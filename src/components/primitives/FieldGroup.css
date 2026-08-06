@@ -1,0 +1,19 @@
+.lq-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+}
+
+.lq-field-group__label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-field-group__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lq-space-2);
+}

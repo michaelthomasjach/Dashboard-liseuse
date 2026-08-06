@@ -1,0 +1,9 @@
+node_modules
+dist
+storybook-static
+*.local
+.DS_Store
+npm-debug.log*
+
+# Never commit a real GitHub Packages token
+.npmrc.local

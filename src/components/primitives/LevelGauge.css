@@ -1,0 +1,40 @@
+.lq-gauge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+}
+
+.lq-gauge__bars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.lq-gauge__bar {
+  display: block;
+  width: 4px;
+  border: 1px solid var(--lq-color-border);
+  background-color: var(--lq-color-fill-track);
+  border-radius: 1px;
+}
+
+.lq-gauge--md .lq-gauge__bar {
+  height: 16px;
+}
+
+.lq-gauge--sm .lq-gauge__bar {
+  height: 12px;
+  width: 3px;
+}
+
+.lq-gauge__bar--filled {
+  background-color: var(--lq-color-fill);
+  border-color: var(--lq-color-fill);
+}
+
+.lq-gauge__label {
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+  min-width: 3.5ch;
+  text-align: right;
+}

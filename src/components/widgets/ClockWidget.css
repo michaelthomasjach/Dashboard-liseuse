@@ -1,0 +1,43 @@
+.lq-clock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-1);
+}
+
+.lq-clock__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lq-space-3);
+}
+
+.lq-clock__time {
+  font-size: clamp(2.5rem, 6vw, 4.2rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--lq-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-clock__icon {
+  color: var(--lq-color-text-muted);
+  flex-shrink: 0;
+  margin-top: var(--lq-space-1);
+}
+
+.lq-clock__date {
+  font-size: 1.05rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-clock__presence {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  margin-top: var(--lq-space-3);
+  padding-top: var(--lq-space-3);
+  border-top: 1px solid var(--lq-color-border-subtle);
+  font-size: 0.9rem;
+  color: var(--lq-color-text);
+}

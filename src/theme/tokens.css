@@ -1,0 +1,133 @@
+/*
+ * Design tokens for @michaelthomasjach/liseuse-dashboard-kit.
+ * Two independent axes are combined into four modes:
+ *   data-lq-palette: "eink" | "color"
+ *   data-lq-surface: "light" | "dark"
+ * Everything a component needs (color, spacing, radius, motion) is a
+ * CSS custom property so consumers can also override individual tokens.
+ */
+
+.lq-root {
+  --lq-font-space-grotesk: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --lq-font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;
+  --lq-font-sora: "Sora", ui-sans-serif, system-ui, sans-serif;
+  --lq-font-family: var(--lq-font-sora);
+
+  --lq-radius-sm: 4px;
+  --lq-radius-md: 8px;
+  --lq-radius-lg: 14px;
+  --lq-radius-pill: 999px;
+
+  --lq-space-1: 4px;
+  --lq-space-2: 8px;
+  --lq-space-3: 12px;
+  --lq-space-4: 16px;
+  --lq-space-5: 24px;
+  --lq-space-6: 32px;
+
+  --lq-transition-fast: 120ms ease;
+  --lq-transition-base: 200ms ease;
+
+  font-family: var(--lq-font-family);
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-bg);
+}
+
+/* ---------------------------------------------------------------- */
+/* E-ink palette — pure monochrome, hairline borders, no shadows,   */
+/* no gradients, tuned to read cleanly on e-paper (BOOX, Kindle…).  */
+/* ---------------------------------------------------------------- */
+
+.lq-root[data-lq-palette="eink"][data-lq-surface="light"] {
+  --lq-color-bg: #f1eee6;
+  --lq-color-panel: #f1eee6;
+  --lq-color-text: #111111;
+  --lq-color-text-muted: #55524a;
+  --lq-color-border: #111111;
+  --lq-color-border-subtle: #c9c4b6;
+  --lq-color-accent: #111111;
+  --lq-color-accent-contrast: #f1eee6;
+  --lq-color-fill: #111111;
+  --lq-color-fill-track: #f1eee6;
+  --lq-color-danger: #111111;
+  --lq-color-overlay: rgba(17, 17, 17, 0.35);
+  --lq-shadow-panel: none;
+  --lq-shadow-modal: none;
+}
+
+.lq-root[data-lq-palette="eink"][data-lq-surface="dark"] {
+  --lq-color-bg: #0a0a0a;
+  --lq-color-panel: #0a0a0a;
+  --lq-color-text: #f5f5f2;
+  --lq-color-text-muted: #9c9a94;
+  --lq-color-border: #f5f5f2;
+  --lq-color-border-subtle: #3a3a37;
+  --lq-color-accent: #f5f5f2;
+  --lq-color-accent-contrast: #0a0a0a;
+  --lq-color-fill: #f5f5f2;
+  --lq-color-fill-track: #0a0a0a;
+  --lq-color-danger: #f5f5f2;
+  --lq-color-overlay: rgba(0, 0, 0, 0.55);
+  --lq-shadow-panel: none;
+  --lq-shadow-modal: none;
+}
+
+/* ---------------------------------------------------------------- */
+/* Color palette — for backlit color tablets/screens.               */
+/* ---------------------------------------------------------------- */
+
+.lq-root[data-lq-palette="color"][data-lq-surface="light"] {
+  --lq-color-bg: #f4f5f7;
+  --lq-color-panel: #ffffff;
+  --lq-color-text: #12141a;
+  --lq-color-text-muted: #656b78;
+  --lq-color-border: #dfe2e8;
+  --lq-color-border-subtle: #ecedf1;
+  --lq-color-accent: #2563eb;
+  --lq-color-accent-contrast: #ffffff;
+  --lq-color-fill: #2563eb;
+  --lq-color-fill-track: #e4e7ee;
+  --lq-color-danger: #dc2626;
+  --lq-color-overlay: rgba(15, 18, 26, 0.45);
+  --lq-shadow-panel: 0 1px 2px rgba(16, 24, 40, 0.06);
+  --lq-shadow-modal: 0 20px 40px rgba(16, 24, 40, 0.22);
+
+  --lq-color-amber: #d97706;
+  --lq-color-sky: #0284c7;
+  --lq-color-green: #16a34a;
+  --lq-color-rose: #db2777;
+  --lq-color-violet: #7c3aed;
+}
+
+.lq-root[data-lq-palette="color"][data-lq-surface="dark"] {
+  --lq-color-bg: #0f1420;
+  --lq-color-panel: #171d2b;
+  --lq-color-text: #f1f5f9;
+  --lq-color-text-muted: #8b93a7;
+  --lq-color-border: #2a3245;
+  --lq-color-border-subtle: #232a3a;
+  --lq-color-accent: #60a5fa;
+  --lq-color-accent-contrast: #0f1420;
+  --lq-color-fill: #60a5fa;
+  --lq-color-fill-track: #232a3a;
+  --lq-color-danger: #f87171;
+  --lq-color-overlay: rgba(0, 0, 0, 0.6);
+  --lq-shadow-panel: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --lq-shadow-modal: 0 20px 40px rgba(0, 0, 0, 0.5);
+
+  --lq-color-amber: #fbbf24;
+  --lq-color-sky: #38bdf8;
+  --lq-color-green: #4ade80;
+  --lq-color-rose: #f472b6;
+  --lq-color-violet: #a78bfa;
+}
+
+/* Fallback accent tokens for the e-ink palette so shared components
+   (e.g. color swatches) still render meaningfully in monochrome. */
+.lq-root[data-lq-palette="eink"] {
+  --lq-color-amber: var(--lq-color-text);
+  --lq-color-sky: var(--lq-color-text);
+  --lq-color-green: var(--lq-color-text);
+  --lq-color-rose: var(--lq-color-text);
+  --lq-color-violet: var(--lq-color-text);
+}

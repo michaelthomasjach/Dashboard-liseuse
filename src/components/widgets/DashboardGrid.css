@@ -1,0 +1,12 @@
+.lq-dashboard-grid {
+  display: grid;
+  gap: var(--lq-space-6);
+  align-items: start;
+}
+
+.lq-dashboard-grid__item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-6);
+  min-width: 0;
+}

@@ -1,0 +1,42 @@
+.lq-swatch {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  padding: var(--lq-space-2) var(--lq-space-3);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-panel);
+  border: 1.5px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  cursor: pointer;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-swatch {
+  border-radius: 0;
+}
+
+.lq-swatch--selected {
+  border-color: var(--lq-color-fill);
+}
+
+.lq-swatch__box {
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--lq-color-border);
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+/* E-ink can't render hue, so swatches fall back to a neutral, still-legible mark. */
+.lq-root[data-lq-palette="eink"] .lq-swatch__box {
+  filter: grayscale(1);
+  opacity: 0.85;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-swatch--selected .lq-swatch__box {
+  opacity: 1;
+  box-shadow: inset 0 0 0 2px var(--lq-color-bg);
+  background-color: var(--lq-color-text) !important;
+}

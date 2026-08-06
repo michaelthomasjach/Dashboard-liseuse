@@ -1,0 +1,51 @@
+.lq-toggle {
+  --lq-toggle-w: 44px;
+  --lq-toggle-h: 24px;
+  --lq-toggle-pad: 3px;
+
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: var(--lq-toggle-w);
+  height: var(--lq-toggle-h);
+  padding: 0;
+  border-radius: var(--lq-radius-pill);
+  border: 1.5px solid var(--lq-color-border);
+  background-color: var(--lq-color-fill-track);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color var(--lq-transition-base), border-color var(--lq-transition-base);
+}
+
+.lq-toggle:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lq-toggle__knob {
+  position: absolute;
+  top: 50%;
+  left: var(--lq-toggle-pad);
+  width: calc(var(--lq-toggle-h) - 2 * var(--lq-toggle-pad) - 1px);
+  height: calc(var(--lq-toggle-h) - 2 * var(--lq-toggle-pad) - 1px);
+  border-radius: 50%;
+  background-color: var(--lq-color-border);
+  transform: translate(0, -50%);
+  transition: transform var(--lq-transition-base), background-color var(--lq-transition-base);
+}
+
+.lq-toggle--on {
+  background-color: var(--lq-color-fill);
+}
+
+.lq-toggle--on .lq-toggle__knob {
+  background-color: var(--lq-color-accent-contrast);
+  transform: translate(
+    calc(var(--lq-toggle-w) - var(--lq-toggle-h)),
+    -50%
+  );
+}
+
+.lq-root[data-lq-palette="eink"] .lq-toggle--on .lq-toggle__knob {
+  background-color: var(--lq-color-bg);
+}

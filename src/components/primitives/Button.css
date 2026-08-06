@@ -1,0 +1,40 @@
+.lq-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lq-space-2);
+  padding: var(--lq-space-3) var(--lq-space-4);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-panel);
+  border: 1.5px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  cursor: pointer;
+  transition: background-color var(--lq-transition-fast), color var(--lq-transition-fast);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-button {
+  border-radius: 0;
+}
+
+.lq-button:hover {
+  opacity: 0.85;
+}
+
+.lq-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lq-button--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
+  border-color: var(--lq-color-fill);
+}
+
+.lq-button--block {
+  display: flex;
+  width: 100%;
+}
