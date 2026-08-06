@@ -1,0 +1,101 @@
+.lq-jumbotron {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lq-space-6);
+  padding: var(--lq-space-6);
+  border-radius: var(--lq-radius-lg);
+  border: 1px solid var(--lq-color-border-subtle);
+  background-color: var(--lq-color-panel);
+  overflow: hidden;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-jumbotron {
+  border-radius: 0;
+}
+
+.lq-jumbotron--accent {
+  background-color: var(--lq-color-fill);
+  border-color: var(--lq-color-fill);
+}
+
+.lq-jumbotron--accent .lq-jumbotron__title,
+.lq-jumbotron--accent .lq-jumbotron__description,
+.lq-jumbotron--accent .lq-jumbotron__eyebrow {
+  color: var(--lq-color-accent-contrast);
+}
+
+.lq-jumbotron--has-image {
+  background-size: cover;
+  background-position: center;
+}
+
+.lq-jumbotron--has-image::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, var(--lq-color-overlay) 30%, transparent 90%);
+}
+
+.lq-jumbotron--has-image .lq-jumbotron__content {
+  position: relative;
+  color: var(--lq-color-accent-contrast);
+}
+
+.lq-jumbotron__content {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--lq-space-2);
+  max-width: 56ch;
+}
+
+.lq-jumbotron__eyebrow {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-jumbotron__title {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+  line-height: 1.2;
+}
+
+.lq-jumbotron__description {
+  margin: 0;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-jumbotron--has-image .lq-jumbotron__description {
+  color: inherit;
+  opacity: 0.9;
+}
+
+.lq-jumbotron__actions {
+  display: flex;
+  gap: var(--lq-space-3);
+  margin-top: var(--lq-space-2);
+  flex-wrap: wrap;
+}
+
+.lq-jumbotron__media {
+  position: relative;
+  flex-shrink: 0;
+}
+
+@media (max-width: 720px) {
+  .lq-jumbotron {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .lq-jumbotron__media {
+    width: 100%;
+  }
+}

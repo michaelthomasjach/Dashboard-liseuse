@@ -1,0 +1,37 @@
+import type { ReactNode } from "react";
+import "./Jumbotron.css";
+
+export interface JumbotronProps {
+  eyebrow?: ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  /** Buttons/links row. */
+  actions?: ReactNode;
+  /** Illustration/graphic shown beside the text on wide screens, above it on narrow ones. */
+  media?: ReactNode;
+  /** Full-bleed background image URL; text gets a scrim for legibility. */
+  backgroundImage?: string;
+  /** "accent" fills the panel with the theme's accent color instead of the default panel background. */
+  tone?: "default" | "accent";
+  className?: string;
+}
+
+/** Large promotional/hero banner — a welcome message, a feature callout, a CTA block. */
+export function Jumbotron({ eyebrow, title, description, actions, media, backgroundImage, tone = "default", className }: JumbotronProps) {
+  return (
+    <div
+      className={["lq-jumbotron", `lq-jumbotron--${tone}`, backgroundImage && "lq-jumbotron--has-image", className]
+        .filter(Boolean)
+        .join(" ")}
+      style={backgroundImage ? { backgroundImage: `url(${backgroundImage})` } : undefined}
+    >
+      <div className="lq-jumbotron__content">
+        {eyebrow && <span className="lq-jumbotron__eyebrow">{eyebrow}</span>}
+        <h2 className="lq-jumbotron__title">{title}</h2>
+        {description && <p className="lq-jumbotron__description">{description}</p>}
+        {actions && <div className="lq-jumbotron__actions">{actions}</div>}
+      </div>
+      {media && <div className="lq-jumbotron__media">{media}</div>}
+    </div>
+  );
+}

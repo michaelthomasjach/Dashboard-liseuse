@@ -31,4 +31,7 @@ export type { DatePickerProps } from "./DatePicker";
 export { RangeSlider } from "./RangeSlider";
 export type { RangeSliderProps } from "./RangeSlider";
 
+export { Dropzone } from "./Dropzone";
+export type { DropzoneProps } from "./Dropzone";
+
 export type { PopoverPlacement } from "./internal/usePopoverPosition";

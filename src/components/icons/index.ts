@@ -42,4 +42,8 @@ export {
   CreditCardIcon,
   PhoneIcon,
   RefreshIcon,
+  UploadCloudIcon,
+  FileIcon,
+  TrashIcon,
+  FolderIcon,
 } from "./icons";

@@ -294,3 +294,31 @@ export const RefreshIcon = (props: IconProps) => (
     <path d="M17 3.5v3.5h-3.5M7 20.5V17h3.5" />
   </IconBase>
 );
+
+export const UploadCloudIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M7 18.5h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.5 1.6A3.5 3.5 0 0 0 7 18.5Z" />
+    <path d="M12 15.5v-6M9.2 12l2.8-2.8 2.8 2.8" />
+  </IconBase>
+);
+
+export const FileIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M6.5 3.5h7l4 4v13a1 1 0 0 1-1 1h-10a1 1 0 0 1-1-1v-16a1 1 0 0 1 1-1Z" />
+    <path d="M13.5 3.5v4h4" />
+  </IconBase>
+);
+
+export const TrashIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" />
+    <path d="M6.5 7v12.5A1.5 1.5 0 0 0 8 21h8a1.5 1.5 0 0 0 1.5-1.5V7" />
+    <path d="M10 11v6M14 11v6" />
+  </IconBase>
+);
+
+export const FolderIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3.5 6.5a1 1 0 0 1 1-1h4.7l1.6 2h8.7a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1Z" />
+  </IconBase>
+);

@@ -7,9 +7,6 @@ export type { PriceChangeTagProps } from "./PriceChangeTag";
 export { StatCard } from "./StatCard";
 export type { StatCardProps } from "./StatCard";
 
-export { Tabs } from "./Tabs";
-export type { TabsProps, TabItem } from "./Tabs";
-
 export { Avatar } from "./Avatar";
 export type { AvatarProps } from "./Avatar";
 

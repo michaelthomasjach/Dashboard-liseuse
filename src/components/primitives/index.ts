@@ -24,3 +24,18 @@ export type { FieldGroupProps } from "./FieldGroup";
 
 export { SegmentedControl } from "./SegmentedControl";
 export type { SegmentedControlProps, SegmentedControlOption } from "./SegmentedControl";
+
+export { Tabs } from "./Tabs";
+export type { TabsProps, TabItem } from "./Tabs";
+
+export { Jumbotron } from "./Jumbotron";
+export type { JumbotronProps } from "./Jumbotron";
+
+export { TreeView } from "./TreeView";
+export type { TreeViewProps, TreeNode } from "./TreeView";
+
+export { ExpandableCard } from "./ExpandableCard";
+export type { ExpandableCardProps } from "./ExpandableCard";
+
+export { TabbedCard } from "./TabbedCard";
+export type { TabbedCardProps, TabbedCardTab } from "./TabbedCard";

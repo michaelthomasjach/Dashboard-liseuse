@@ -100,6 +100,11 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 - `Modal` — panneau de détail centré
 - `FieldGroup` — label + rangée de contrôles
 - `SegmentedControl` — sélecteur exclusif (ex: le switch Palette/Surface/Typo de la maquette)
+- `Tabs` — navigation par onglets, horizontale ou verticale (`orientation`)
+- `Jumbotron` — bannière promo/hero (eyebrow, titre, description, actions, media ou image de fond)
+- `TreeView` — arbre expand/collapse récursif (explorateur de fichiers, arborescence de catégories…)
+- `ExpandableCard` — carte qui se déplie verticalement (animation CSS pure, pas de mesure JS)
+- `TabbedCard` — carte dont le corps est découpé en onglets (`orientation="horizontal"|"vertical"`)
 
 **Widgets** — composants métier prêts à brancher sur tes données
 - `ClockWidget` — heure/date + ligne de présence
@@ -133,6 +138,7 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `PasswordField` — champ mot de passe avec bascule afficher/masquer
 - `DatePicker` — calendrier en popup (même moteur de positionnement que `Select`)
 - `RangeSlider` — double curseur (plage de prix, de dates…)
+- `Dropzone` — zone de dépôt de fichiers (drag & drop + sélection au clic), liste de fichiers avec suppression, validation de taille
 
 **Feedback**
 - `Spinner`, `Skeleton`, `ProgressBar` (déterminée ou indéterminée) — animations désactivées sous la palette e-ink (l'e-ink réel ne peut pas s'animer proprement)
@@ -141,7 +147,6 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `Badge` — pastille de statut (tons neutral/up/down/warning/info)
 - `PriceChangeTag` — delta signé avec flèche (variation de cours, P&L)
 - `StatCard` — tuile KPI (label, valeur, delta, sparkline)
-- `Tabs` — navigation par onglets soulignés
 - `Avatar` — image ou initiales
 - `Breadcrumbs` — fil d'ariane
 - `DataTable` — tableau triable, responsive (scroll horizontal)

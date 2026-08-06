@@ -1,0 +1,103 @@
+.lq-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: var(--lq-space-6) var(--lq-space-4);
+  text-align: center;
+  background-color: var(--lq-color-panel);
+  border: 1.5px dashed var(--lq-color-border);
+  border-radius: var(--lq-radius-lg);
+  cursor: pointer;
+  transition: border-color var(--lq-transition-fast), background-color var(--lq-transition-fast);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-dropzone {
+  border-radius: 0;
+}
+
+.lq-dropzone:hover:not(.lq-dropzone--disabled) {
+  border-color: var(--lq-color-accent);
+}
+
+.lq-dropzone--dragging {
+  border-color: var(--lq-color-accent);
+  background-color: var(--lq-color-hover);
+}
+
+.lq-dropzone--error {
+  border-color: var(--lq-color-danger);
+}
+
+.lq-dropzone--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.lq-dropzone__icon {
+  color: var(--lq-color-text-muted);
+}
+
+.lq-dropzone__label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--lq-color-text);
+}
+
+.lq-dropzone__hint {
+  font-size: 0.75rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-dropzone__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lq-dropzone__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lq-dropzone__file {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  padding: var(--lq-space-2) var(--lq-space-3);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-md);
+  color: var(--lq-color-text);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-dropzone__file {
+  border-radius: 0;
+}
+
+.lq-dropzone__file svg {
+  flex-shrink: 0;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-dropzone__file-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-dropzone__file-size {
+  font-size: 0.75rem;
+  color: var(--lq-color-text-muted);
+  flex-shrink: 0;
+}

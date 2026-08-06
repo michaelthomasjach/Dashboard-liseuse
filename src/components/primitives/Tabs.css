@@ -7,6 +7,9 @@
 
 .lq-tabs__tab {
   position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--lq-space-2);
   padding: var(--lq-space-2) 2px var(--lq-space-3);
   font-family: inherit;
   font-size: 0.88rem;
@@ -16,6 +19,10 @@
   border: none;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.lq-tabs__tab svg {
+  flex-shrink: 0;
 }
 
 .lq-tabs__tab:hover:not(:disabled) {
@@ -42,6 +49,38 @@
 }
 
 .lq-root[data-lq-palette="eink"] .lq-tabs__tab--active::after {
-  height: 2px;
   background-color: var(--lq-color-text);
+}
+
+/* Vertical orientation — a side rail of tabs, e.g. inside a TabbedCard. */
+.lq-tabs--vertical {
+  flex-direction: column;
+  gap: 2px;
+  border-bottom: none;
+  border-right: 1px solid var(--lq-color-border-subtle);
+  overflow-x: visible;
+  padding-right: var(--lq-space-3);
+}
+
+.lq-tabs--vertical .lq-tabs__tab {
+  padding: var(--lq-space-2) var(--lq-space-3);
+  border-radius: var(--lq-radius-md);
+  justify-content: flex-start;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-tabs--vertical .lq-tabs__tab {
+  border-radius: 0;
+}
+
+.lq-tabs--vertical .lq-tabs__tab--active {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-tabs--vertical .lq-tabs__tab--active::after {
+  left: auto;
+  right: -13px;
+  bottom: 0;
+  top: 0;
+  width: 2px;
+  height: auto;
 }
