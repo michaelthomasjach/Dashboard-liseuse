@@ -16,8 +16,16 @@ export type { BreadcrumbsProps, BreadcrumbItem } from "./Breadcrumbs";
 export { DataTable } from "./DataTable";
 export type { DataTableProps, DataTableColumn } from "./DataTable";
 
-export { ToastProvider, useToast } from "./Toast";
-export type { ToastOptions, ToastTone } from "./Toast";
+export { Notification, NotificationProvider, useNotification } from "./Notification";
+export type {
+  NotificationProps,
+  NotificationOptions,
+  NotificationCardConfig,
+  NotificationVariant,
+  NotificationCorner,
+  NotificationBarPosition,
+  NotificationTone,
+} from "./Notification";
 
 export { UserMenu } from "./UserMenu";
 export type { UserMenuProps, UserMenuItem } from "./UserMenu";

@@ -150,7 +150,7 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `Avatar` — image ou initiales
 - `Breadcrumbs` — fil d'ariane
 - `DataTable` — tableau triable, responsive (scroll horizontal)
-- `ToastProvider` / `useToast` — notifications empilées, auto-dismiss configurable
+- `Notification` — popin (4 coins), barre sticky (haut/bas) ou modale ; auto-dismiss avec barre de progression (pause au survol) ou simple croix, selon les props. Utilisable seule (`open`/`onClose`) ou en file d'attente via `NotificationProvider` + `useNotification()` (empile correctement plusieurs popins/barres)
 - `UserMenu` — avatar + menu déroulant (construit sur `Popover`)
 
 **Layouts** — responsive, s'effondrent en menu mobile sous ~900px

@@ -1,0 +1,242 @@
+/* ---------------------------------------------------------------- */
+/* Positioning: standalone anchors (single item) and provider stacks */
+/* (multiple items) share the same fixed coordinates per corner/edge. */
+/* ---------------------------------------------------------------- */
+
+.lq-notification-anchor,
+.lq-notification-stack {
+  position: fixed;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+  max-width: min(360px, calc(100vw - 32px));
+  pointer-events: none;
+}
+
+.lq-notification-anchor > *,
+.lq-notification-stack > * {
+  pointer-events: auto;
+}
+
+.lq-notification-anchor--top-left,
+.lq-notification-stack--top-left {
+  top: var(--lq-space-5);
+  left: var(--lq-space-5);
+}
+
+.lq-notification-anchor--top-right,
+.lq-notification-stack--top-right {
+  top: var(--lq-space-5);
+  right: var(--lq-space-5);
+}
+
+.lq-notification-anchor--bottom-left,
+.lq-notification-stack--bottom-left {
+  bottom: var(--lq-space-5);
+  left: var(--lq-space-5);
+  flex-direction: column-reverse;
+}
+
+.lq-notification-anchor--bottom-right,
+.lq-notification-stack--bottom-right {
+  bottom: var(--lq-space-5);
+  right: var(--lq-space-5);
+  flex-direction: column-reverse;
+}
+
+.lq-notification-bar-anchor {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 2000;
+  display: flex;
+  justify-content: center;
+  padding: var(--lq-space-3);
+}
+
+.lq-notification-bar-anchor--top {
+  top: 0;
+}
+
+.lq-notification-bar-anchor--bottom {
+  bottom: 0;
+}
+
+.lq-notification-bar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+  width: 100%;
+}
+
+.lq-notification-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lq-space-5);
+  background-color: var(--lq-color-overlay);
+}
+
+/* ---------------------------------------------------------------- */
+/* The card itself.                                                  */
+/* ---------------------------------------------------------------- */
+
+.lq-notification-card {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--lq-space-3);
+  width: 100%;
+  padding: var(--lq-space-3) var(--lq-space-4) var(--lq-space-3) var(--lq-space-3);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-left: 3px solid var(--lq-color-text-muted);
+  border-radius: var(--lq-radius-md);
+  box-shadow: var(--lq-shadow-modal);
+  overflow: hidden;
+  animation: lq-notification-in 180ms ease;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-notification-card {
+  border-radius: 0;
+}
+
+@keyframes lq-notification-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lq-notification-card--success {
+  border-left-color: var(--lq-color-up);
+}
+
+.lq-notification-card--error {
+  border-left-color: var(--lq-color-down);
+}
+
+.lq-notification-card--warning {
+  border-left-color: var(--lq-color-warning);
+}
+
+.lq-notification-card--info {
+  border-left-color: var(--lq-color-info);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-notification-card {
+  border-left-color: var(--lq-color-text);
+}
+
+.lq-notification-card--bar {
+  max-width: 720px;
+  align-items: center;
+  border-left: 1px solid var(--lq-color-border);
+  border-top: 3px solid var(--lq-color-text-muted);
+  border-radius: var(--lq-radius-md);
+}
+
+.lq-notification-card--bar.lq-notification-card--success {
+  border-top-color: var(--lq-color-up);
+}
+
+.lq-notification-card--bar.lq-notification-card--error {
+  border-top-color: var(--lq-color-down);
+}
+
+.lq-notification-card--bar.lq-notification-card--warning {
+  border-top-color: var(--lq-color-warning);
+}
+
+.lq-notification-card--bar.lq-notification-card--info {
+  border-top-color: var(--lq-color-info);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-notification-card--bar {
+  border-top-color: var(--lq-color-text);
+}
+
+.lq-notification-card__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  margin-top: 1px;
+  color: var(--lq-color-text);
+}
+
+.lq-notification-card__body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.lq-notification-card__title {
+  font-size: 0.85rem;
+  color: var(--lq-color-text);
+}
+
+.lq-notification-card__description {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-notification-card__actions {
+  display: flex;
+  gap: var(--lq-space-2);
+  margin-top: var(--lq-space-2);
+}
+
+.lq-notification-card__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-notification-card__close:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-notification-card__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 2px;
+  background-color: var(--lq-color-accent);
+  animation-name: lq-notification-progress-shrink;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+@keyframes lq-notification-progress-shrink {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
+.lq-root[data-lq-palette="eink"] .lq-notification-card__progress {
+  background-color: var(--lq-color-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-notification-card {
+    animation: none;
+  }
+}
