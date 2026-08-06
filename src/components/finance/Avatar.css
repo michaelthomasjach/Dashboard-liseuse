@@ -1,0 +1,23 @@
+.lq-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background-color: var(--lq-color-fill-track);
+  color: var(--lq-color-text);
+  font-weight: 700;
+  overflow: hidden;
+  border: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-avatar {
+  border-radius: 0;
+  border-color: var(--lq-color-text);
+}
+
+.lq-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}

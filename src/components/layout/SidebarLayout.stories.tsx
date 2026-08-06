@@ -1,0 +1,50 @@
+import type { Meta, StoryObj } from "@storybook/react";
+import { SidebarLayout } from "./SidebarLayout";
+import { UserMenu } from "../finance/UserMenu";
+import { StatCard } from "../finance/StatCard";
+import { LineAreaChart } from "../charts/LineAreaChart";
+import { Breadcrumbs } from "../finance/Breadcrumbs";
+import { generateSeries } from "../../test-data/financeSampleData";
+import { HomeIcon, SettingsIcon, LogoutIcon, UserIcon } from "../icons";
+
+const meta: Meta<typeof SidebarLayout> = {
+  title: "Layouts/SidebarLayout",
+  component: SidebarLayout,
+  parameters: { layout: "fullscreen" },
+};
+export default meta;
+type Story = StoryObj<typeof SidebarLayout>;
+
+export const Dashboard: Story = {
+  render: () => (
+    <SidebarLayout
+      logo={<strong>Finance Kit</strong>}
+      navItems={[
+        { id: "overview", label: "Vue d'ensemble", icon: <HomeIcon size={18} />, active: true },
+        { id: "settings", label: "Paramètres", icon: <SettingsIcon size={18} /> },
+      ]}
+      footer={
+        <UserMenu
+          name="Michael Jach"
+          items={[
+            { id: "profile", label: "Profil", icon: <UserIcon size={16} /> },
+            { id: "logout", label: "Déconnexion", icon: <LogoutIcon size={16} />, danger: true },
+          ]}
+        />
+      }
+      header={<Breadcrumbs items={[{ id: "home", label: "Accueil" }, { id: "overview", label: "Vue d'ensemble" }]} />}
+    >
+      <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ width: 220 }}>
+            <StatCard label="Valeur totale" value="42 380 €" delta={3.4} sparklineData={[10, 10.4, 10.1, 10.8, 11.2, 11.6, 12.1]} />
+          </div>
+          <div style={{ width: 220 }}>
+            <StatCard label="P&L du jour" value="− 214 €" delta={-1.2} />
+          </div>
+        </div>
+        <LineAreaChart series={[{ id: "p", label: "Portefeuille", data: generateSeries(90, 40000, 5) }]} area />
+      </div>
+    </SidebarLayout>
+  ),
+};

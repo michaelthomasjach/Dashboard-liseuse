@@ -1,6 +1,6 @@
 # @michaelthomasjach/liseuse-dashboard-kit
 
-Bibliothèque de composants React pour construire des tableaux de bord domotiques façon liseuse e-ink (BOOX, Kindle…) ou tablette. Chaque composant supporte nativement :
+Bibliothèque de composants React pour construire des tableaux de bord — domotique façon liseuse e-ink (BOOX, Kindle…) ou tablette, et applications finance (graphiques D3 interactifs, formulaires, layouts, pages). Chaque composant supporte nativement :
 
 - **Palette** — `eink` (monochrome, hairlines, sans ombre ni dégradé) ou `color` (tablette couleur, avec accents).
 - **Surface** — `light` (Clair) ou `dark` (Sombre).
@@ -22,8 +22,10 @@ Dans le projet consommateur, ajoute un fichier `.npmrc` :
 `GITHUB_TOKEN` doit être un token GitHub avec le scope `read:packages` (variable d'env locale, ou secret CI).
 
 ```bash
-npm install @michaelthomasjach/liseuse-dashboard-kit
+npm install @michaelthomasjach/liseuse-dashboard-kit d3
 ```
+
+`react`, `react-dom` et `d3` sont des **peerDependencies** (non bundlées) — installe-les dans le projet consommateur si ce n'est pas déjà fait. `d3` n'est nécessaire que si tu utilises les graphiques (`components/charts`) ; le reste de la lib fonctionne sans.
 
 ## Usage
 
@@ -111,6 +113,48 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 - `DashboardGrid`, `DashboardGridItem` — grille CSS pour composer la page
 
 Chaque widget est piloté par des props (pas de fetch ni d'état interne caché) : à toi de brancher tes propres données/API.
+
+**Charts** — SVG piloté par React, D3 pour les maths (scales/zoom/shapes) uniquement ; zoom (molette/pincement) + pan (glisser) sur les graphiques à domaine continu
+- `LineAreaChart` — courbe/aire multi-séries, zoom + pan, tooltip avec crosshair, légende cliquable (masquer une série)
+- `BarChart` — barres verticales/horizontales, tri par valeur (`colorByValue` pour vert/rouge automatique)
+- `CandlestickChart` — chandeliers OHLC + volume, zoom + pan ; convention creux/plein en palette e-ink (le monochrome ne peut pas coder la hausse/baisse par la teinte)
+- `GaugeChart` — jauge en arc avec bandes de seuils (ex. score de risque)
+- `DonutChart` — répartition (allocation de portefeuille…)
+- `Sparkline` — mini-courbe sans axes, pour cellule de tableau ou StatCard
+- `ChartTooltip`, `ChartAxis` — primitives exposées si tu construis ton propre graphique par-dessus
+
+**Forms** — dropdowns adaptatifs (collision detection), champs avec état d'erreur
+- `Popover` — moteur de positionnement générique (flip vertical bas/haut + décalage horizontal gauche/droite selon l'espace dispo), portalé, ferme au clic extérieur/Échap
+- `Select` — dropdown construit sur `Popover`
+- `TextField` — champ texte de base (label, icônes, erreur, texte d'aide)
+- `MaskedInput` — moteur de masque générique (`#` = chiffre, tout le reste est littéral), caractère de masque configurable (`maskChar`)
+- `PhoneInput`, `CreditCardInput`, `DateInput` — masques prêts à l'emploi construits sur `MaskedInput`
+- `NumberField` — champ numérique avec préfixe/suffixe (€, %) et steppers
+- `PasswordField` — champ mot de passe avec bascule afficher/masquer
+- `DatePicker` — calendrier en popup (même moteur de positionnement que `Select`)
+- `RangeSlider` — double curseur (plage de prix, de dates…)
+
+**Feedback**
+- `Spinner`, `Skeleton`, `ProgressBar` (déterminée ou indéterminée) — animations désactivées sous la palette e-ink (l'e-ink réel ne peut pas s'animer proprement)
+
+**Finance** — composants pensés pour un dashboard finance, mais génériques
+- `Badge` — pastille de statut (tons neutral/up/down/warning/info)
+- `PriceChangeTag` — delta signé avec flèche (variation de cours, P&L)
+- `StatCard` — tuile KPI (label, valeur, delta, sparkline)
+- `Tabs` — navigation par onglets soulignés
+- `Avatar` — image ou initiales
+- `Breadcrumbs` — fil d'ariane
+- `DataTable` — tableau triable, responsive (scroll horizontal)
+- `ToastProvider` / `useToast` — notifications empilées, auto-dismiss configurable
+- `UserMenu` — avatar + menu déroulant (construit sur `Popover`)
+
+**Layouts** — responsive, s'effondrent en menu mobile sous ~900px
+- `SidebarLayout` — sidebar fixe desktop → tiroir hors-écran (hamburger) sur mobile
+- `HeaderLayout` — nav horizontale sticky → tiroir déroulant sur mobile
+
+**Pages**
+- `LoginPage` — image plein cadre sur 3/4 de la largeur, panneau de connexion centré verticalement sur le dernier quart (le formulaire est laissé à ta charge via `children`) ; l'image disparaît sous 900px
+- `NotFoundPage` — page 404 centrée, action de retour personnalisable
 
 ## Développement
 

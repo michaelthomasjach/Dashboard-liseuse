@@ -1,0 +1,66 @@
+.lq-select {
+  width: 100%;
+}
+
+.lq-select__trigger {
+  cursor: pointer;
+  justify-content: space-between;
+  text-align: left;
+}
+
+.lq-select__trigger svg {
+  color: var(--lq-color-text-muted);
+  flex-shrink: 0;
+}
+
+.lq-select__value {
+  color: var(--lq-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-select__placeholder {
+  color: var(--lq-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-select__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.lq-select__option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: var(--lq-space-2) var(--lq-space-3);
+  font-family: inherit;
+  font-size: 0.88rem;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-select__option:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-select__option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.lq-select__option svg {
+  color: var(--lq-color-accent);
+  flex-shrink: 0;
+}

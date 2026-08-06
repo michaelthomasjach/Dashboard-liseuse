@@ -1,0 +1,90 @@
+.lq-chart {
+  position: relative;
+  width: 100%;
+}
+
+.lq-chart__svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.lq-chart__overlay {
+  fill: transparent;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lq-chart__overlay:active {
+  cursor: grabbing;
+}
+
+.lq-chart__crosshair-line {
+  stroke: var(--lq-color-text-muted);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.lq-chart__dot {
+  pointer-events: none;
+}
+
+.lq-chart__toolbar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+}
+
+.lq-chart__reset-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart__reset-button:hover {
+  color: var(--lq-color-text);
+  border-color: var(--lq-color-border);
+}
+
+.lq-chart__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 160px;
+  color: var(--lq-color-text-muted);
+  font-size: 0.85rem;
+}
+
+.lq-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lq-space-4);
+  margin-top: var(--lq-space-2);
+}
+
+.lq-chart__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-chart__legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}

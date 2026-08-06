@@ -1,0 +1,25 @@
+.lq-popover {
+  position: fixed;
+  z-index: 1200;
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  box-shadow: var(--lq-shadow-modal);
+  overflow: hidden;
+  animation: lq-popover-in 120ms ease;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-popover {
+  border-radius: 0;
+}
+
+@keyframes lq-popover-in {
+  from {
+    opacity: 0;
+    transform: translateY(-2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

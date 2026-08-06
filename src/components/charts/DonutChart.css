@@ -1,0 +1,55 @@
+.lq-donut-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lq-space-3);
+}
+
+.lq-donut-chart__plot {
+  position: relative;
+}
+
+.lq-donut-chart__slice {
+  stroke: var(--lq-color-panel);
+  stroke-width: 2;
+  cursor: pointer;
+  transition: opacity var(--lq-transition-fast);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-donut-chart__slice {
+  stroke: var(--lq-color-bg);
+  stroke-width: 1.5;
+}
+
+.lq-donut-chart__center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  text-align: center;
+}
+
+.lq-donut-chart__center-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-donut-chart__center-label {
+  font-size: 0.78rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-donut-chart__legend {
+  justify-content: center;
+  margin-top: 0;
+}
+
+.lq-donut-chart__legend .lq-chart__legend-item {
+  cursor: default;
+  transition: opacity var(--lq-transition-fast);
+}

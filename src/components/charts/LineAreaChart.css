@@ -1,0 +1,7 @@
+.lq-chart__legend-item {
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: inherit;
+}

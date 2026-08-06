@@ -1,0 +1,43 @@
+.lq-gauge-chart {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lq-space-2);
+}
+
+.lq-gauge-chart__track {
+  fill: var(--lq-color-fill-track);
+}
+
+.lq-gauge-chart__value {
+  fill: var(--lq-color-accent);
+}
+
+.lq-gauge-chart__needle {
+  stroke: var(--lq-color-text);
+  stroke-width: 2;
+  transition: transform 300ms ease;
+}
+
+.lq-gauge-chart__pivot {
+  fill: var(--lq-color-text);
+}
+
+.lq-gauge-chart__readout {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: -8px;
+}
+
+.lq-gauge-chart__value-text {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-gauge-chart__label {
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+}

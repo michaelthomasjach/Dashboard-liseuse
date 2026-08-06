@@ -1,0 +1,4 @@
+.lq-chart rect {
+  transition: opacity var(--lq-transition-fast);
+  cursor: pointer;
+}

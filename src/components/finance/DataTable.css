@@ -1,0 +1,66 @@
+.lq-data-table {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.lq-data-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.lq-data-table th {
+  padding: var(--lq-space-2) var(--lq-space-3);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lq-color-text-muted);
+  border-bottom: 1px solid var(--lq-color-border);
+  white-space: nowrap;
+}
+
+.lq-data-table__header {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lq-data-table__sortable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.lq-data-table__sortable:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-data-table__sort-icon {
+  display: inline-flex;
+  width: 14px;
+}
+
+.lq-data-table td {
+  padding: var(--lq-space-3);
+  color: var(--lq-color-text);
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-data-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.lq-data-table__row--interactive {
+  cursor: pointer;
+}
+
+.lq-data-table__row--interactive:hover td {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-data-table__empty {
+  text-align: center;
+  color: var(--lq-color-text-muted);
+  padding: var(--lq-space-6) var(--lq-space-3);
+}

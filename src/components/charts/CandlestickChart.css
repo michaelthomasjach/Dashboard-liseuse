@@ -1,0 +1,57 @@
+.lq-candle-wick {
+  stroke-width: 1;
+}
+
+.lq-candle-body {
+  stroke-width: 1;
+}
+
+.lq-candle--up .lq-candle-body,
+.lq-candle--up .lq-candle-wick {
+  fill: var(--lq-color-up);
+  stroke: var(--lq-color-up);
+}
+
+.lq-candle--down .lq-candle-body,
+.lq-candle--down .lq-candle-wick {
+  fill: var(--lq-color-down);
+  stroke: var(--lq-color-down);
+}
+
+.lq-candle-volume--up {
+  fill: var(--lq-color-up);
+  opacity: 0.55;
+}
+
+.lq-candle-volume--down {
+  fill: var(--lq-color-down);
+  opacity: 0.55;
+}
+
+/* E-ink: no color, so up/down is read from hollow vs filled bodies (the
+   standard monochrome OHLC convention) instead of hue. */
+.lq-root[data-lq-palette="eink"] .lq-candle--up .lq-candle-body {
+  fill: var(--lq-color-bg);
+  stroke: var(--lq-color-text);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-candle--down .lq-candle-body {
+  fill: var(--lq-color-text);
+  stroke: var(--lq-color-text);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-candle--up .lq-candle-wick,
+.lq-root[data-lq-palette="eink"] .lq-candle--down .lq-candle-wick {
+  fill: none;
+  stroke: var(--lq-color-text);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-candle-volume--up,
+.lq-root[data-lq-palette="eink"] .lq-candle-volume--down {
+  fill: var(--lq-color-text);
+  opacity: 0.35;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-candle-volume--up {
+  opacity: 0.15;
+}

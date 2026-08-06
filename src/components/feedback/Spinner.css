@@ -1,0 +1,32 @@
+.lq-spinner {
+  animation: lq-spinner-spin 900ms linear infinite;
+}
+
+.lq-spinner__track {
+  stroke: var(--lq-color-border-subtle);
+}
+
+.lq-spinner__arc {
+  stroke: var(--lq-color-accent);
+  stroke-dasharray: 44;
+  stroke-dashoffset: 30;
+}
+
+@keyframes lq-spinner-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-spinner {
+    animation-duration: 1.8s;
+  }
+}
+
+/* Real e-ink hardware can't animate smoothly — a static partial ring still
+   reads as "loading" without a refresh-flicker. */
+.lq-root[data-lq-palette="eink"] .lq-spinner {
+  animation: none;
+}
+

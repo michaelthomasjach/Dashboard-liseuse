@@ -1,0 +1,39 @@
+.lq-field__input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.lq-field__input[type="number"]::-webkit-outer-spin-button,
+.lq-field__input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.lq-number-field__affix {
+  font-size: 0.85rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-number-field__steppers {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.lq-number-field__stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 12px;
+  line-height: 1;
+  font-size: 0.7rem;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-number-field__stepper:hover {
+  color: var(--lq-color-text);
+}

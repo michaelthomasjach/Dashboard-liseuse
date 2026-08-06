@@ -20,11 +20,12 @@ export default defineConfig({
       formats: ["es", "cjs"],
     },
     rollupOptions: {
-      external: ["react", "react-dom", "react/jsx-runtime"],
+      external: ["react", "react-dom", "react/jsx-runtime", "d3"],
       output: {
         globals: {
           react: "React",
           "react-dom": "ReactDOM",
+          d3: "d3",
         },
         assetFileNames: (assetInfo) =>
           assetInfo.name?.endsWith(".css") ? "style.css" : (assetInfo.name ?? "asset"),

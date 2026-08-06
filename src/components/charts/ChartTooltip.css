@@ -1,0 +1,48 @@
+.lq-chart-tooltip {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 10;
+  pointer-events: none;
+  transform: translate(-9999px, -9999px);
+  min-width: 120px;
+  padding: var(--lq-space-2) var(--lq-space-3);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  box-shadow: var(--lq-shadow-modal);
+  font-size: 0.8rem;
+  color: var(--lq-color-text);
+  white-space: nowrap;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-chart-tooltip {
+  border-radius: 0;
+}
+
+.lq-chart-tooltip--left {
+  margin-left: calc(-100% - 16px);
+}
+
+.lq-chart-tooltip:not(.lq-chart-tooltip--left) {
+  margin-left: 12px;
+}
+
+.lq-chart-tooltip__title {
+  font-weight: 700;
+  margin-bottom: 2px;
+}
+
+.lq-chart-tooltip__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-chart-tooltip__swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}

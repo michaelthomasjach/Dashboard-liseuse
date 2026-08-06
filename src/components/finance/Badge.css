@@ -1,0 +1,44 @@
+.lq-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  border-radius: var(--lq-radius-pill);
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-badge {
+  border-radius: 0;
+  background: transparent !important;
+  border-color: var(--lq-color-text) !important;
+  color: var(--lq-color-text) !important;
+}
+
+.lq-badge--neutral {
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-hover);
+}
+
+.lq-badge--up {
+  color: var(--lq-color-up);
+  background-color: color-mix(in srgb, var(--lq-color-up) 15%, transparent);
+}
+
+.lq-badge--down {
+  color: var(--lq-color-down);
+  background-color: color-mix(in srgb, var(--lq-color-down) 15%, transparent);
+}
+
+.lq-badge--warning {
+  color: var(--lq-color-warning);
+  background-color: color-mix(in srgb, var(--lq-color-warning) 18%, transparent);
+}
+
+.lq-badge--info {
+  color: var(--lq-color-info);
+  background-color: color-mix(in srgb, var(--lq-color-info) 15%, transparent);
+}

@@ -1,0 +1,21 @@
+.lq-price-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-price-change--up {
+  color: var(--lq-color-up);
+}
+
+.lq-price-change--down {
+  color: var(--lq-color-down);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-price-change--up,
+.lq-root[data-lq-palette="eink"] .lq-price-change--down {
+  color: var(--lq-color-text);
+}
