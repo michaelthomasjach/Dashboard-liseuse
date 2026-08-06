@@ -1,10 +1,13 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
+import { useAxisDragRescale } from "./internal/useAxisDragRescale";
+import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
 import { CHART_PALETTE } from "./internal/palette";
+import { MaximizeIcon, MinimizeIcon } from "../icons";
 import "./charts-shared.css";
 import "./LineAreaChart.css";
 
@@ -25,6 +28,7 @@ export interface ChartSeries {
 
 export interface LineAreaChartProps {
   series: ChartSeries[];
+  /** Fixed height in px. Fills 100% of the container's width regardless. */
   height?: number;
   area?: boolean;
   xType?: "time" | "linear";
@@ -33,6 +37,8 @@ export interface LineAreaChartProps {
   formatY?: (y: number) => string;
   showGrid?: boolean;
   showLegend?: boolean;
+  /** Shows a fullscreen toggle button in the toolbar. Default true. */
+  fullscreenToggle?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -47,13 +53,18 @@ export function LineAreaChart({
   formatY,
   showGrid = true,
   showLegend = true,
+  fullscreenToggle = true,
   margin,
   className,
 }: LineAreaChartProps) {
-  const [ref, dims] = useChartDimensions(margin, { height });
+  const clipId = useId();
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
+  const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ index: number; mouseX: number } | null>(null);
+
+  const [ref, dims] = useChartDimensions(margin, { height });
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
 
   const visibleSeries = series.filter((s) => !hiddenIds.has(s.id));
 
@@ -86,26 +97,46 @@ export function LineAreaChart({
       .nice();
   }, [visibleSeries, dims.boundedHeight]);
 
-  const { ref: zoomRef, reset } = useD3Zoom<SVGRectElement>({
+  const zoomedYScale = yTransform.rescaleY(yScale);
+
+  const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: dims.boundedHeight,
     enabled: zoomable,
     onZoom: setTransform,
   });
 
-  const isZoomed = transform.k !== 1 || transform.x !== 0;
+  const xAxisDrag = useAxisDragRescale({
+    axis: "x",
+    size: dims.boundedWidth,
+    transform,
+    onChange: setXTransformViaZoom,
+  });
+  const yAxisDrag = useAxisDragRescale({
+    axis: "y",
+    size: dims.boundedHeight,
+    transform: yTransform,
+    onChange: setYTransform,
+  });
+
+  const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
+
+  function resetZoom() {
+    resetX();
+    setYTransform(d3.zoomIdentity);
+  }
 
   const lineGen = d3
     .line<ChartPoint>()
     .x((d) => zoomedXScale(d.x as never))
-    .y((d) => yScale(d.y))
+    .y((d) => zoomedYScale(d.y))
     .curve(d3.curveMonotoneX);
 
   const areaGen = d3
     .area<ChartPoint>()
     .x((d) => zoomedXScale(d.x as never))
     .y0(dims.boundedHeight)
-    .y1((d) => yScale(d.y))
+    .y1((d) => zoomedYScale(d.y))
     .curve(d3.curveMonotoneX);
 
   const colorFor = (s: ChartSeries, i: number) => s.color ?? CHART_PALETTE[i % CHART_PALETTE.length];
@@ -135,17 +166,32 @@ export function LineAreaChart({
 
   return (
     <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
-      {zoomable && isZoomed && (
-        <div className="lq-chart__toolbar">
-          <button type="button" className="lq-chart__reset-button" onClick={reset}>
+      <div className="lq-chart__toolbar">
+        {zoomable && isZoomed && (
+          <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
             Réinitialiser le zoom
           </button>
-        </div>
-      )}
+        )}
+        {fullscreenToggle && (
+          <button
+            type="button"
+            className="lq-chart__icon-button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+          >
+            {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+          </button>
+        )}
+      </div>
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
+          </clipPath>
+        </defs>
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
           <ChartAxis
-            scale={yScale}
+            scale={zoomedYScale}
             orientation="left"
             grid={showGrid}
             gridLength={dims.boundedWidth}
@@ -158,46 +204,48 @@ export function LineAreaChart({
             tickFormat={formatX ? (v) => formatX(xType === "time" ? (v as Date) : Number(v)) : undefined}
           />
 
-          {visibleSeries.map((s, i) => {
-            const color = colorFor(s, i);
-            const fillArea = s.area ?? area;
-            return (
-              <g key={s.id}>
-                {fillArea && <path d={areaGen(s.data) ?? undefined} fill={color} fillOpacity={0.12} stroke="none" />}
-                <path d={lineGen(s.data) ?? undefined} fill="none" stroke={color} strokeWidth={2} />
-              </g>
-            );
-          })}
-
-          {hover &&
-            hoverPoint &&
-            (() => {
-              const p = hoverPoint[0]?.point;
-              if (!p) return null;
+          <g clipPath={`url(#${clipId})`}>
+            {visibleSeries.map((s, i) => {
+              const color = colorFor(s, i);
+              const fillArea = s.area ?? area;
               return (
-                <>
-                  <line
-                    className="lq-chart__crosshair-line"
-                    x1={hover.mouseX}
-                    x2={hover.mouseX}
-                    y1={0}
-                    y2={dims.boundedHeight}
-                  />
-                  {hoverPoint.map(({ series: s, color, point }) =>
-                    point ? (
-                      <circle
-                        key={s.id}
-                        className="lq-chart__dot"
-                        cx={zoomedXScale(point.x as never)}
-                        cy={yScale(point.y)}
-                        r={4}
-                        fill={color}
-                      />
-                    ) : null
-                  )}
-                </>
+                <g key={s.id}>
+                  {fillArea && <path d={areaGen(s.data) ?? undefined} fill={color} fillOpacity={0.12} stroke="none" />}
+                  <path d={lineGen(s.data) ?? undefined} fill="none" stroke={color} strokeWidth={2} />
+                </g>
               );
-            })()}
+            })}
+
+            {hover &&
+              hoverPoint &&
+              (() => {
+                const p = hoverPoint[0]?.point;
+                if (!p) return null;
+                return (
+                  <>
+                    <line
+                      className="lq-chart__crosshair-line"
+                      x1={hover.mouseX}
+                      x2={hover.mouseX}
+                      y1={0}
+                      y2={dims.boundedHeight}
+                    />
+                    {hoverPoint.map(({ series: s, color, point }) =>
+                      point ? (
+                        <circle
+                          key={s.id}
+                          className="lq-chart__dot"
+                          cx={zoomedXScale(point.x as never)}
+                          cy={zoomedYScale(point.y)}
+                          r={4}
+                          fill={color}
+                        />
+                      ) : null
+                    )}
+                  </>
+                );
+              })()}
+          </g>
 
           <rect
             ref={zoomRef}
@@ -206,6 +254,27 @@ export function LineAreaChart({
             height={dims.boundedHeight}
             onPointerMove={handlePointerMove}
             onPointerLeave={() => setHover(null)}
+          />
+
+          <rect
+            className="lq-chart__axis-drag lq-chart__axis-drag--y"
+            x={-dims.margin.left}
+            y={0}
+            width={dims.margin.left}
+            height={dims.boundedHeight}
+            onPointerDown={yAxisDrag.onPointerDown}
+            onPointerMove={yAxisDrag.onPointerMove}
+            onPointerUp={yAxisDrag.onPointerUp}
+          />
+          <rect
+            className="lq-chart__axis-drag lq-chart__axis-drag--x"
+            x={0}
+            y={dims.boundedHeight}
+            width={dims.boundedWidth}
+            height={dims.margin.bottom}
+            onPointerDown={xAxisDrag.onPointerDown}
+            onPointerMove={xAxisDrag.onPointerMove}
+            onPointerUp={xAxisDrag.onPointerUp}
           />
         </g>
       </svg>

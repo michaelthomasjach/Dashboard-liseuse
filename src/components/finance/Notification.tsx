@@ -9,6 +9,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { CloseIcon, CheckIcon, ErrorIcon, AlertTriangleIcon, InfoIcon } from "../icons";
+import { LqThemeProvider, useLqTheme } from "../../theme";
 import "./Notification.css";
 
 export type NotificationVariant = "corner" | "bar" | "modal";
@@ -58,23 +59,21 @@ function useAutoDismiss(autoDismissMs: number | undefined, onClose: () => void) 
   const remainingRef = useRef(autoDismissMs ?? 0);
   const startedAtRef = useRef(0);
   const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
-  const start = useCallback(
-    (duration: number) => {
-      remainingRef.current = duration;
-      startedAtRef.current = Date.now();
-      timerRef.current = setTimeout(onClose, duration);
-      setGeneration((g) => g + 1);
-    },
-    [onClose]
-  );
+  const start = useCallback((duration: number) => {
+    remainingRef.current = duration;
+    startedAtRef.current = Date.now();
+    timerRef.current = setTimeout(() => onCloseRef.current(), duration);
+    setGeneration((g) => g + 1);
+  }, []);
 
   useEffect(() => {
     if (!autoDismissMs) return;
     start(autoDismissMs);
     return () => clearTimeout(timerRef.current);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoDismissMs]);
+  }, [autoDismissMs, start]);
 
   function pause() {
     if (!autoDismissMs || paused) return;
@@ -197,6 +196,7 @@ const BAR_POSITIONS: NotificationBarPosition[] = ["top", "bottom"];
  *  multiple corner/bar notifications correctly (unlike rendering several standalone `<Notification>`s). */
 export function NotificationProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<NotificationItem[]>([]);
+  const theme = useLqTheme();
 
   const dismiss = useCallback((id: string) => {
     setItems((prev) => prev.filter((n) => n.id !== id));
@@ -217,7 +217,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
     <NotificationContext.Provider value={{ notify, dismiss }}>
       {children}
       {createPortal(
-        <>
+        <LqThemeProvider palette={theme.palette} surface={theme.surface} font={theme.font} style={{ display: "contents" }}>
           {CORNERS.map((c) => {
             const group = items.filter((n) => n.variant !== "modal" && n.variant !== "bar" && n.corner === c);
             if (group.length === 0) return null;
@@ -251,7 +251,7 @@ export function NotificationProvider({ children }: { children: ReactNode }) {
               </div>
             </div>
           ))}
-        </>,
+        </LqThemeProvider>,
         document.body
       )}
     </NotificationContext.Provider>

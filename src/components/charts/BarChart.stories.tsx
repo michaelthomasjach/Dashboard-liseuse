@@ -4,7 +4,7 @@ import { BarChart } from "./BarChart";
 const meta: Meta<typeof BarChart> = {
   title: "Charts/BarChart",
   component: BarChart,
-  parameters: { layout: "padded" },
+  parameters: { layout: "fullscreen" },
 };
 export default meta;
 type Story = StoryObj<typeof BarChart>;
@@ -21,7 +21,7 @@ const MONTHLY_RETURN = [
 export const MonthlyReturns: Story = {
   name: "Rendement mensuel (couleur par signe)",
   render: () => (
-    <div style={{ maxWidth: 600 }}>
+    <div style={{ padding: 24 }}>
       <BarChart data={MONTHLY_RETURN} colorByValue formatValue={(v) => `${v.toFixed(1)} %`} />
     </div>
   ),
@@ -29,7 +29,7 @@ export const MonthlyReturns: Story = {
 
 export const Horizontal: Story = {
   render: () => (
-    <div style={{ maxWidth: 500 }}>
+    <div style={{ padding: 24 }}>
       <BarChart
         orientation="horizontal"
         data={[

@@ -35,9 +35,13 @@
   top: 0;
   right: 0;
   z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.lq-chart__reset-button {
+.lq-chart__reset-button,
+.lq-chart__icon-button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -52,9 +56,34 @@
   cursor: pointer;
 }
 
-.lq-chart__reset-button:hover {
+.lq-chart__icon-button {
+  padding: 5px;
+}
+
+.lq-chart__reset-button:hover,
+.lq-chart__icon-button:hover {
   color: var(--lq-color-text);
   border-color: var(--lq-color-border);
+}
+
+.lq-chart__axis-drag {
+  fill: transparent;
+}
+
+.lq-chart__axis-drag--x {
+  cursor: ew-resize;
+}
+
+.lq-chart__axis-drag--y {
+  cursor: ns-resize;
+}
+
+.lq-chart:fullscreen {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background-color: var(--lq-color-bg);
+  padding: var(--lq-space-6);
 }
 
 .lq-chart__empty {

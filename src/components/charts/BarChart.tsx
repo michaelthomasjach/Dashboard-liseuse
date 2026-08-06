@@ -1,8 +1,10 @@
 import { useMemo, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
+import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
+import { MaximizeIcon, MinimizeIcon } from "../icons";
 import "./charts-shared.css";
 import "./BarChart.css";
 
@@ -19,6 +21,8 @@ export interface BarChartProps {
   orientation?: "vertical" | "horizontal";
   formatValue?: (value: number) => string;
   showGrid?: boolean;
+  /** Shows a fullscreen toggle button in the toolbar. Default true. */
+  fullscreenToggle?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
   /** Highlight positive/negative bars using the theme's up/down colors instead of a single accent. */
@@ -34,6 +38,7 @@ export function BarChart({
   orientation = "vertical",
   formatValue,
   showGrid = true,
+  fullscreenToggle = true,
   margin,
   className,
   colorByValue = false,
@@ -43,6 +48,7 @@ export function BarChart({
       ? { top: 8, right: 24, bottom: 24, left: 96 }
       : { top: 8, right: 8, bottom: 32, left: 48 };
   const [ref, dims] = useChartDimensions(margin ?? defaultMargin, { height });
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const colorFor = (d: BarDatum) => {
@@ -72,10 +78,24 @@ export function BarChart({
       .range(orientation === "vertical" ? [size, 0] : [0, size]);
   }, [data, orientation, dims.boundedWidth, dims.boundedHeight]);
 
+  const toolbar = fullscreenToggle && (
+    <div className="lq-chart__toolbar">
+      <button
+        type="button"
+        className="lq-chart__icon-button"
+        onClick={toggleFullscreen}
+        aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+      >
+        {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+      </button>
+    </div>
+  );
+
   if (dims.width === 0) return <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }} />;
   if (data.length === 0) {
     return (
       <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }}>
+        {toolbar}
         <div className="lq-chart__empty">Aucune donnée</div>
       </div>
     );
@@ -86,6 +106,7 @@ export function BarChart({
 
   return (
     <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
+      {toolbar}
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
           {orientation === "vertical" ? (

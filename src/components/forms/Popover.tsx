@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { usePopoverPosition, type PopoverPlacement } from "./internal/usePopoverPosition";
+import { LqThemeProvider, useLqTheme } from "../../theme";
 import "./Popover.css";
 
 export interface PopoverProps {
@@ -24,6 +25,7 @@ export interface PopoverProps {
 export function Popover({ open, onClose, anchorRef, placement = "bottom", matchAnchorWidth, children, className }: PopoverProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const position = usePopoverPosition(anchorRef, panelRef, open, placement);
+  const theme = useLqTheme();
 
   useEffect(() => {
     if (!open) return;
@@ -48,19 +50,21 @@ export function Popover({ open, onClose, anchorRef, placement = "bottom", matchA
   const width = matchAnchorWidth ? anchorRef.current?.getBoundingClientRect().width : undefined;
 
   return createPortal(
-    <div
-      ref={panelRef}
-      className={["lq-popover", className].filter(Boolean).join(" ")}
-      style={{
-        top: position.top,
-        left: position.left,
-        width,
-        visibility: position.ready ? "visible" : "hidden",
-      }}
-      data-placement={position.placement}
-    >
-      {children}
-    </div>,
+    <LqThemeProvider palette={theme.palette} surface={theme.surface} font={theme.font} style={{ display: "contents" }}>
+      <div
+        ref={panelRef}
+        className={["lq-popover", className].filter(Boolean).join(" ")}
+        style={{
+          top: position.top,
+          left: position.left,
+          width,
+          visibility: position.ready ? "visible" : "hidden",
+        }}
+        data-placement={position.placement}
+      >
+        {children}
+      </div>
+    </LqThemeProvider>,
     document.body
   );
 }

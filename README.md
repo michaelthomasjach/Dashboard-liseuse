@@ -119,24 +119,24 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 
 Chaque widget est piloté par des props (pas de fetch ni d'état interne caché) : à toi de brancher tes propres données/API.
 
-**Charts** — SVG piloté par React, D3 pour les maths (scales/zoom/shapes) uniquement ; zoom (molette/pincement) + pan (glisser) sur les graphiques à domaine continu
-- `LineAreaChart` — courbe/aire multi-séries, zoom + pan, tooltip avec crosshair, légende cliquable (masquer une série)
+**Charts** — SVG piloté par React, D3 pour les maths (scales/zoom/shapes) uniquement ; remplissent 100% de la largeur du conteneur par défaut. Sur `LineAreaChart`/`CandlestickChart` : molette/pincement + glisser dans le graphe pour zoomer/naviguer (axe X), glisser sur l'axe vertical pour rescale les prix, glisser sur l'axe horizontal pour rescale le temps — indépendamment l'un de l'autre. Les tracés sont clippés à la zone du graphe (jamais par-dessus les axes). Bouton plein écran dans la barre d'outils (`fullscreenToggle`, via l'API Fullscreen du navigateur — le graphe se redimensionne alors pour remplir l'écran).
+- `LineAreaChart` — courbe/aire multi-séries, zoom + pan + rescale par axe, tooltip avec crosshair, légende cliquable (masquer une série)
 - `BarChart` — barres verticales/horizontales, tri par valeur (`colorByValue` pour vert/rouge automatique)
-- `CandlestickChart` — chandeliers OHLC + volume, zoom + pan ; convention creux/plein en palette e-ink (le monochrome ne peut pas coder la hausse/baisse par la teinte)
+- `CandlestickChart` — chandeliers OHLC + volume, zoom + pan + rescale par axe ; convention creux/plein en palette e-ink (le monochrome ne peut pas coder la hausse/baisse par la teinte)
 - `GaugeChart` — jauge en arc avec bandes de seuils (ex. score de risque)
 - `DonutChart` — répartition (allocation de portefeuille…)
 - `Sparkline` — mini-courbe sans axes, pour cellule de tableau ou StatCard
 - `ChartTooltip`, `ChartAxis` — primitives exposées si tu construis ton propre graphique par-dessus
 
 **Forms** — dropdowns adaptatifs (collision detection), champs avec état d'erreur
-- `Popover` — moteur de positionnement générique (flip vertical bas/haut + décalage horizontal gauche/droite selon l'espace dispo), portalé, ferme au clic extérieur/Échap
+- `Popover` — moteur de positionnement générique (flip vertical bas/haut + décalage horizontal gauche/droite selon l'espace dispo), portalé dans `document.body` **avec réapplication du thème actif** (palette/surface/police) sur le portail, donc stylé correctement même en dehors de l'arbre `.lq-root` ; ferme au clic extérieur/Échap
 - `Select` — dropdown construit sur `Popover`
 - `TextField` — champ texte de base (label, icônes, erreur, texte d'aide)
 - `MaskedInput` — moteur de masque générique (`#` = chiffre, tout le reste est littéral), caractère de masque configurable (`maskChar`)
 - `PhoneInput`, `CreditCardInput`, `DateInput` — masques prêts à l'emploi construits sur `MaskedInput`
 - `NumberField` — champ numérique avec préfixe/suffixe (€, %) et steppers
 - `PasswordField` — champ mot de passe avec bascule afficher/masquer
-- `DatePicker` — calendrier en popup (même moteur de positionnement que `Select`)
+- `DatePicker` — calendrier en popup (même moteur de positionnement que `Select`). Cliquer sur le libellé "mois année" fait remonter vers une grille de mois, puis une grille d'années (± décennie) — beaucoup plus rapide que de paginer mois par mois pour changer d'année
 - `RangeSlider` — double curseur (plage de prix, de dates…)
 - `Dropzone` — zone de dépôt de fichiers (drag & drop + sélection au clic), liste de fichiers avec suppression, validation de taille
 
@@ -150,8 +150,8 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `Avatar` — image ou initiales
 - `Breadcrumbs` — fil d'ariane
 - `DataTable` — tableau triable, responsive (scroll horizontal)
-- `Notification` — popin (4 coins), barre sticky (haut/bas) ou modale ; auto-dismiss avec barre de progression (pause au survol) ou simple croix, selon les props. Utilisable seule (`open`/`onClose`) ou en file d'attente via `NotificationProvider` + `useNotification()` (empile correctement plusieurs popins/barres)
-- `UserMenu` — avatar + menu déroulant (construit sur `Popover`)
+- `Notification` — popin (4 coins), barre sticky (haut/bas) ou modale ; auto-dismiss avec barre de progression (pause au survol) ou simple croix, selon les props. Utilisable seule (`open`/`onClose`) ou en file d'attente via `NotificationProvider` + `useNotification()` (empile correctement plusieurs popins/barres, thème réappliqué sur le portail comme `Popover`)
+- `UserMenu` — avatar + menu déroulant (construit sur `Popover`), items imbriqués via `children` pour des sous-menus en cascade (s'ouvrent à droite, ou à gauche s'il n'y a pas la place)
 
 **Layouts** — responsive, s'effondrent en menu mobile sous ~900px
 - `SidebarLayout` — sidebar fixe desktop → tiroir hors-écran (hamburger) sur mobile

@@ -15,11 +15,29 @@
   margin-bottom: var(--lq-space-3);
 }
 
-.lq-date-picker__month {
+.lq-date-picker__header-label {
+  font-family: inherit;
   font-size: 0.85rem;
   font-weight: 700;
   text-transform: capitalize;
   color: var(--lq-color-text);
+  background: none;
+  border: none;
+  padding: 4px 8px;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-date-picker__header-label:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-date-picker__header-label--static {
+  cursor: default;
+}
+
+.lq-date-picker__header-label--static:hover {
+  background-color: transparent;
 }
 
 .lq-date-picker__nav {
@@ -87,6 +105,36 @@
 }
 
 .lq-date-picker__day--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
+  font-weight: 700;
+}
+
+.lq-date-picker__grid--picker {
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.lq-date-picker__cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--lq-space-3) var(--lq-space-2);
+  font-family: inherit;
+  font-size: 0.82rem;
+  text-transform: capitalize;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-date-picker__cell:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-date-picker__cell--selected {
   background-color: var(--lq-color-fill);
   color: var(--lq-color-accent-contrast);
   font-weight: 700;

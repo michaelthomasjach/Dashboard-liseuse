@@ -6,6 +6,18 @@ export function addMonths(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth() + n, 1);
 }
 
+export function addYears(d: Date, n: number): Date {
+  return new Date(d.getFullYear() + n, d.getMonth(), 1);
+}
+
+export function setMonth(d: Date, month: number): Date {
+  return new Date(d.getFullYear(), month, 1);
+}
+
+export function setYear(d: Date, year: number): Date {
+  return new Date(year, d.getMonth(), 1);
+}
+
 export function addDays(d: Date, n: number): Date {
   const copy = new Date(d);
   copy.setDate(copy.getDate() + n);

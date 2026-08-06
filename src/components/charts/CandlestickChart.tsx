@@ -1,9 +1,12 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
+import { useAxisDragRescale } from "./internal/useAxisDragRescale";
+import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
+import { MaximizeIcon, MinimizeIcon } from "../icons";
 import "./charts-shared.css";
 import "./CandlestickChart.css";
 
@@ -24,6 +27,8 @@ export interface CandlestickChartProps {
   formatDate?: (d: Date) => string;
   formatPrice?: (v: number) => string;
   formatVolume?: (v: number) => string;
+  /** Shows a fullscreen toggle button in the toolbar. Default true. */
+  fullscreenToggle?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -38,12 +43,17 @@ export function CandlestickChart({
   formatDate,
   formatPrice,
   formatVolume,
+  fullscreenToggle = true,
   margin,
   className,
 }: CandlestickChartProps) {
-  const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height });
+  const clipId = useId();
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
+  const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height });
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
 
   const volumeGap = showVolume ? 16 : 0;
   const volumeHeight = showVolume ? Math.round(dims.boundedHeight * 0.22) : 0;
@@ -65,12 +75,14 @@ export function CandlestickChart({
     return d3.scaleLinear().domain([min - pad, max + pad]).range([priceHeight, 0]);
   }, [data, priceHeight]);
 
+  const zoomedPriceScale = yTransform.rescaleY(priceScale);
+
   const volumeScale = useMemo(() => {
     const max = d3.max(data, (d) => d.volume ?? 0) ?? 0;
     return d3.scaleLinear().domain([0, max || 1]).range([volumeHeight, 0]);
   }, [data, volumeHeight]);
 
-  const { ref: zoomRef, reset } = useD3Zoom<SVGRectElement>({
+  const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: dims.boundedHeight,
     enabled: zoomable,
@@ -78,7 +90,26 @@ export function CandlestickChart({
     onZoom: setTransform,
   });
 
-  const isZoomed = transform.k !== 1 || transform.x !== 0;
+  const xAxisDrag = useAxisDragRescale({
+    axis: "x",
+    size: dims.boundedWidth,
+    transform,
+    onChange: setXTransformViaZoom,
+    scaleExtent: [1, 20],
+  });
+  const yAxisDrag = useAxisDragRescale({
+    axis: "y",
+    size: priceHeight,
+    transform: yTransform,
+    onChange: setYTransform,
+  });
+
+  const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
+
+  function resetZoom() {
+    resetX();
+    setYTransform(d3.zoomIdentity);
+  }
 
   const slotWidth = data.length > 0 ? dims.boundedWidth / data.length : 0;
   const candleWidth = Math.max(1, Math.min(24, slotWidth * transform.k * 0.6));
@@ -118,26 +149,41 @@ export function CandlestickChart({
 
   return (
     <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
-      {zoomable && isZoomed && (
-        <div className="lq-chart__toolbar">
-          <button type="button" className="lq-chart__reset-button" onClick={reset}>
+      <div className="lq-chart__toolbar">
+        {zoomable && isZoomed && (
+          <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
             Réinitialiser le zoom
           </button>
-        </div>
-      )}
+        )}
+        {fullscreenToggle && (
+          <button
+            type="button"
+            className="lq-chart__icon-button"
+            onClick={toggleFullscreen}
+            aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+          >
+            {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+          </button>
+        )}
+      </div>
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
+          </clipPath>
+        </defs>
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-          <ChartAxis scale={priceScale} orientation="left" grid gridLength={dims.boundedWidth} tickFormat={(v) => pFmt(Number(v))} />
+          <ChartAxis scale={zoomedPriceScale} orientation="left" grid gridLength={dims.boundedWidth} tickFormat={(v) => pFmt(Number(v))} />
 
-          <g clipPath="none">
+          <g clipPath={`url(#${clipId})`}>
             {visible.map((d) => {
               const cx = zoomedXScale(d.date);
               const up = d.close >= d.open;
-              const bodyTop = priceScale(Math.max(d.open, d.close));
-              const bodyBottom = priceScale(Math.min(d.open, d.close));
+              const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
+              const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
               return (
                 <g key={d.date.getTime()} className={up ? "lq-candle lq-candle--up" : "lq-candle lq-candle--down"}>
-                  <line className="lq-candle-wick" x1={cx} x2={cx} y1={priceScale(d.high)} y2={priceScale(d.low)} />
+                  <line className="lq-candle-wick" x1={cx} x2={cx} y1={zoomedPriceScale(d.high)} y2={zoomedPriceScale(d.low)} />
                   <rect
                     className="lq-candle-body"
                     x={cx - candleWidth / 2}
@@ -148,36 +194,41 @@ export function CandlestickChart({
                 </g>
               );
             })}
-          </g>
 
-          {hovered && (
-            <line
-              className="lq-chart__crosshair-line"
-              x1={zoomedXScale(hovered.date)}
-              x2={zoomedXScale(hovered.date)}
-              y1={0}
-              y2={dims.boundedHeight}
-            />
-          )}
+            {hovered && (
+              <line
+                className="lq-chart__crosshair-line"
+                x1={zoomedXScale(hovered.date)}
+                x2={zoomedXScale(hovered.date)}
+                y1={0}
+                y2={dims.boundedHeight}
+              />
+            )}
+
+            {showVolume && (
+              <g transform={`translate(0, ${priceHeight + volumeGap})`}>
+                {visible.map((d) => {
+                  const cx = zoomedXScale(d.date);
+                  const up = d.close >= d.open;
+                  const barHeight = volumeHeight - volumeScale(d.volume ?? 0);
+                  return (
+                    <rect
+                      key={d.date.getTime()}
+                      className={up ? "lq-candle-volume lq-candle-volume--up" : "lq-candle-volume lq-candle-volume--down"}
+                      x={cx - candleWidth / 2}
+                      y={volumeHeight - barHeight}
+                      width={candleWidth}
+                      height={Math.max(0, barHeight)}
+                    />
+                  );
+                })}
+              </g>
+            )}
+          </g>
 
           {showVolume && (
             <g transform={`translate(0, ${priceHeight + volumeGap})`}>
               <ChartAxis scale={volumeScale} orientation="left" ticks={2} tickFormat={(v) => vFmt(Number(v))} />
-              {visible.map((d) => {
-                const cx = zoomedXScale(d.date);
-                const up = d.close >= d.open;
-                const barHeight = volumeHeight - volumeScale(d.volume ?? 0);
-                return (
-                  <rect
-                    key={d.date.getTime()}
-                    className={up ? "lq-candle-volume lq-candle-volume--up" : "lq-candle-volume lq-candle-volume--down"}
-                    x={cx - candleWidth / 2}
-                    y={volumeHeight - barHeight}
-                    width={candleWidth}
-                    height={Math.max(0, barHeight)}
-                  />
-                );
-              })}
             </g>
           )}
 
@@ -190,6 +241,27 @@ export function CandlestickChart({
             height={dims.boundedHeight}
             onPointerMove={handlePointerMove}
             onPointerLeave={() => setHoverIndex(null)}
+          />
+
+          <rect
+            className="lq-chart__axis-drag lq-chart__axis-drag--y"
+            x={-dims.margin.left}
+            y={0}
+            width={dims.margin.left}
+            height={priceHeight}
+            onPointerDown={yAxisDrag.onPointerDown}
+            onPointerMove={yAxisDrag.onPointerMove}
+            onPointerUp={yAxisDrag.onPointerUp}
+          />
+          <rect
+            className="lq-chart__axis-drag lq-chart__axis-drag--x"
+            x={0}
+            y={dims.boundedHeight}
+            width={dims.boundedWidth}
+            height={dims.margin.bottom}
+            onPointerDown={xAxisDrag.onPointerDown}
+            onPointerMove={xAxisDrag.onPointerMove}
+            onPointerUp={xAxisDrag.onPointerUp}
           />
         </g>
       </svg>

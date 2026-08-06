@@ -322,3 +322,15 @@ export const FolderIcon = (props: IconProps) => (
     <path d="M3.5 6.5a1 1 0 0 1 1-1h4.7l1.6 2h8.7a1 1 0 0 1 1 1v9.5a1 1 0 0 1-1 1h-15a1 1 0 0 1-1-1Z" />
   </IconBase>
 );
+
+export const MaximizeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M9 3.5H4.5V8M15 3.5h4.5V8M9 20.5H4.5V16M15 20.5h4.5V16" />
+  </IconBase>
+);
+
+export const MinimizeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4.5 8.5H9V4M19.5 8.5H15V4M4.5 15.5H9V20M19.5 15.5H15V20" />
+  </IconBase>
+);

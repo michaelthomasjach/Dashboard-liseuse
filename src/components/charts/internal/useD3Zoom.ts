@@ -13,6 +13,9 @@ export interface UseD3ZoomOptions {
 export interface UseD3ZoomResult<T extends Element> {
   ref: RefObject<T>;
   reset: () => void;
+  /** Imperatively apply a transform (e.g. from a drag on the axis strip) — goes through the
+   *  d3-zoom behavior itself so its internally-tracked state stays in sync with wheel/drag input. */
+  setTransform: (transform: d3.ZoomTransform) => void;
 }
 
 /**
@@ -67,6 +70,12 @@ export function useD3Zoom<T extends Element>({
       const behavior = behaviorRef.current;
       if (!el || !behavior) return;
       d3.select(el).transition().duration(250).call(behavior.transform, d3.zoomIdentity);
+    },
+    setTransform: (t: d3.ZoomTransform) => {
+      const el = ref.current;
+      const behavior = behaviorRef.current;
+      if (!el || !behavior) return;
+      d3.select(el).call(behavior.transform, t);
     },
   };
 }

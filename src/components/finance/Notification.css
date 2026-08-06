@@ -19,30 +19,39 @@
   pointer-events: auto;
 }
 
+/* Fixed-height-content flex boxes grow away from their pinned edge, so the
+   newest item (last in DOM — we always append) must sit at the START of the
+   flex main axis on that pinned side to actually appear next to it:
+   top-anchored stacks pin their top edge and grow downward, so the newest
+   item needs to render first along the axis → reverse the axis (top of the
+   reversed axis = bottom of the screen... concretely: `column-reverse`
+   places the *last* DOM child at the top). Bottom-anchored stacks pin their
+   bottom edge and grow upward, so plain `column` already puts the newest
+   (last DOM child) right at that bottom edge. */
 .lq-notification-anchor--top-left,
 .lq-notification-stack--top-left {
   top: var(--lq-space-5);
   left: var(--lq-space-5);
+  flex-direction: column-reverse;
 }
 
 .lq-notification-anchor--top-right,
 .lq-notification-stack--top-right {
   top: var(--lq-space-5);
   right: var(--lq-space-5);
+  flex-direction: column-reverse;
 }
 
 .lq-notification-anchor--bottom-left,
 .lq-notification-stack--bottom-left {
   bottom: var(--lq-space-5);
   left: var(--lq-space-5);
-  flex-direction: column-reverse;
 }
 
 .lq-notification-anchor--bottom-right,
 .lq-notification-stack--bottom-right {
   bottom: var(--lq-space-5);
   right: var(--lq-space-5);
-  flex-direction: column-reverse;
 }
 
 .lq-notification-bar-anchor {
@@ -68,6 +77,11 @@
   flex-direction: column;
   gap: var(--lq-space-2);
   width: 100%;
+}
+
+/* Same reasoning as the corner stacks above. */
+.lq-notification-bar-anchor--top .lq-notification-bar-stack {
+  flex-direction: column-reverse;
 }
 
 .lq-notification-modal-overlay {

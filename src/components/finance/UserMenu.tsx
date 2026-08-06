@@ -1,7 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Popover } from "../forms/Popover";
 import { Avatar } from "./Avatar";
-import { ChevronDownIcon } from "../icons";
+import { ChevronDownIcon, ChevronRightIcon } from "../icons";
 import "./UserMenu.css";
 
 export interface UserMenuItem {
@@ -10,6 +10,8 @@ export interface UserMenuItem {
   icon?: ReactNode;
   onClick?: () => void;
   danger?: boolean;
+  /** Nested items rendered as a flyout submenu (opens right, or left if there isn't room). */
+  children?: UserMenuItem[];
 }
 
 export interface UserMenuProps {
@@ -40,23 +42,66 @@ export function UserMenu({ name, subtitle, avatarSrc, items, placement = "bottom
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={anchorRef} placement={placement}>
         <ul className="lq-user-menu__list" role="menu">
           {items.map((item) => (
-            <li key={item.id}>
-              <button
-                type="button"
-                role="menuitem"
-                className={["lq-user-menu__item", item.danger && "lq-user-menu__item--danger"].filter(Boolean).join(" ")}
-                onClick={() => {
-                  item.onClick?.();
-                  setOpen(false);
-                }}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            </li>
+            <UserMenuRow key={item.id} item={item} onSelect={() => setOpen(false)} />
           ))}
         </ul>
       </Popover>
     </div>
+  );
+}
+
+function UserMenuRow({ item, onSelect }: { item: UserMenuItem; onSelect: () => void }) {
+  const [submenuOpen, setSubmenuOpen] = useState(false);
+  const [openLeft, setOpenLeft] = useState(false);
+  const rowRef = useRef<HTMLLIElement>(null);
+  const hasChildren = Boolean(item.children && item.children.length > 0);
+
+  function openSubmenu() {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (rect) setOpenLeft(rect.right + 200 > window.innerWidth);
+    setSubmenuOpen(true);
+  }
+
+  return (
+    <li
+      ref={rowRef}
+      className="lq-user-menu__list-item"
+      onMouseEnter={hasChildren ? openSubmenu : undefined}
+      onMouseLeave={hasChildren ? () => setSubmenuOpen(false) : undefined}
+    >
+      <button
+        type="button"
+        role="menuitem"
+        aria-haspopup={hasChildren ? "menu" : undefined}
+        aria-expanded={hasChildren ? submenuOpen : undefined}
+        className={["lq-user-menu__item", item.danger && "lq-user-menu__item--danger"].filter(Boolean).join(" ")}
+        onClick={() => {
+          if (hasChildren) {
+            if (submenuOpen) setSubmenuOpen(false);
+            else openSubmenu();
+            return;
+          }
+          item.onClick?.();
+          onSelect();
+        }}
+      >
+        {item.icon}
+        <span className="lq-user-menu__item-label">{item.label}</span>
+        {hasChildren && <ChevronRightIcon size={14} className="lq-user-menu__submenu-caret" />}
+      </button>
+
+      {hasChildren && submenuOpen && (
+        <ul
+          className={["lq-user-menu__list", "lq-user-menu__submenu", openLeft && "lq-user-menu__submenu--left"]
+            .filter(Boolean)
+            .join(" ")}
+          role="menu"
+        >
+          {item.children!.map((child) => (
+            <UserMenuRow key={child.id} item={child} onSelect={onSelect} />
+          ))}
+        </ul>
+      )}
+    </li>
   );
 }

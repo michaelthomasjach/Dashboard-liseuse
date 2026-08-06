@@ -5,7 +5,9 @@
   border: 1px solid var(--lq-color-border);
   border-radius: var(--lq-radius-md);
   box-shadow: var(--lq-shadow-modal);
-  overflow: hidden;
+  /* visible, not hidden: menu items with a submenu flyout (see UserMenu)
+     position their submenu outside this box via `left: 100%`. */
+  overflow: visible;
   animation: lq-popover-in 120ms ease;
 }
 

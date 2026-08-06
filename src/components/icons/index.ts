@@ -46,4 +46,6 @@ export {
   FileIcon,
   TrashIcon,
   FolderIcon,
+  MaximizeIcon,
+  MinimizeIcon,
 } from "./icons";
