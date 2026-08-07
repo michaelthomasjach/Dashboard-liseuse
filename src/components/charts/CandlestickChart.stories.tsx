@@ -18,9 +18,11 @@ export const Default: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Molette pour zoomer, glisser dans le graphe pour naviguer. Glisser sur l'axe des prix (gauche) rescale
-        verticalement, glisser sur l'axe des dates (bas) rescale horizontalement. Bouton en haut à droite pour le plein
-        écran.
+        Molette pour zoomer, glisser dans le graphe pour naviguer (glisser pan aussi bien l'axe des prix que l'axe des
+        dates à la fois — utile une fois rescalé verticalement pour retrouver des bougies sorties de l'écran). Glisser
+        sur l'axe des prix (gauche) rescale verticalement, glisser sur l'axe des dates (bas) rescale horizontalement —
+        jusqu'à n'afficher qu'une seule bougie. Survoler le graphe affiche le prix et la date exacts directement sur
+        les axes, au lieu d'une infobulle flottante. Bouton en haut à droite pour le plein écran.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 11)} />
     </div>
@@ -40,10 +42,12 @@ export const WithDrawingTools: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Bouton "ligne de tendance" dans la barre d'outils à droite du graphe. 1er clic = début de la ligne, 2ème clic
-        = fin (la ligne suit le curseur entre les deux). Échap ou re-clic sur l'outil annule. Survoler une ligne
-        dessinée fait apparaître des poignées à ses extrémités — glisser une poignée pour la redéfinir. Les lignes
-        sont ancrées en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
+        Bouton "ligne de tendance" dans la colonne d'outils à droite du graphe (une vraie zone réservée, pas des
+        boutons superposés — elle reste visible en plein écran). 1er clic = début de la ligne, 2ème clic = fin (la
+        ligne suit le curseur entre les deux). Échap ou re-clic sur l'outil annule. Survoler une ligne dessinée fait
+        apparaître des poignées à ses extrémités — glisser une poignée pour la redéfinir, ou glisser directement sur
+        la ligne pour la déplacer entièrement. Les lignes sont ancrées en coordonnées date/prix : elles suivent le
+        zoom et le déplacement du graphe.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools />
     </div>

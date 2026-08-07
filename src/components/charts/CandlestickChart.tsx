@@ -6,7 +6,6 @@ import { useAxisDragRescale } from "./internal/useAxisDragRescale";
 import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
-import { ChartTooltip } from "./ChartTooltip";
 import { MaximizeIcon, MinimizeIcon, TrendLineIcon } from "../icons";
 import "./charts-shared.css";
 
@@ -94,10 +93,26 @@ export function CandlestickChart({
   const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
+  const [hoverY, setHoverY] = useState<number | null>(null);
   const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
   const drawingIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [themeTick, setThemeTick] = useState(0);
+
+  // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
+  // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
+  // every hover change.
+  const hoveredDrawingIdRef = useRef<string | null>(null);
+  function updateHoveredDrawingId(id: string | null) {
+    hoveredDrawingIdRef.current = id;
+    setHoveredDrawingId(id);
+  }
+
+  // Set while dragging a whole drawing (pointer down directly on its body, not an endpoint).
+  const dragLineRef = useRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>(null);
+  // Set while dragging the plot body itself to pan the price axis vertically (independent of
+  // d3-zoom's own horizontal pan, which only ever touches the X transform).
+  const dragPanRef = useRef<{ startClientY: number; startYTransform: d3.ZoomTransform } | null>(null);
 
   function commitDrawings(next: TrendLineDrawing[]) {
     setDrawings(next);
@@ -151,12 +166,18 @@ export function CandlestickChart({
     return d3.scaleLinear().domain([0, max || 1]).range([volumeHeight, 0]);
   }, [data, volumeHeight]);
 
+  // High enough that zooming all the way in leaves roughly one candle's slot filling the
+  // viewport, regardless of how many candles are in `data` (a fixed cap like 20 would only
+  // ever reveal ~20 candles at max zoom on a large dataset).
+  const maxXZoom = Math.max(20, data.length);
+
   const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: dims.boundedHeight,
     enabled: zoomable && activeTool === null,
-    scaleExtent: [1, 20],
+    scaleExtent: [1, maxXZoom],
     onZoom: setTransform,
+    filter: () => hoveredDrawingIdRef.current === null,
   });
 
   const xAxisDrag = useAxisDragRescale({
@@ -164,7 +185,7 @@ export function CandlestickChart({
     size: dims.boundedWidth,
     transform,
     onChange: setXTransformViaZoom,
-    scaleExtent: [1, 20],
+    scaleExtent: [1, maxXZoom],
   });
   const yAxisDrag = useAxisDragRescale({
     axis: "y",
@@ -178,7 +199,7 @@ export function CandlestickChart({
     transform,
     onChange: setXTransformViaZoom,
     enabled: zoomable,
-    scaleExtent: [1, 20],
+    scaleExtent: [1, maxXZoom],
     size: dims.boundedWidth,
   });
   const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
@@ -294,10 +315,32 @@ export function CandlestickChart({
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
+
+    if (dragLineRef.current) {
+      const drag = dragLineRef.current;
+      const dxPixels = e.clientX - drag.startClientX;
+      const dyPixels = e.clientY - drag.startClientY;
+      const newX1 = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
+      const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
+      const newX2 = zoomedXScale.invert(zoomedXScale(drag.orig.x2) + dxPixels) as Date;
+      const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
+      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2 } : d)));
+      return;
+    }
+
+    if (dragPanRef.current) {
+      const drag = dragPanRef.current;
+      const dy = e.clientY - drag.startClientY;
+      const t0 = drag.startYTransform;
+      setYTransform(d3.zoomIdentity.scale(t0.k).translate(0, t0.y / t0.k + dy / t0.k));
+      return;
+    }
+
     const target = zoomedXScale.invert(mouseX);
     const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
     const index = Math.min(data.length - 1, Math.max(0, bisect(data, target as Date)));
     setHoverIndex(index);
+    setHoverY(mouseY <= priceHeight ? mouseY : null);
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: zoomedXScale.invert(mouseX) as Date, y: zoomedPriceScale.invert(mouseY) });
@@ -318,8 +361,30 @@ export function CandlestickChart({
           closestId = dr.id;
         }
       }
-      setHoveredDrawingId(closestId);
+      updateHoveredDrawingId(closestId);
     }
+  }
+
+  function handleOverlayPointerDown(e: React.PointerEvent<SVGRectElement>) {
+    if (activeTool) return;
+    if (hoveredDrawingId) {
+      const dr = drawings.find((d) => d.id === hoveredDrawingId);
+      if (dr) {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        dragLineRef.current = { id: dr.id, startClientX: e.clientX, startClientY: e.clientY, orig: dr };
+        return;
+      }
+    }
+    if (zoomable) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragPanRef.current = { startClientY: e.clientY, startYTransform: yTransform };
+    }
+  }
+
+  function handleOverlayPointerUp(e: React.PointerEvent<SVGRectElement>) {
+    dragLineRef.current = null;
+    dragPanRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
   const hovered = hoverIndex !== null ? data[hoverIndex] : null;
@@ -410,6 +475,12 @@ export function CandlestickChart({
       ctx.moveTo(hx, 0);
       ctx.lineTo(hx, dims.boundedHeight);
       ctx.stroke();
+      if (hoverY !== null) {
+        ctx.beginPath();
+        ctx.moveTo(0, hoverY);
+        ctx.lineTo(dims.boundedWidth, hoverY);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -445,6 +516,7 @@ export function CandlestickChart({
     volumeGap,
     priceHeight,
     hovered,
+    hoverY,
     drawings,
     hoveredDrawingId,
     activeTool,
@@ -474,7 +546,7 @@ export function CandlestickChart({
       ref={ref}
       className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}
       onPointerLeave={() => {
-        if (!dragEndpointRef.current) setHoveredDrawingId(null);
+        if (!dragEndpointRef.current) updateHoveredDrawingId(null);
       }}
     >
       <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
@@ -540,8 +612,13 @@ export function CandlestickChart({
               className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
               width={dims.boundedWidth}
               height={dims.boundedHeight}
+              onPointerDown={handleOverlayPointerDown}
               onPointerMove={handlePointerMove}
-              onPointerLeave={() => setHoverIndex(null)}
+              onPointerUp={handleOverlayPointerUp}
+              onPointerLeave={() => {
+                setHoverIndex(null);
+                setHoverY(null);
+              }}
               onClick={handleOverlayClick}
             />
 
@@ -606,22 +683,24 @@ export function CandlestickChart({
             </g>
           </g>
         </svg>
-      </div>
 
-      {hovered &&
-        (() => {
-          const x = dims.margin.left + zoomedXScale(hovered.date);
-          return (
-            <ChartTooltip x={x} y={dims.margin.top} visible align={x > dims.width * 0.65 ? "left" : "right"}>
-              <div className="lq-chart-tooltip__title">{dFmt(hovered.date)}</div>
-              <div className="lq-chart-tooltip__row">O <strong>{pFmt(hovered.open)}</strong></div>
-              <div className="lq-chart-tooltip__row">H <strong>{pFmt(hovered.high)}</strong></div>
-              <div className="lq-chart-tooltip__row">L <strong>{pFmt(hovered.low)}</strong></div>
-              <div className="lq-chart-tooltip__row">C <strong>{pFmt(hovered.close)}</strong></div>
-              {hovered.volume !== undefined && <div className="lq-chart-tooltip__row">Vol <strong>{vFmt(hovered.volume)}</strong></div>}
-            </ChartTooltip>
-          );
-        })()}
+        {hoverY !== null && (
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--y"
+            style={{ top: dims.margin.top + hoverY, width: dims.margin.left }}
+          >
+            {pFmt(zoomedPriceScale.invert(hoverY))}
+          </div>
+        )}
+        {hovered && (
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--x"
+            style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + dims.boundedHeight }}
+          >
+            {dFmt(hovered.date)}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

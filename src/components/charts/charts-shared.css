@@ -203,3 +203,28 @@
 .lq-chart__drawing-handle:active {
   cursor: grabbing;
 }
+
+/* Value badge pinned to an axis at the hovered position — replaces a floating OHLC tooltip
+   with the same "read the value off the axis" convention trading platforms use. */
+.lq-chart__axis-value {
+  position: absolute;
+  z-index: 6;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-accent);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.lq-chart__axis-value--y {
+  left: 0;
+  text-align: right;
+  transform: translateY(-50%);
+}
+
+.lq-chart__axis-value--x {
+  transform: translateX(-50%);
+}

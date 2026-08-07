@@ -8,6 +8,11 @@ export interface UseD3ZoomOptions {
   scaleExtent?: [number, number];
   enabled?: boolean;
   onZoom: (transform: d3.ZoomTransform) => void;
+  /** Extra predicate (on top of d3-zoom's own default filter) to reject a gesture — e.g.
+   *  rejecting a drag that starts on top of a draggable annotation so it doesn't also pan the
+   *  chart underneath it. Read fresh on every event (not memoized — always pass the live value,
+   *  a ref-backed callback works well here). */
+  filter?: (event: Event) => boolean;
 }
 
 export interface UseD3ZoomResult<T extends Element> {
@@ -29,11 +34,14 @@ export function useD3Zoom<T extends Element>({
   scaleExtent = [1, 8],
   enabled = true,
   onZoom,
+  filter,
 }: UseD3ZoomOptions): UseD3ZoomResult<T> {
   const ref = useRef<T>(null);
   const behaviorRef = useRef<d3.ZoomBehavior<T, unknown> | null>(null);
   const onZoomRef = useRef(onZoom);
   onZoomRef.current = onZoom;
+  const filterRef = useRef(filter);
+  filterRef.current = filter;
   const [scaleMin, scaleMax] = scaleExtent;
 
   useEffect(() => {
@@ -51,6 +59,12 @@ export function useD3Zoom<T extends Element>({
         [0, 0],
         [width, height],
       ])
+      .filter((event: Event & { ctrlKey?: boolean; button?: number }) => {
+        // Mirrors d3-zoom's own default filter exactly (ctrl+wheel is a trackpad pinch gesture,
+        // not a modifier click, so it stays allowed; only ctrl+drag/click is rejected).
+        const defaultOk = (!event.ctrlKey || event.type === "wheel") && !event.button;
+        return defaultOk && (filterRef.current ? filterRef.current(event) : true);
+      })
       .on("zoom", (event: d3.D3ZoomEvent<T, unknown>) => onZoomRef.current(event.transform));
 
     behaviorRef.current = behavior;
