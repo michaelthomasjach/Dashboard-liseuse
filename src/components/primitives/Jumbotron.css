@@ -26,13 +26,19 @@
   color: var(--lq-color-accent-contrast);
 }
 
-.lq-jumbotron--has-image {
+.lq-jumbotron__bg {
+  position: absolute;
+  inset: 0;
   background-size: cover;
   background-position: center;
+  transition: filter 200ms ease;
 }
 
-.lq-jumbotron--has-image::before {
-  content: "";
+.lq-jumbotron__bg--grayscale {
+  filter: grayscale(1);
+}
+
+.lq-jumbotron__scrim {
   position: absolute;
   inset: 0;
   background: linear-gradient(90deg, var(--lq-color-overlay) 30%, transparent 90%);
@@ -40,6 +46,7 @@
 
 .lq-jumbotron--has-image .lq-jumbotron__content {
   position: relative;
+  z-index: 1;
   color: var(--lq-color-accent-contrast);
 }
 
@@ -86,6 +93,7 @@
 
 .lq-jumbotron__media {
   position: relative;
+  z-index: 1;
   flex-shrink: 0;
 }
 

@@ -8,20 +8,44 @@
   /* visible, not hidden: menu items with a submenu flyout (see UserMenu)
      position their submenu outside this box via `left: 100%`. */
   overflow: visible;
-  animation: lq-popover-in 120ms ease;
+  animation: lq-popover-in 140ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.lq-popover[data-placement="bottom"] {
+  transform-origin: top center;
+}
+
+.lq-popover[data-placement="top"] {
+  transform-origin: bottom center;
 }
 
 .lq-root[data-lq-palette="eink"] .lq-popover {
   border-radius: 0;
+  animation: lq-popover-in-eink 80ms linear;
 }
 
 @keyframes lq-popover-in {
   from {
     opacity: 0;
-    transform: translateY(-2px);
+    transform: scale(0.97) translateY(-4px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes lq-popover-in-eink {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-popover {
+    animation: lq-popover-in-eink 80ms linear;
   }
 }

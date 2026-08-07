@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Popover } from "../forms/Popover";
 import { Avatar } from "./Avatar";
 import { ChevronDownIcon, ChevronRightIcon } from "../icons";
@@ -54,9 +54,26 @@ function UserMenuRow({ item, onSelect }: { item: UserMenuItem; onSelect: () => v
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [openLeft, setOpenLeft] = useState(false);
   const rowRef = useRef<HTMLLIElement>(null);
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout>>();
   const hasChildren = Boolean(item.children && item.children.length > 0);
 
+  useEffect(() => () => clearTimeout(closeTimerRef.current), []);
+
+  function cancelClose() {
+    clearTimeout(closeTimerRef.current);
+  }
+
+  // Moving the mouse from the trigger to the flyout crosses a gap that belongs to
+  // neither element — closing immediately on mouseleave makes the submenu
+  // impossible to reach diagonally. Delay the close briefly instead, and cancel
+  // it if the pointer lands back on the trigger *or* the flyout in that window.
+  function scheduleClose() {
+    cancelClose();
+    closeTimerRef.current = setTimeout(() => setSubmenuOpen(false), 300);
+  }
+
   function openSubmenu() {
+    cancelClose();
     const rect = rowRef.current?.getBoundingClientRect();
     if (rect) setOpenLeft(rect.right + 200 > window.innerWidth);
     setSubmenuOpen(true);
@@ -67,7 +84,7 @@ function UserMenuRow({ item, onSelect }: { item: UserMenuItem; onSelect: () => v
       ref={rowRef}
       className="lq-user-menu__list-item"
       onMouseEnter={hasChildren ? openSubmenu : undefined}
-      onMouseLeave={hasChildren ? () => setSubmenuOpen(false) : undefined}
+      onMouseLeave={hasChildren ? scheduleClose : undefined}
     >
       <button
         type="button"
@@ -96,6 +113,8 @@ function UserMenuRow({ item, onSelect }: { item: UserMenuItem; onSelect: () => v
             .filter(Boolean)
             .join(" ")}
           role="menu"
+          onMouseEnter={cancelClose}
+          onMouseLeave={scheduleClose}
         >
           {item.children!.map((child) => (
             <UserMenuRow key={child.id} item={child} onSelect={onSelect} />

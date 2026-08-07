@@ -334,3 +334,21 @@ export const MinimizeIcon = (props: IconProps) => (
     <path d="M4.5 8.5H9V4M19.5 8.5H15V4M4.5 15.5H9V20M19.5 15.5H15V20" />
   </IconBase>
 );
+
+export const StarIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M12 3.5l2.6 5.4 5.9.8-4.3 4.2 1 5.9-5.2-2.8-5.2 2.8 1-5.9-4.3-4.2 5.9-.8Z" />
+  </IconBase>
+);
+
+export const ArrowRightIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M5 12h14M13 6l6 6-6 6" />
+  </IconBase>
+);
+
+export const PlusIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M12 5v14M5 12h14" />
+  </IconBase>
+);

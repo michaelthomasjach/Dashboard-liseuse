@@ -63,8 +63,8 @@ export function LineAreaChart({
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [hover, setHover] = useState<{ index: number; mouseX: number } | null>(null);
 
-  const [ref, dims] = useChartDimensions(margin, { height });
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const [ref, dims] = useChartDimensions(margin, { height: isFullscreen ? undefined : height });
 
   const visibleSeries = series.filter((s) => !hiddenIds.has(s.id));
 
@@ -126,6 +126,10 @@ export function LineAreaChart({
     setYTransform(d3.zoomIdentity);
   }
 
+  function resetYAxis() {
+    setYTransform(d3.zoomIdentity);
+  }
+
   const lineGen = d3
     .line<ChartPoint>()
     .x((d) => zoomedXScale(d.x as never))
@@ -154,7 +158,7 @@ export function LineAreaChart({
 
   if (dims.width === 0 || series.length === 0 || series.every((s) => s.data.length === 0)) {
     return (
-      <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }}>
+      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }}>
         {series.length === 0 && <div className="lq-chart__empty">Aucune donnée</div>}
       </div>
     );
@@ -165,7 +169,7 @@ export function LineAreaChart({
     : null;
 
   return (
-    <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
       <div className="lq-chart__toolbar">
         {zoomable && isZoomed && (
           <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
@@ -265,6 +269,7 @@ export function LineAreaChart({
             onPointerDown={yAxisDrag.onPointerDown}
             onPointerMove={yAxisDrag.onPointerMove}
             onPointerUp={yAxisDrag.onPointerUp}
+            onDoubleClick={resetYAxis}
           />
           <rect
             className="lq-chart__axis-drag lq-chart__axis-drag--x"
@@ -275,6 +280,7 @@ export function LineAreaChart({
             onPointerDown={xAxisDrag.onPointerDown}
             onPointerMove={xAxisDrag.onPointerMove}
             onPointerUp={xAxisDrag.onPointerUp}
+            onDoubleClick={resetX}
           />
         </g>
       </svg>

@@ -1,8 +1,40 @@
 .lq-tabs {
+  position: relative;
   display: flex;
   gap: var(--lq-space-4);
   border-bottom: 1px solid var(--lq-color-border-subtle);
   overflow-x: auto;
+}
+
+.lq-tabs__indicator {
+  position: absolute;
+  background-color: var(--lq-color-accent);
+  opacity: 0;
+  transition: transform 220ms ease, width 220ms ease, height 220ms ease, opacity 150ms ease;
+  pointer-events: none;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-tabs__indicator {
+  background-color: var(--lq-color-text);
+  transition: opacity 150ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-tabs__indicator {
+    transition: opacity 150ms ease;
+  }
+}
+
+.lq-tabs--horizontal .lq-tabs__indicator {
+  bottom: -1px;
+  left: 0;
+  height: 2px;
+}
+
+.lq-tabs--vertical .lq-tabs__indicator {
+  top: 0;
+  right: -13px;
+  width: 2px;
 }
 
 .lq-tabs__tab {
@@ -19,6 +51,7 @@
   border: none;
   white-space: nowrap;
   cursor: pointer;
+  transition: color var(--lq-transition-fast);
 }
 
 .lq-tabs__tab svg {
@@ -36,20 +69,6 @@
 
 .lq-tabs__tab--active {
   color: var(--lq-color-text);
-}
-
-.lq-tabs__tab--active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: -1px;
-  height: 2px;
-  background-color: var(--lq-color-accent);
-}
-
-.lq-root[data-lq-palette="eink"] .lq-tabs__tab--active::after {
-  background-color: var(--lq-color-text);
 }
 
 /* Vertical orientation — a side rail of tabs, e.g. inside a TabbedCard. */
@@ -74,13 +93,5 @@
 
 .lq-tabs--vertical .lq-tabs__tab--active {
   background-color: var(--lq-color-hover);
-}
-
-.lq-tabs--vertical .lq-tabs__tab--active::after {
-  left: auto;
-  right: -13px;
-  bottom: 0;
-  top: 0;
-  width: 2px;
-  height: auto;
+  transition: background-color var(--lq-transition-fast);
 }

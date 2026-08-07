@@ -1,0 +1,13 @@
+.lq-gauge-card__body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lq-space-3);
+}
+
+.lq-gauge-card__description {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: var(--lq-color-text-muted);
+}

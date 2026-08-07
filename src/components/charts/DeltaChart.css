@@ -1,0 +1,15 @@
+.lq-delta-chart__zero-line {
+  stroke: var(--lq-color-border);
+  stroke-width: 1;
+}
+
+.lq-delta-chart__connector {
+  stroke: var(--lq-color-text-muted);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+}
+
+.lq-delta-chart__bar {
+  cursor: pointer;
+  transition: opacity var(--lq-transition-fast);
+}

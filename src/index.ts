@@ -6,5 +6,6 @@ export * from "./components/charts";
 export * from "./components/forms";
 export * from "./components/feedback";
 export * from "./components/finance";
+export * from "./components/finance-widgets";
 export * from "./components/layout";
 export * from "./pages";

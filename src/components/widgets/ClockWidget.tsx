@@ -11,15 +11,26 @@ export interface ClockWidgetProps {
   icon?: ReactNode;
   /** Optional presence/status line under the date, e.g. a home icon + "Ulrich est à la maison". */
   presence?: ReactNode;
+  /** Blinks the ":" separator(s) in `time` once per second, like a real digital clock. Default true. */
+  blinkColon?: boolean;
   className?: string;
 }
 
 /** Large time + date header, as seen top-left of the reference dashboard. */
-export function ClockWidget({ time, date, icon, presence, className }: ClockWidgetProps) {
+export function ClockWidget({ time, date, icon, presence, blinkColon = true, className }: ClockWidgetProps) {
+  const segments = blinkColon ? time.split(":") : [time];
+
   return (
     <Panel bare className={["lq-clock", className].filter(Boolean).join(" ")}>
       <div className="lq-clock__top">
-        <span className="lq-clock__time">{time}</span>
+        <span className="lq-clock__time">
+          {segments.map((segment, i) => (
+            <span key={i}>
+              {i > 0 && <span className="lq-clock__colon">:</span>}
+              {segment}
+            </span>
+          ))}
+        </span>
         {icon && <span className="lq-clock__icon">{icon}</span>}
       </div>
       <span className="lq-clock__date">{date}</span>

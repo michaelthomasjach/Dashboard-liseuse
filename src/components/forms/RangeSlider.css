@@ -48,6 +48,43 @@
   border-radius: 0;
 }
 
+/* Grab the filled segment to shift the whole range — pad the hit area well
+   past the thin visual bar so it's easy to grab without widening the bar itself. */
+.lq-range-slider__fill--drag {
+  top: -8px;
+  padding: 8px 0;
+  box-sizing: content-box;
+  background-clip: content-box;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lq-range-slider__fill--drag:active {
+  cursor: grabbing;
+}
+
+.lq-range-slider__fill--down {
+  background-color: var(--lq-color-down);
+}
+
+.lq-range-slider__fill--up {
+  background-color: var(--lq-color-up);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-range-slider__fill--down,
+.lq-root[data-lq-palette="eink"] .lq-range-slider__fill--up {
+  background-color: var(--lq-color-text);
+}
+
+.lq-range-slider__zero-tick {
+  position: absolute;
+  top: -5px;
+  width: 1.5px;
+  height: 14px;
+  background-color: var(--lq-color-text-muted);
+  transform: translateX(-50%);
+}
+
 .lq-range-slider__thumb {
   position: absolute;
   top: 50%;

@@ -12,7 +12,7 @@
   border: 1.5px solid var(--lq-color-border);
   border-radius: var(--lq-radius-md);
   cursor: pointer;
-  transition: background-color var(--lq-transition-fast), color var(--lq-transition-fast);
+  transition: background-color var(--lq-transition-fast), color var(--lq-transition-fast), border-color var(--lq-transition-fast), transform 120ms ease;
 }
 
 .lq-root[data-lq-palette="eink"] .lq-button {
@@ -21,6 +21,10 @@
 
 .lq-button:hover {
   opacity: 0.85;
+}
+
+.lq-button:not(:disabled):active {
+  transform: scale(0.97);
 }
 
 .lq-button:disabled {
@@ -37,4 +41,53 @@
 .lq-button--block {
   display: flex;
   width: 100%;
+}
+
+.lq-button__icon {
+  display: inline-flex;
+  transition: transform 200ms ease;
+}
+
+.lq-button:hover .lq-button__icon {
+  transform: translateX(2px) scale(1.08);
+}
+
+.lq-button__icon--pop {
+  animation: lq-button-icon-pop 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes lq-button-icon-pop {
+  0% {
+    transform: scale(0.4) rotate(-15deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.15) rotate(4deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+  }
+}
+
+.lq-root[data-lq-palette="eink"] .lq-button__icon--pop {
+  animation: none;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-button:hover .lq-button__icon {
+  transform: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-button__icon--pop {
+    animation: none;
+  }
+
+  .lq-button:hover .lq-button__icon {
+    transform: none;
+  }
+
+  .lq-button:not(:disabled):active {
+    transform: none;
+  }
 }

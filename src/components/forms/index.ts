@@ -34,4 +34,7 @@ export type { RangeSliderProps } from "./RangeSlider";
 export { Dropzone } from "./Dropzone";
 export type { DropzoneProps } from "./Dropzone";
 
+export { Checkbox } from "./Checkbox";
+export type { CheckboxProps } from "./Checkbox";
+
 export type { PopoverPlacement } from "./internal/usePopoverPosition";

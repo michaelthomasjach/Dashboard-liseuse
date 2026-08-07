@@ -1,0 +1,32 @@
+.lq-comparison-card {
+  display: flex;
+}
+
+.lq-comparison-card__figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  padding: 0 var(--lq-space-4);
+}
+
+.lq-comparison-card__figure:first-child {
+  padding-left: 0;
+  border-right: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-comparison-card__figure:last-child {
+  padding-right: 0;
+}
+
+.lq-comparison-card__label {
+  font-size: 0.78rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-comparison-card__value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+  font-variant-numeric: tabular-nums;
+}

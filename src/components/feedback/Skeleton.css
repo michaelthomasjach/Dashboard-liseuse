@@ -1,32 +1,37 @@
 .lq-skeleton {
   display: inline-block;
-  background-color: var(--lq-color-border-subtle);
+  background: linear-gradient(
+    100deg,
+    var(--lq-color-border-subtle) 30%,
+    var(--lq-color-hover) 50%,
+    var(--lq-color-border-subtle) 70%
+  );
+  background-size: 400% 100%;
+  background-position: 100% 50%;
   border-radius: var(--lq-radius-sm);
-  animation: lq-skeleton-pulse 1.4s ease-in-out infinite;
+  animation: lq-skeleton-shimmer 1.6s ease-in-out infinite;
 }
 
 .lq-skeleton--circle {
   border-radius: 50%;
 }
 
-@keyframes lq-skeleton-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
-  }
-  50% {
-    opacity: 1;
+@keyframes lq-skeleton-shimmer {
+  to {
+    background-position: 0% 50%;
   }
 }
 
 /* Real e-ink hardware can't animate smoothly — fall back to a static tone. */
 .lq-root[data-lq-palette="eink"] .lq-skeleton {
+  background: var(--lq-color-border-subtle);
   animation: none;
   opacity: 0.5;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lq-skeleton {
+    background: var(--lq-color-border-subtle);
     animation: none;
     opacity: 0.75;
   }

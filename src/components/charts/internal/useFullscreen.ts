@@ -1,26 +1,31 @@
-import { useEffect, useState, type RefObject } from "react";
+import { useEffect, useState } from "react";
 
-/** Wraps the native Fullscreen API for a given element ref. */
-export function useFullscreen(ref: RefObject<HTMLElement | null>) {
+/**
+ * CSS-driven "fullscreen" (a fixed, viewport-covering overlay) rather than the
+ * native Fullscreen API — the native API silently fails inside sandboxed
+ * iframes (e.g. Storybook's preview frame) unless `allow="fullscreen"` is set
+ * on the iframe, which a component library can't guarantee for its consumers.
+ * This works everywhere and needs no permissions.
+ */
+export function useFullscreen() {
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   useEffect(() => {
-    function onChange() {
-      setIsFullscreen(Boolean(ref.current) && document.fullscreenElement === ref.current);
-    }
-    document.addEventListener("fullscreenchange", onChange);
-    return () => document.removeEventListener("fullscreenchange", onChange);
-  }, [ref]);
+    if (!isFullscreen) return;
 
-  function toggle() {
-    const el = ref.current;
-    if (!el) return;
-    if (document.fullscreenElement === el) {
-      document.exitFullscreen();
-    } else {
-      el.requestFullscreen?.();
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") setIsFullscreen(false);
     }
-  }
+    window.addEventListener("keydown", onKeyDown);
 
-  return { isFullscreen, toggle };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isFullscreen]);
+
+  return { isFullscreen, toggle: () => setIsFullscreen((f) => !f) };
 }

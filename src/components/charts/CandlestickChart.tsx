@@ -52,8 +52,8 @@ export function CandlestickChart({
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
-  const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height });
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height: isFullscreen ? undefined : height });
 
   const volumeGap = showVolume ? 16 : 0;
   const volumeHeight = showVolume ? Math.round(dims.boundedHeight * 0.22) : 0;
@@ -111,6 +111,10 @@ export function CandlestickChart({
     setYTransform(d3.zoomIdentity);
   }
 
+  function resetYAxis() {
+    setYTransform(d3.zoomIdentity);
+  }
+
   const slotWidth = data.length > 0 ? dims.boundedWidth / data.length : 0;
   const candleWidth = Math.max(1, Math.min(24, slotWidth * transform.k * 0.6));
 
@@ -133,10 +137,10 @@ export function CandlestickChart({
     setHoverIndex(index);
   }
 
-  if (dims.width === 0) return <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }} />;
+  if (dims.width === 0) return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }} />;
   if (data.length === 0) {
     return (
-      <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }}>
+      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }}>
         <div className="lq-chart__empty">Aucune donnée</div>
       </div>
     );
@@ -148,7 +152,7 @@ export function CandlestickChart({
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
 
   return (
-    <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
       <div className="lq-chart__toolbar">
         {zoomable && isZoomed && (
           <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
@@ -252,6 +256,7 @@ export function CandlestickChart({
             onPointerDown={yAxisDrag.onPointerDown}
             onPointerMove={yAxisDrag.onPointerMove}
             onPointerUp={yAxisDrag.onPointerUp}
+            onDoubleClick={resetYAxis}
           />
           <rect
             className="lq-chart__axis-drag lq-chart__axis-drag--x"
@@ -262,6 +267,7 @@ export function CandlestickChart({
             onPointerDown={xAxisDrag.onPointerDown}
             onPointerMove={xAxisDrag.onPointerMove}
             onPointerUp={xAxisDrag.onPointerUp}
+            onDoubleClick={resetX}
           />
         </g>
       </svg>

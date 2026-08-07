@@ -31,7 +31,7 @@
   border-radius: 50%;
   background-color: var(--lq-color-border);
   transform: translate(0, -50%);
-  transition: transform var(--lq-transition-base), background-color var(--lq-transition-base);
+  transition: transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1), background-color var(--lq-transition-base), width 120ms ease;
 }
 
 .lq-toggle--on {
@@ -44,6 +44,29 @@
     calc(var(--lq-toggle-w) - var(--lq-toggle-h)),
     -50%
   );
+}
+
+/* A quick tactile "squeeze" while pressed, like a physical switch. */
+.lq-toggle:not(:disabled):active .lq-toggle__knob {
+  width: calc(var(--lq-toggle-h) - 2 * var(--lq-toggle-pad) - 1px + 4px);
+}
+
+.lq-toggle:not(:disabled):active.lq-toggle--on .lq-toggle__knob {
+  transform: translate(calc(var(--lq-toggle-w) - var(--lq-toggle-h) - 4px), -50%);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-toggle__knob {
+  transition: transform var(--lq-transition-base), background-color var(--lq-transition-base);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-toggle:not(:disabled):active .lq-toggle__knob {
+  width: calc(var(--lq-toggle-h) - 2 * var(--lq-toggle-pad) - 1px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-toggle__knob {
+    transition: background-color var(--lq-transition-base);
+  }
 }
 
 .lq-root[data-lq-palette="eink"] .lq-toggle--on .lq-toggle__knob {

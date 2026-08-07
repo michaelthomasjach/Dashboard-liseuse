@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import "./Tabs.css";
 
 export interface TabItem {
@@ -16,17 +16,53 @@ export interface TabsProps {
   className?: string;
 }
 
-/** Underlined tab navigation for switching panels (Positions / Orders / History…). */
+/** Underlined tab navigation for switching panels (Positions / Orders / History…). The active
+ *  indicator slides to the selected tab instead of jumping. */
 export function Tabs({ items, value, onChange, orientation = "horizontal", className }: TabsProps) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const buttonRefs = useRef(new Map<string, HTMLButtonElement>());
+  const [indicator, setIndicator] = useState<CSSProperties>({ opacity: 0 });
+
+  useLayoutEffect(() => {
+    const container = containerRef.current;
+    const button = buttonRefs.current.get(value);
+
+    function update() {
+      if (!container || !button) {
+        setIndicator({ opacity: 0 });
+        return;
+      }
+      const containerRect = container.getBoundingClientRect();
+      const buttonRect = button.getBoundingClientRect();
+      setIndicator(
+        orientation === "horizontal"
+          ? { opacity: 1, transform: `translateX(${buttonRect.left - containerRect.left}px)`, width: buttonRect.width }
+          : { opacity: 1, transform: `translateY(${buttonRect.top - containerRect.top}px)`, height: buttonRect.height }
+      );
+    }
+
+    update();
+    if (!container) return;
+    const observer = new ResizeObserver(update);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [value, orientation, items.length]);
+
   return (
     <div
+      ref={containerRef}
       className={["lq-tabs", `lq-tabs--${orientation}`, className].filter(Boolean).join(" ")}
       role="tablist"
       aria-orientation={orientation}
     >
+      <span className="lq-tabs__indicator" style={indicator} aria-hidden="true" />
       {items.map((item) => (
         <button
           key={item.id}
+          ref={(el) => {
+            if (el) buttonRefs.current.set(item.id, el);
+            else buttonRefs.current.delete(item.id);
+          }}
           type="button"
           role="tab"
           aria-selected={item.id === value}

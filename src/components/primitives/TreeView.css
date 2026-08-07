@@ -6,6 +6,7 @@
 }
 
 .lq-tree__row {
+  position: relative;
   display: flex;
   align-items: center;
   border-radius: var(--lq-radius-sm);
@@ -25,6 +26,44 @@
 
 .lq-tree__row--disabled {
   opacity: 0.45;
+}
+
+.lq-tree__row--dragging {
+  opacity: 0.4;
+}
+
+.lq-tree__row--drop-before::before,
+.lq-tree__row--drop-after::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  right: 4px;
+  height: 2px;
+  border-radius: var(--lq-radius-pill);
+  background-color: var(--lq-color-accent);
+}
+
+.lq-tree__row--drop-before::before {
+  top: -1px;
+}
+
+.lq-tree__row--drop-after::after {
+  bottom: -1px;
+}
+
+.lq-tree__row--drop-inside {
+  background-color: var(--lq-color-hover);
+  outline: 1.5px dashed var(--lq-color-accent);
+  outline-offset: -1.5px;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-tree__row--drop-before::before,
+.lq-root[data-lq-palette="eink"] .lq-tree__row--drop-after::after {
+  background-color: var(--lq-color-text);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-tree__row--drop-inside {
+  outline-color: var(--lq-color-text);
 }
 
 .lq-tree__toggle {

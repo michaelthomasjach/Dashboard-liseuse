@@ -22,6 +22,11 @@
   background: none;
   border: none;
   cursor: pointer;
+  transition: background-color var(--lq-transition-fast);
+}
+
+.lq-expandable-card__header:hover {
+  background-color: var(--lq-color-hover);
 }
 
 .lq-expandable-card__heading {
@@ -77,11 +82,31 @@
   padding: 0 var(--lq-space-5) var(--lq-space-5);
   border-top: 1px solid var(--lq-color-border-subtle);
   padding-top: var(--lq-space-4);
+  animation: lq-expandable-card-fade-in 260ms ease;
+}
+
+@keyframes lq-expandable-card-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lq-root[data-lq-palette="eink"] .lq-expandable-card__body {
+  animation: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .lq-expandable-card__collapse {
     transition: none;
+  }
+
+  .lq-expandable-card__body {
+    animation: none;
   }
 }
 

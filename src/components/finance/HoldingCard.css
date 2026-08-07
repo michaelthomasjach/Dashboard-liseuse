@@ -1,0 +1,74 @@
+.lq-holding-card {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-3);
+  padding: var(--lq-space-3);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-lg);
+  transition: background-color var(--lq-transition-fast), transform 120ms ease;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-holding-card {
+  border-radius: 0;
+}
+
+.lq-holding-card--interactive {
+  cursor: pointer;
+}
+
+.lq-holding-card--interactive:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-holding-card--interactive:active {
+  transform: scale(0.99);
+}
+
+.lq-holding-card__identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.lq-holding-card__symbol {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+}
+
+.lq-holding-card__name {
+  font-size: 0.78rem;
+  color: var(--lq-color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-holding-card__sparkline {
+  flex-shrink: 0;
+}
+
+.lq-holding-card__figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.lq-holding-card__price {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-holding-card__quantity {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--lq-color-text-muted);
+  padding-left: var(--lq-space-2);
+  border-left: 1px solid var(--lq-color-border-subtle);
+}

@@ -31,8 +31,8 @@ export type { TabsProps, TabItem } from "./Tabs";
 export { Jumbotron } from "./Jumbotron";
 export type { JumbotronProps } from "./Jumbotron";
 
-export { TreeView } from "./TreeView";
-export type { TreeViewProps, TreeNode } from "./TreeView";
+export { TreeView, moveTreeNode } from "./TreeView";
+export type { TreeViewProps, TreeNode, TreeDropPosition } from "./TreeView";
 
 export { ExpandableCard } from "./ExpandableCard";
 export type { ExpandableCardProps } from "./ExpandableCard";

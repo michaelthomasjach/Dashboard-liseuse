@@ -13,6 +13,14 @@
   flex-shrink: 0;
 }
 
+.lq-select__chevron {
+  transition: transform var(--lq-transition-base);
+}
+
+.lq-select__chevron--open {
+  transform: rotate(180deg);
+}
+
 .lq-select__value {
   color: var(--lq-color-text);
   overflow: hidden;

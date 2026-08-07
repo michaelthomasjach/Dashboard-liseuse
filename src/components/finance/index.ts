@@ -7,6 +7,15 @@ export type { PriceChangeTagProps } from "./PriceChangeTag";
 export { StatCard } from "./StatCard";
 export type { StatCardProps } from "./StatCard";
 
+export { HoldingCard } from "./HoldingCard";
+export type { HoldingCardProps } from "./HoldingCard";
+
+export { ComparisonCard } from "./ComparisonCard";
+export type { ComparisonCardProps, ComparisonCardFigure } from "./ComparisonCard";
+
+export { GaugeCard } from "./GaugeCard";
+export type { GaugeCardProps } from "./GaugeCard";
+
 export { Avatar } from "./Avatar";
 export type { AvatarProps } from "./Avatar";
 

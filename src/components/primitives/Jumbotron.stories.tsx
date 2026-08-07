@@ -35,3 +35,47 @@ export const Accent: Story = {
     />
   ),
 };
+
+// Local, offline placeholder — swap for a real photo in your app.
+const PLACEHOLDER_IMAGE =
+  "data:image/svg+xml;utf8," +
+  encodeURIComponent(`
+    <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700">
+      <defs>
+        <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#1e3a5f"/>
+          <stop offset="1" stop-color="#0f1420"/>
+        </linearGradient>
+      </defs>
+      <rect width="1200" height="700" fill="url(#g)"/>
+      <circle cx="900" cy="200" r="260" fill="#2563eb" opacity="0.35"/>
+      <circle cx="1050" cy="480" r="160" fill="#16a34a" opacity="0.35"/>
+    </svg>
+  `);
+
+export const WithImage: Story = {
+  name: "Avec image de fond",
+  render: () => (
+    <Jumbotron
+      eyebrow="Marché"
+      title="Les marchés ouvrent dans 2 heures"
+      description="Préparez vos ordres avant l'ouverture de Wall Street."
+      backgroundImage={PLACEHOLDER_IMAGE}
+      actions={<Button selected>Voir le calendrier</Button>}
+    />
+  ),
+};
+
+export const WithImageGrayscale: Story = {
+  name: "Avec image de fond, filtre noir et blanc",
+  render: () => (
+    <Jumbotron
+      eyebrow="Marché"
+      title="Les marchés ouvrent dans 2 heures"
+      description="Préparez vos ordres avant l'ouverture de Wall Street."
+      backgroundImage={PLACEHOLDER_IMAGE}
+      imageFilter="grayscale"
+      actions={<Button selected>Voir le calendrier</Button>}
+    />
+  ),
+};

@@ -16,6 +16,9 @@ export type { DonutChartProps, DonutDatum } from "./DonutChart";
 export { Sparkline } from "./Sparkline";
 export type { SparklineProps } from "./Sparkline";
 
+export { DeltaChart } from "./DeltaChart";
+export type { DeltaChartProps, DeltaChartItem } from "./DeltaChart";
+
 export { ChartTooltip } from "./ChartTooltip";
 export type { ChartTooltipProps } from "./ChartTooltip";
 

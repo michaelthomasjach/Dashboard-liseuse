@@ -47,8 +47,8 @@ export function BarChart({
     orientation === "horizontal"
       ? { top: 8, right: 24, bottom: 24, left: 96 }
       : { top: 8, right: 8, bottom: 32, left: 48 };
-  const [ref, dims] = useChartDimensions(margin ?? defaultMargin, { height });
-  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen(ref);
+  const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const [ref, dims] = useChartDimensions(margin ?? defaultMargin, { height: isFullscreen ? undefined : height });
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const colorFor = (d: BarDatum) => {
@@ -91,10 +91,10 @@ export function BarChart({
     </div>
   );
 
-  if (dims.width === 0) return <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }} />;
+  if (dims.width === 0) return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }} />;
   if (data.length === 0) {
     return (
-      <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")} style={{ height }}>
+      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }}>
         {toolbar}
         <div className="lq-chart__empty">Aucune donnée</div>
       </div>
@@ -105,7 +105,7 @@ export function BarChart({
   const hovered = data.find((d) => d.id === hoverId);
 
   return (
-    <div ref={ref} className={["lq-chart", className].filter(Boolean).join(" ")}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
       {toolbar}
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>

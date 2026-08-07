@@ -66,10 +66,15 @@
   border: none;
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
+  transition: background-color var(--lq-transition-fast);
 }
 
 .lq-user-menu__item:hover {
   background-color: var(--lq-color-hover);
+}
+
+.lq-user-menu__item:hover .lq-user-menu__submenu-caret {
+  transform: translateX(2px);
 }
 
 .lq-user-menu__item--danger {
@@ -87,6 +92,7 @@
 .lq-user-menu__submenu-caret {
   flex-shrink: 0;
   color: var(--lq-color-text-muted);
+  transition: transform var(--lq-transition-fast);
 }
 
 .lq-user-menu__list-item {
@@ -103,10 +109,30 @@
   border: 1px solid var(--lq-color-border);
   border-radius: var(--lq-radius-md);
   box-shadow: var(--lq-shadow-modal);
+  animation: lq-submenu-in 120ms ease;
+  transform-origin: left top;
+}
+
+@keyframes lq-submenu-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .lq-root[data-lq-palette="eink"] .lq-user-menu__submenu {
   border-radius: 0;
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-user-menu__submenu {
+    animation: none;
+  }
 }
 
 .lq-user-menu__submenu--left {
@@ -114,4 +140,5 @@
   right: 100%;
   margin-left: 0;
   margin-right: 4px;
+  transform-origin: right top;
 }

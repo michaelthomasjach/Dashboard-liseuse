@@ -57,6 +57,11 @@
   gap: var(--lq-space-4);
 }
 
+.lq-login-page__terms {
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+}
+
 .lq-login-page__footer {
   text-align: center;
   font-size: 0.85rem;

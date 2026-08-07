@@ -21,7 +21,7 @@ export const Default: Story = {
     const [value, setValue] = useState<string | null>("eur");
     return (
       <div style={{ maxWidth: 260 }}>
-        <Select options={OPTIONS} value={value} onChange={setValue} />
+        <Select label="Devise" options={OPTIONS} value={value} onChange={setValue} />
       </div>
     );
   },
@@ -44,7 +44,7 @@ export const WithError: Story = {
     const [value, setValue] = useState<string | null>(null);
     return (
       <div style={{ maxWidth: 260 }}>
-        <Select options={OPTIONS} value={value} onChange={setValue} error="Sélection requise" />
+        <Select label="Devise" options={OPTIONS} value={value} onChange={setValue} error="Sélection requise" />
       </div>
     );
   },
