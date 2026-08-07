@@ -9,6 +9,15 @@
   overflow: visible;
 }
 
+/* Positioning context for the canvas + svg pair, kept free of padding on purpose:
+   `.lq-chart` itself gets padding in fullscreen mode, and an absolutely-positioned
+   canvas is placed relative to its ancestor's padding box — ignoring that padding
+   — while the svg (normal flow) starts after it. Without this padding-free wrapper
+   the two would drift apart by the fullscreen padding amount. */
+.lq-chart__plot {
+  position: relative;
+}
+
 .lq-chart__canvas {
   position: absolute;
   pointer-events: none;

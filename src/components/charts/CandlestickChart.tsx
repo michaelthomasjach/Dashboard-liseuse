@@ -494,107 +494,109 @@ export function CandlestickChart({
           </button>
         </div>
       )}
-      <canvas
-        ref={canvasRef}
-        className="lq-chart__canvas"
-        style={{
-          left: dims.margin.left,
-          top: dims.margin.top,
-          width: dims.boundedWidth,
-          height: dims.boundedHeight,
-        }}
-      />
-      <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
-        <defs>
-          <clipPath id={clipId}>
-            <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
-          </clipPath>
-        </defs>
-        <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-          <ChartAxis scale={zoomedPriceScale} orientation="left" tickFormat={(v) => pFmt(Number(v))} />
+      <div className="lq-chart__plot">
+        <canvas
+          ref={canvasRef}
+          className="lq-chart__canvas"
+          style={{
+            left: dims.margin.left,
+            top: dims.margin.top,
+            width: dims.boundedWidth,
+            height: dims.boundedHeight,
+          }}
+        />
+        <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
+          <defs>
+            <clipPath id={clipId}>
+              <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
+            </clipPath>
+          </defs>
+          <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
+            <ChartAxis scale={zoomedPriceScale} orientation="left" tickFormat={(v) => pFmt(Number(v))} />
 
-          {showVolume && (
-            <g transform={`translate(0, ${priceHeight + volumeGap})`}>
-              <ChartAxis scale={volumeScale} orientation="left" ticks={2} tickFormat={(v) => vFmt(Number(v))} />
+            {showVolume && (
+              <g transform={`translate(0, ${priceHeight + volumeGap})`}>
+                <ChartAxis scale={volumeScale} orientation="left" ticks={2} tickFormat={(v) => vFmt(Number(v))} />
+              </g>
+            )}
+
+            <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${dims.boundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
+
+            <rect
+              ref={zoomRef}
+              className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
+              width={dims.boundedWidth}
+              height={dims.boundedHeight}
+              onPointerMove={handlePointerMove}
+              onPointerLeave={() => {
+                setHoverIndex(null);
+                if (!dragEndpointRef.current) setHoveredDrawingId(null);
+              }}
+              onClick={handleOverlayClick}
+            />
+
+            <rect
+              ref={yAxisWheelRef}
+              className="lq-chart__axis-drag lq-chart__axis-drag--y"
+              x={-dims.margin.left}
+              y={0}
+              width={dims.margin.left}
+              height={priceHeight}
+              onPointerDown={yAxisDrag.onPointerDown}
+              onPointerMove={yAxisDrag.onPointerMove}
+              onPointerUp={yAxisDrag.onPointerUp}
+              onDoubleClick={resetYAxis}
+            />
+            <rect
+              ref={xAxisWheelRef}
+              className="lq-chart__axis-drag lq-chart__axis-drag--x"
+              x={0}
+              y={dims.boundedHeight}
+              width={dims.boundedWidth}
+              height={dims.margin.bottom}
+              onPointerDown={xAxisDrag.onPointerDown}
+              onPointerMove={xAxisDrag.onPointerMove}
+              onPointerUp={xAxisDrag.onPointerUp}
+              onDoubleClick={resetX}
+            />
+
+            {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
+                actually receive pointer events instead of the overlay swallowing them first. */}
+            <g clipPath={`url(#${clipId})`}>
+              {drawings.map((dr) => {
+                const isHovered = hoveredDrawingId === dr.id;
+                if (!isHovered) return null;
+                const x1 = zoomedXScale(dr.x1);
+                const y1 = zoomedPriceScale(dr.y1);
+                const x2 = zoomedXScale(dr.x2);
+                const y2 = zoomedPriceScale(dr.y2);
+                return (
+                  <g key={dr.id}>
+                    <circle
+                      className="lq-chart__drawing-handle"
+                      cx={x1}
+                      cy={y1}
+                      r={5}
+                      onPointerDown={handleEndpointPointerDown(dr.id, 1)}
+                      onPointerMove={handleEndpointPointerMove}
+                      onPointerUp={handleEndpointPointerUp}
+                    />
+                    <circle
+                      className="lq-chart__drawing-handle"
+                      cx={x2}
+                      cy={y2}
+                      r={5}
+                      onPointerDown={handleEndpointPointerDown(dr.id, 2)}
+                      onPointerMove={handleEndpointPointerMove}
+                      onPointerUp={handleEndpointPointerUp}
+                    />
+                  </g>
+                );
+              })}
             </g>
-          )}
-
-          <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${dims.boundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
-
-          <rect
-            ref={zoomRef}
-            className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
-            width={dims.boundedWidth}
-            height={dims.boundedHeight}
-            onPointerMove={handlePointerMove}
-            onPointerLeave={() => {
-              setHoverIndex(null);
-              if (!dragEndpointRef.current) setHoveredDrawingId(null);
-            }}
-            onClick={handleOverlayClick}
-          />
-
-          <rect
-            ref={yAxisWheelRef}
-            className="lq-chart__axis-drag lq-chart__axis-drag--y"
-            x={-dims.margin.left}
-            y={0}
-            width={dims.margin.left}
-            height={priceHeight}
-            onPointerDown={yAxisDrag.onPointerDown}
-            onPointerMove={yAxisDrag.onPointerMove}
-            onPointerUp={yAxisDrag.onPointerUp}
-            onDoubleClick={resetYAxis}
-          />
-          <rect
-            ref={xAxisWheelRef}
-            className="lq-chart__axis-drag lq-chart__axis-drag--x"
-            x={0}
-            y={dims.boundedHeight}
-            width={dims.boundedWidth}
-            height={dims.margin.bottom}
-            onPointerDown={xAxisDrag.onPointerDown}
-            onPointerMove={xAxisDrag.onPointerMove}
-            onPointerUp={xAxisDrag.onPointerUp}
-            onDoubleClick={resetX}
-          />
-
-          {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
-              actually receive pointer events instead of the overlay swallowing them first. */}
-          <g clipPath={`url(#${clipId})`}>
-            {drawings.map((dr) => {
-              const isHovered = hoveredDrawingId === dr.id;
-              if (!isHovered) return null;
-              const x1 = zoomedXScale(dr.x1);
-              const y1 = zoomedPriceScale(dr.y1);
-              const x2 = zoomedXScale(dr.x2);
-              const y2 = zoomedPriceScale(dr.y2);
-              return (
-                <g key={dr.id}>
-                  <circle
-                    className="lq-chart__drawing-handle"
-                    cx={x1}
-                    cy={y1}
-                    r={5}
-                    onPointerDown={handleEndpointPointerDown(dr.id, 1)}
-                    onPointerMove={handleEndpointPointerMove}
-                    onPointerUp={handleEndpointPointerUp}
-                  />
-                  <circle
-                    className="lq-chart__drawing-handle"
-                    cx={x2}
-                    cy={y2}
-                    r={5}
-                    onPointerDown={handleEndpointPointerDown(dr.id, 2)}
-                    onPointerMove={handleEndpointPointerMove}
-                    onPointerUp={handleEndpointPointerUp}
-                  />
-                </g>
-              );
-            })}
           </g>
-        </g>
-      </svg>
+        </svg>
+      </div>
 
       {hovered &&
         (() => {
