@@ -9,7 +9,11 @@
   width: var(--lq-toggle-w);
   height: var(--lq-toggle-h);
   padding: 0;
-  border-radius: var(--lq-radius-pill);
+  /* Deliberately hardcoded, not var(--lq-radius-pill): every other control in
+     this library is square in both palettes, but the switch keeps its pill
+     shape — it's the one place a rounded "physical toggle" silhouette reads
+     more clearly than a square one. */
+  border-radius: 999px;
   border: 1.5px solid var(--lq-color-border);
   background-color: var(--lq-color-fill-track);
   cursor: pointer;
