@@ -51,4 +51,5 @@ export {
   StarIcon,
   ArrowRightIcon,
   PlusIcon,
+  CopyIcon,
 } from "./icons";

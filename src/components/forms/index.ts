@@ -37,4 +37,13 @@ export type { DropzoneProps } from "./Dropzone";
 export { Checkbox } from "./Checkbox";
 export type { CheckboxProps } from "./Checkbox";
 
+export { CheckboxButton } from "./CheckboxButton";
+export type { CheckboxButtonProps } from "./CheckboxButton";
+
+export { Tag } from "./Tag";
+export type { TagProps } from "./Tag";
+
+export { TagInput } from "./TagInput";
+export type { TagInputProps } from "./TagInput";
+
 export type { PopoverPlacement } from "./internal/usePopoverPosition";

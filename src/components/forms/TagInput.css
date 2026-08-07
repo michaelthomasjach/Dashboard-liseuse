@@ -1,0 +1,28 @@
+.lq-tag-input {
+  flex-wrap: wrap;
+  height: auto;
+  min-height: 40px;
+  padding: 6px 8px;
+  gap: 6px;
+  cursor: text;
+}
+
+.lq-tag-input__field {
+  flex: 1;
+  min-width: 100px;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.9rem;
+  color: var(--lq-color-text);
+  padding: 3px 2px;
+}
+
+.lq-tag-input__field::placeholder {
+  color: var(--lq-color-text-muted);
+}
+
+.lq-tag-input__field:disabled {
+  cursor: not-allowed;
+}

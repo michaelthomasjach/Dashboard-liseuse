@@ -1,0 +1,49 @@
+.lq-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px 3px 8px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
+  border: 1px solid var(--lq-color-border-subtle);
+  white-space: nowrap;
+  animation: lq-tag-in 140ms ease;
+}
+
+@keyframes lq-tag-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.lq-root[data-lq-palette="eink"] .lq-tag {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-tag {
+    animation: none;
+  }
+}
+
+.lq-tag__remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-tag__remove:hover {
+  color: var(--lq-color-danger);
+}

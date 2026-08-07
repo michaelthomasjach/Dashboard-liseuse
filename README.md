@@ -2,11 +2,11 @@
 
 Bibliothèque de composants React pour construire des tableaux de bord — domotique façon liseuse e-ink (BOOX, Kindle…) ou tablette, et applications finance (graphiques D3 interactifs, formulaires, layouts, pages). Chaque composant supporte nativement :
 
-- **Palette** — `eink` (monochrome, hairlines, sans ombre ni dégradé) ou `color` (tablette couleur, avec accents).
+- **Palette** — `eink` (monochrome, hairlines, sans ombre ni dégradé) ou `color` (tablette couleur, accents pastel).
 - **Surface** — `light` (Clair) ou `dark` (Sombre).
 - **Typo** — `space-grotesk`, `manrope`, ou `sora`.
 
-Les quatre combinaisons palette × surface sont pilotées par variables CSS ; aucune classe conditionnelle à gérer côté consommateur.
+Les quatre combinaisons palette × surface sont pilotées par variables CSS ; aucune classe conditionnelle à gérer côté consommateur. Les deux palettes partagent la **même géométrie** — coins carrés partout (`--lq-radius-*` vaut `0px` dans les deux cas), `color` n'est qu'une variante *colorée* du même langage visuel qu'`eink`, pas un style différent. Les couleurs de `color` sont volontairement **pastel/dusty** (désaturées) plutôt que des teintes UI-kit brutes, pour rester cohérentes avec la sobriété d'`eink`.
 
 ## Installation
 
@@ -105,6 +105,9 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 - `TreeView` — arbre expand/collapse récursif, avec glisser-déposer optionnel (`onMove`) pour réorganiser/reparenter — voir l'utilitaire `moveTreeNode`
 - `ExpandableCard` — carte qui se déplie verticalement (animation CSS pure, pas de mesure JS)
 - `TabbedCard` — carte dont le corps est découpé en onglets (`orientation="horizontal"|"vertical"`)
+- `Testimonial` — carte témoignage (citation, avatar/initiales, nom, rôle, note en étoiles)
+- `CodeBlock` — bloc de code monospace avec bouton copier ; pas de coloration syntaxique (pas de dépendance lourde), numéros de ligne optionnels
+- `Heading`, `Text` — typographie du système (h1-h6, tailles xs→xl, graisses, variante atténuée) — voir la story "Foundations/Typography"
 
 **Widgets** — composants métier prêts à brancher sur tes données
 - `ClockWidget` — heure/date + ligne de présence
@@ -141,6 +144,9 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `RangeSlider` — double curseur (plage de prix, de dates…) ; glisser le segment central pour décaler toute la plage sans changer sa largeur ; `centerZero` pour une plage bipolaire (négatif à gauche, positif à droite, avec repère au 0)
 - `Dropzone` — zone de dépôt de fichiers (drag & drop + sélection au clic), liste de fichiers avec suppression, validation de taille
 - `Checkbox` — case à cocher avec coche animée au tracé (SVG `stroke-dashoffset`), état indéterminé pour les groupes
+- `CheckboxButton` — case à cocher qui a l'apparence d'un `Button` : coché → ton actif + icône coché animée, décoché → bouton neutre, sans icône (filtres sous forme de puces)
+- `Tag` — puce supprimable (croix optionnelle)
+- `TagInput` — saisie de tags libres : virgule/Entrée pour ajouter, Retour arrière (champ vide) ou croix pour retirer
 
 **Feedback**
 - `Spinner`, `Skeleton` (effet de balayage), `ProgressBar` (déterminée ou indéterminée) — animations désactivées sous la palette e-ink (l'e-ink réel ne peut pas s'animer proprement)

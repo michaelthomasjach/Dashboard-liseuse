@@ -39,3 +39,15 @@ export type { ExpandableCardProps } from "./ExpandableCard";
 
 export { TabbedCard } from "./TabbedCard";
 export type { TabbedCardProps, TabbedCardTab } from "./TabbedCard";
+
+export { Testimonial } from "./Testimonial";
+export type { TestimonialProps } from "./Testimonial";
+
+export { CodeBlock } from "./CodeBlock";
+export type { CodeBlockProps } from "./CodeBlock";
+
+export { Heading } from "./Heading";
+export type { HeadingProps } from "./Heading";
+
+export { Text } from "./Text";
+export type { TextProps } from "./Text";

@@ -1,0 +1,35 @@
+.lq-heading {
+  margin: 0;
+  font-weight: 700;
+  line-height: var(--lq-line-height-heading);
+  color: var(--lq-color-text);
+  letter-spacing: -0.01em;
+}
+
+.lq-heading--h1 {
+  font-size: var(--lq-text-h1);
+  letter-spacing: -0.02em;
+}
+
+.lq-heading--h2 {
+  font-size: var(--lq-text-h2);
+}
+
+.lq-heading--h3 {
+  font-size: var(--lq-text-h3);
+}
+
+.lq-heading--h4 {
+  font-size: var(--lq-text-h4);
+}
+
+.lq-heading--h5 {
+  font-size: var(--lq-text-h5);
+}
+
+.lq-heading--h6 {
+  font-size: var(--lq-text-h6);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
