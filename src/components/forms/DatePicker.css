@@ -110,6 +110,12 @@
   font-weight: 700;
 }
 
+/* Continuous band between a range's start/end — cells sit flush (no grid gap, no radius) so
+   it reads as one unbroken highlight rather than a row of separately-rounded chips. */
+.lq-date-picker__day--range-middle {
+  background-color: var(--lq-color-hover);
+}
+
 .lq-date-picker__grid--picker {
   grid-template-columns: repeat(3, 1fr);
   gap: 4px;
@@ -138,4 +144,91 @@
   background-color: var(--lq-color-fill);
   color: var(--lq-color-accent-contrast);
   font-weight: 700;
+}
+
+/* DateTimePicker: calendar on the left, a time-of-day panel docked to the right. */
+.lq-date-picker--with-time {
+  display: flex;
+  align-items: stretch;
+  width: auto;
+  padding: 0;
+}
+
+.lq-date-picker__calendar {
+  padding: var(--lq-space-3);
+  width: 280px;
+}
+
+.lq-date-picker__time {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lq-space-3);
+  padding: var(--lq-space-3);
+  border-left: 1px solid var(--lq-color-border-subtle);
+  min-width: 100px;
+}
+
+.lq-date-picker__time-display {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lq-date-picker__time-stepper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.lq-date-picker__time-stepper button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 20px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-date-picker__time-stepper button:hover {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
+}
+
+.lq-date-picker__time-value {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--lq-color-text);
+  padding: 2px 0;
+}
+
+.lq-date-picker__time-colon {
+  align-self: center;
+  font-size: 1.4rem;
+  font-weight: 700;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-date-picker__time-confirm {
+  width: 100%;
+  margin-top: auto;
+  padding: var(--lq-space-2) var(--lq-space-3);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-fill);
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-date-picker__time-confirm:hover {
+  opacity: 0.9;
 }

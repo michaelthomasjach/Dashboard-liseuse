@@ -28,6 +28,12 @@ export type { PasswordFieldProps } from "./PasswordField";
 export { DatePicker } from "./DatePicker";
 export type { DatePickerProps } from "./DatePicker";
 
+export { DateRangePicker } from "./DateRangePicker";
+export type { DateRangePickerProps, DateRange } from "./DateRangePicker";
+
+export { DateTimePicker } from "./DateTimePicker";
+export type { DateTimePickerProps } from "./DateTimePicker";
+
 export { RangeSlider } from "./RangeSlider";
 export type { RangeSliderProps } from "./RangeSlider";
 

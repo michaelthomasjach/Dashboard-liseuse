@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { LqFont, LqPalette, LqSurface, LqThemeContextValue } from "./types";
 import "./tokens.css";
+import "./scrollActivity";
 
 const FONT_VARS: Record<LqFont, string> = {
   "space-grotesk": "var(--lq-font-space-grotesk)",

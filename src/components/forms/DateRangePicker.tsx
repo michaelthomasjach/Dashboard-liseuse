@@ -6,9 +6,14 @@ import { CalendarHeader, MonthsView, YearsView, WEEKDAY_LABELS, YEARS_PER_PAGE }
 import "./field.css";
 import "./DatePicker.css";
 
-export interface DatePickerProps {
-  value: Date | null;
-  onChange: (date: Date) => void;
+export interface DateRange {
+  start: Date | null;
+  end: Date | null;
+}
+
+export interface DateRangePickerProps {
+  value: DateRange;
+  onChange: (value: DateRange) => void;
   label?: string;
   error?: string;
   placeholder?: string;
@@ -22,37 +27,59 @@ export interface DatePickerProps {
 
 type ViewMode = "days" | "months" | "years";
 
-const defaultFormat = (d: Date) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "long", year: "numeric" });
+const defaultFormat = (d: Date) => d.toLocaleDateString("fr-FR", { day: "2-digit", month: "short", year: "numeric" });
 
-/** Calendar popup date field, positioned via the same adaptive `Popover` engine as `Select`. Click the
- *  "month year" header to drill up to a month grid, then a year grid — much faster than paging
- *  month-by-month to change years. */
-export function DatePicker({
+/** Same calendar popup as `DatePicker`, but for picking a start/end pair — like booking a
+ *  stay from date A to date B. First click sets the start; hovering afterwards previews the
+ *  span up to the cursor; second click sets the end (swapped automatically if it lands before
+ *  the start) and closes. Clicking again after a complete range starts a fresh selection. */
+export function DateRangePicker({
   value,
   onChange,
   label,
   error,
-  placeholder = "jj/mm/aaaa",
+  placeholder = "jj/mm/aaaa – jj/mm/aaaa",
   formatDate = defaultFormat,
   minDate,
   maxDate,
   placement = "bottom",
   disabled,
   className,
-}: DatePickerProps) {
+}: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
-  const [viewMonth, setViewMonth] = useState(() => value ?? new Date());
+  const [viewMonth, setViewMonth] = useState(() => value.start ?? new Date());
   const [viewMode, setViewMode] = useState<ViewMode>("days");
+  const [hoverDay, setHoverDay] = useState<Date | null>(null);
   const anchorRef = useRef<HTMLButtonElement>(null);
 
   const today = new Date();
   const isDisabled = (d: Date) => (minDate && isBeforeDay(d, minDate)) || (maxDate && isAfterDay(d, maxDate));
 
   function openPicker() {
-    setViewMonth(value ?? new Date());
+    setViewMonth(value.start ?? new Date());
     setViewMode("days");
     setOpen((o) => !o);
   }
+
+  function handlePick(d: Date) {
+    if (!value.start || value.end) {
+      onChange({ start: d, end: null });
+      return;
+    }
+    if (isBeforeDay(d, value.start)) {
+      onChange({ start: d, end: value.start });
+    } else {
+      onChange({ start: value.start, end: d });
+    }
+    setOpen(false);
+  }
+
+  const triggerLabel =
+    value.start && value.end
+      ? `${formatDate(value.start)} – ${formatDate(value.end)}`
+      : value.start
+        ? `${formatDate(value.start)} – …`
+        : null;
 
   return (
     <div className={["lq-field", className].filter(Boolean).join(" ")}>
@@ -67,25 +94,24 @@ export function DatePicker({
         onClick={openPicker}
       >
         <CalendarIcon size={16} />
-        <span className={value ? undefined : "lq-select__placeholder"}>{value ? formatDate(value) : placeholder}</span>
+        <span className={triggerLabel ? undefined : "lq-select__placeholder"}>{triggerLabel ?? placeholder}</span>
       </button>
       {error && <span className="lq-field__error">{error}</span>}
 
       <Popover open={open} onClose={() => setOpen(false)} anchorRef={anchorRef} placement={placement}>
-        <div className="lq-date-picker">
+        <div className="lq-date-picker" onPointerLeave={() => setHoverDay(null)}>
           {viewMode === "days" && (
-            <DaysView
+            <RangeDaysView
               viewMonth={viewMonth}
               value={value}
+              hoverDay={hoverDay}
               today={today}
               isDisabled={isDisabled}
+              onHoverDay={setHoverDay}
               onPrev={() => setViewMonth((m) => addMonths(m, -1))}
               onNext={() => setViewMonth((m) => addMonths(m, 1))}
               onHeaderClick={() => setViewMode("months")}
-              onPick={(d) => {
-                onChange(d);
-                setOpen(false);
-              }}
+              onPick={handlePick}
             />
           )}
 
@@ -119,19 +145,42 @@ export function DatePicker({
   );
 }
 
-interface DaysViewProps {
+interface RangeDaysViewProps {
   viewMonth: Date;
-  value: Date | null;
+  value: DateRange;
+  hoverDay: Date | null;
   today: Date;
   isDisabled: (d: Date) => boolean | undefined;
+  onHoverDay: (d: Date | null) => void;
   onPrev: () => void;
   onNext: () => void;
   onHeaderClick: () => void;
   onPick: (d: Date) => void;
 }
 
-function DaysView({ viewMonth, value, today, isDisabled, onPrev, onNext, onHeaderClick, onPick }: DaysViewProps) {
+function RangeDaysView({
+  viewMonth,
+  value,
+  hoverDay,
+  today,
+  isDisabled,
+  onHoverDay,
+  onPrev,
+  onNext,
+  onHeaderClick,
+  onPick,
+}: RangeDaysViewProps) {
   const grid = buildMonthGrid(viewMonth);
+
+  // While only the start is picked, preview the range up to whatever day is hovered.
+  const previewEnd = value.start && !value.end ? hoverDay : value.end;
+  const [lo, hi] =
+    value.start && previewEnd
+      ? isBeforeDay(previewEnd, value.start)
+        ? [previewEnd, value.start]
+        : [value.start, previewEnd]
+      : [value.start, null];
+
   return (
     <>
       <CalendarHeader
@@ -152,9 +201,11 @@ function DaysView({ viewMonth, value, today, isDisabled, onPrev, onNext, onHeade
       <div className="lq-date-picker__grid">
         {grid.map((d) => {
           const outsideMonth = d.getMonth() !== viewMonth.getMonth();
-          const selected = value ? isSameDay(d, value) : false;
           const isToday = isSameDay(d, today);
           const disabledDay = isDisabled(d);
+          const isStart = lo ? isSameDay(d, lo) : false;
+          const isEnd = hi ? isSameDay(d, hi) : false;
+          const inRange = lo && hi ? isAfterDay(d, lo) && isBeforeDay(d, hi) : false;
           return (
             <button
               type="button"
@@ -163,11 +214,13 @@ function DaysView({ viewMonth, value, today, isDisabled, onPrev, onNext, onHeade
               className={[
                 "lq-date-picker__day",
                 outsideMonth && "lq-date-picker__day--outside",
-                selected && "lq-date-picker__day--selected",
-                isToday && !selected && "lq-date-picker__day--today",
+                (isStart || isEnd) && "lq-date-picker__day--selected",
+                inRange && "lq-date-picker__day--range-middle",
+                isToday && !isStart && !isEnd && "lq-date-picker__day--today",
               ]
                 .filter(Boolean)
                 .join(" ")}
+              onPointerEnter={() => onHoverDay(d)}
               onClick={() => onPick(d)}
             >
               {d.getDate()}

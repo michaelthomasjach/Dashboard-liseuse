@@ -64,6 +64,45 @@
 }
 
 /* ---------------------------------------------------------------- */
+/* Scrollbars — thin and faint at rest, more visible on hover or    */
+/* while actively scrolling (`.lq-scrolling`, toggled by            */
+/* scrollActivity.ts). Applies to every scrollable element under    */
+/* .lq-root, not just a specific component.                         */
+/* ---------------------------------------------------------------- */
+
+.lq-root {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--lq-color-text) 20%, transparent) transparent;
+}
+
+.lq-root *:hover,
+.lq-root .lq-scrolling {
+  scrollbar-color: color-mix(in srgb, var(--lq-color-text) 45%, transparent) transparent;
+}
+
+.lq-root ::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+.lq-root ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.lq-root ::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--lq-color-text) 20%, transparent);
+  background-clip: content-box;
+  border: 2px solid transparent;
+  border-radius: var(--lq-radius-pill);
+  transition: background-color var(--lq-transition-base);
+}
+
+.lq-root *:hover::-webkit-scrollbar-thumb,
+.lq-root .lq-scrolling::-webkit-scrollbar-thumb {
+  background-color: color-mix(in srgb, var(--lq-color-text) 45%, transparent);
+}
+
+/* ---------------------------------------------------------------- */
 /* E-ink palette — pure monochrome, hairline borders, no shadows,   */
 /* no gradients, tuned to read cleanly on e-paper (BOOX, Kindle…).  */
 /* ---------------------------------------------------------------- */

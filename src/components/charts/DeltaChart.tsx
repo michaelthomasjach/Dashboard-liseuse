@@ -253,6 +253,7 @@ export function DeltaChart({
                   height={barHeight}
                   fill={colorFor(bar)}
                   opacity={hoverId === bar.item.id ? 0.8 : 1}
+                  style={{ animationDelay: `${Math.min(i, 20) * 45}ms` }}
                   onPointerEnter={() => setHoverId(bar.item.id)}
                   onPointerLeave={() => setHoverId(null)}
                 />

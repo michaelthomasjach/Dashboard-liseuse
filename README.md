@@ -86,6 +86,10 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 />
 ```
 
+### Scrollbars
+
+Toute zone scrollable sous `.lq-root` reçoit automatiquement un ascenseur fin et discret (`scrollbar-width`/`scrollbar-color` sur Firefox, `::-webkit-scrollbar` ailleurs), avec une opacité faible au repos qui augmente au survol **et** pendant un scroll actif (classe `.lq-scrolling`, posée/retirée par un unique listener `scroll` global — voir `theme/scrollActivity.ts`, importé une seule fois par `LqThemeProvider` quel que soit le nombre d'instances montées).
+
 ## Composants
 
 **Thème**
@@ -130,7 +134,7 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `LineAreaChart` — courbe/aire multi-séries, zoom + pan + rescale par axe, tooltip avec crosshair, légende cliquable (masquer une série)
 - `BarChart` — barres verticales/horizontales, zoom + pan + rescale par axe (axe catégoriel en index continu), tri par valeur (`colorByValue` pour vert/rouge automatique)
 - `CandlestickChart` — chandeliers OHLC + volume, zoom + pan + rescale par axe ; convention creux/plein en palette e-ink (le monochrome ne peut pas coder la hausse/baisse par la teinte). Tient à l'aise sur des dizaines de milliers de bougies grâce au rendu canvas (voir plus haut) ; le zoom horizontal va jusqu'à n'afficher qu'une seule bougie, quelle que soit la taille du jeu de données. Glisser dans le graphe pan simultanément les deux axes (utile pour retrouver des bougies sorties de l'écran après un rescale vertical). Pas d'infobulle flottante : le prix et la date exacts sous le curseur s'affichent directement en badge sur l'axe des prix et l'axe des dates. Outils de dessin optionnels (`drawingTools`) : une vraie colonne verticale réservée à droite du graphe (pas des boutons superposés — l'axe/le tracé ne dessinent jamais dessous, et elle reste visible en plein écran), actuellement un outil "ligne de tendance" — 1er clic = point de départ (la ligne suit ensuite le curseur), 2ème clic = point d'arrivée ; Échap ou re-clic sur l'outil annule le point en cours et désélectionne l'outil ; un clic en dehors du graphe ne fait rien. Les lignes sont ancrées en coordonnées date/prix (`onDrawingsChange`) donc elles suivent le zoom/déplacement ; survoler une ligne dessinée affiche des poignées à ses extrémités (à glisser pour la redéfinir), et glisser directement sur la ligne la déplace entièrement.
-- `DeltaChart` — graphique en cascade (waterfall/bridge) : ajouts/retraits signés qui construisent un ou plusieurs totaux, avec connecteurs pointillés (ex. structure du capital : capitalisation + dette + intérêts minoritaires − trésorerie = valeur d'entreprise) ; zoom + pan + rescale par axe comme les autres graphiques
+- `DeltaChart` — graphique en cascade (waterfall/bridge) : ajouts/retraits signés qui construisent un ou plusieurs totaux, avec connecteurs pointillés (ex. structure du capital : capitalisation + dette + intérêts minoritaires − trésorerie = valeur d'entreprise) ; zoom + pan + rescale par axe comme les autres graphiques. Les barres apparaissent avec une animation de croissance échelonnée au chargement (désactivée en palette e-ink / `prefers-reduced-motion`)
 - `GaugeChart` — jauge en arc avec bandes de seuils (ex. score de risque)
 - `DonutChart` — répartition (allocation de portefeuille…)
 - `Sparkline` — mini-courbe sans axes, pour cellule de tableau ou StatCard
@@ -145,6 +149,8 @@ Chaque widget est piloté par des props (pas de fetch ni d'état interne caché)
 - `NumberField` — champ numérique avec préfixe/suffixe (€, %) et steppers
 - `PasswordField` — champ mot de passe avec bascule afficher/masquer
 - `DatePicker` — calendrier en popup (même moteur de positionnement que `Select`). Cliquer sur le libellé "mois année" fait remonter vers une grille de mois, puis une grille d'années (± décennie) — beaucoup plus rapide que de paginer mois par mois pour changer d'année
+- `DateRangePicker` — même calendrier, pour choisir une plage (date A → date B, comme une réservation) : 1er clic = début, survol = aperçu de la plage jusqu'au curseur, 2ème clic = fin (inversée automatiquement si elle précède le début) ; `value`/`onChange` prennent `{ start, end }`
+- `DateTimePicker` — même calendrier + un panneau heure/minute à droite (steppers), composant à part entière (le `DatePicker` sans heure reste inchangé) ; choisir un jour ne ferme pas le popup, le bouton "Valider" confirme date + heure ; `minuteStep` pour le pas des minutes
 - `RangeSlider` — double curseur (plage de prix, de dates…) ; glisser le segment central pour décaler toute la plage sans changer sa largeur ; `centerZero` pour une plage bipolaire (négatif à gauche, positif à droite, avec repère au 0)
 - `Dropzone` — zone de dépôt de fichiers (drag & drop + sélection au clic), liste de fichiers avec suppression, validation de taille
 - `Checkbox` — case à cocher avec coche animée au tracé (SVG `stroke-dashoffset`), état indéterminé pour les groupes

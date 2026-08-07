@@ -12,4 +12,29 @@
 .lq-delta-chart__bar {
   cursor: pointer;
   transition: opacity var(--lq-transition-fast);
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: lq-delta-bar-grow 420ms ease-out both;
+}
+
+/* Only the transform is animated — opacity is left alone since it's also driven by the
+   hover-dim prop, and an animation fill-mode would otherwise pin it to the keyframe's final
+   value and silently break hover dimming once the entrance animation finished. */
+@keyframes lq-delta-bar-grow {
+  from {
+    transform: scaleY(0);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.lq-root[data-lq-palette="eink"] .lq-delta-chart__bar {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-delta-chart__bar {
+    animation: none;
+  }
 }
