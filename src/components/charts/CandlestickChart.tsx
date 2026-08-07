@@ -110,9 +110,11 @@ export function CandlestickChart({
 
   // Set while dragging a whole drawing (pointer down directly on its body, not an endpoint).
   const dragLineRef = useRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>(null);
-  // Set while dragging the plot body itself to pan the price axis vertically (independent of
-  // d3-zoom's own horizontal pan, which only ever touches the X transform).
-  const dragPanRef = useRef<{ startClientY: number; startYTransform: d3.ZoomTransform } | null>(null);
+
+  // True while dragging the plot body to pan the price axis vertically, independent of
+  // d3-zoom's own horizontal pan (see handleOverlayPointerDown) — only used to have
+  // handlePointerMove skip its hover-detection work while this drag is live.
+  const isPanningYRef = useRef(false);
 
   function commitDrawings(next: TrendLineDrawing[]) {
     setDrawings(next);
@@ -328,13 +330,7 @@ export function CandlestickChart({
       return;
     }
 
-    if (dragPanRef.current) {
-      const drag = dragPanRef.current;
-      const dy = e.clientY - drag.startClientY;
-      const t0 = drag.startYTransform;
-      setYTransform(d3.zoomIdentity.scale(t0.k).translate(0, t0.y / t0.k + dy / t0.k));
-      return;
-    }
+    if (isPanningYRef.current) return;
 
     const target = zoomedXScale.invert(mouseX);
     const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
@@ -365,6 +361,14 @@ export function CandlestickChart({
     }
   }
 
+  // When hovering a drawing, starts a "drag the whole line" gesture — d3-zoom already backs off
+  // in that case via the filter above, so capturing the pointer here doesn't compete with
+  // anything. Otherwise starts an independent Y-pan via plain window listeners (same pattern
+  // RangeSlider's drag uses) rather than a second setPointerCapture on the SAME overlay d3-zoom
+  // is attached to — an earlier attempt did that, and it raced with d3-zoom's own native pointer
+  // handling and broke X panning entirely. Window listeners never touch this element's pointer
+  // capture, so d3-zoom's own gesture (handling X) is completely unaffected by this running
+  // alongside it for Y.
   function handleOverlayPointerDown(e: React.PointerEvent<SVGRectElement>) {
     if (activeTool) return;
     if (hoveredDrawingId) {
@@ -375,15 +379,26 @@ export function CandlestickChart({
         return;
       }
     }
-    if (zoomable) {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragPanRef.current = { startClientY: e.clientY, startYTransform: yTransform };
-    }
+    if (!zoomable) return;
+    const startClientY = e.clientY;
+    const startYTransform = yTransform;
+    isPanningYRef.current = true;
+    const onMove = (ev: PointerEvent) => {
+      const dy = ev.clientY - startClientY;
+      setYTransform(d3.zoomIdentity.scale(startYTransform.k).translate(0, startYTransform.y / startYTransform.k + dy / startYTransform.k));
+    };
+    const onUp = () => {
+      isPanningYRef.current = false;
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
   }
 
   function handleOverlayPointerUp(e: React.PointerEvent<SVGRectElement>) {
+    if (!dragLineRef.current) return;
     dragLineRef.current = null;
-    dragPanRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
@@ -549,37 +564,40 @@ export function CandlestickChart({
         if (!dragEndpointRef.current) updateHoveredDrawingId(null);
       }}
     >
-      <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
-        {zoomable && isZoomed && (
-          <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
-            Réinitialiser le zoom
-          </button>
-        )}
-        {fullscreenToggle && (
-          <button
-            type="button"
-            className="lq-chart__icon-button"
-            onClick={toggleFullscreen}
-            aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-          >
-            {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
-          </button>
-        )}
-      </div>
-      {drawingTools && (
-        <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: dims.height }}>
-          <button
-            type="button"
-            className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-            onClick={() => handleToolClick("trendline")}
-            aria-label="Ligne de tendance"
-            aria-pressed={activeTool === "trendline"}
-          >
-            <TrendLineIcon size={14} />
-          </button>
-        </div>
-      )}
       <div className="lq-chart__plot">
+        {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
+            canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
+            box lines up with where the svg/canvas content actually starts. */}
+        <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
+          {zoomable && isZoomed && (
+            <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
+              Réinitialiser le zoom
+            </button>
+          )}
+          {fullscreenToggle && (
+            <button
+              type="button"
+              className="lq-chart__icon-button"
+              onClick={toggleFullscreen}
+              aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
+            >
+              {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+            </button>
+          )}
+        </div>
+        {drawingTools && (
+          <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: dims.height }}>
+            <button
+              type="button"
+              className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => handleToolClick("trendline")}
+              aria-label="Ligne de tendance"
+              aria-pressed={activeTool === "trendline"}
+            >
+              <TrendLineIcon size={14} />
+            </button>
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           className="lq-chart__canvas"
