@@ -9,7 +9,6 @@ import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
 import { MaximizeIcon, MinimizeIcon, TrendLineIcon } from "../icons";
 import "./charts-shared.css";
-import "./CandlestickChart.css";
 
 export interface Candle {
   date: Date;
@@ -94,6 +93,8 @@ export function CandlestickChart({
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
   const drawingIdRef = useRef(0);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [themeTick, setThemeTick] = useState(0);
 
   function commitDrawings(next: TrendLineDrawing[]) {
     setDrawings(next);
@@ -102,6 +103,19 @@ export function CandlestickChart({
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height: isFullscreen ? undefined : height });
+
+  // The candles/volume/crosshair/drawings are drawn on a <canvas> for performance with large
+  // datasets (versus one SVG node per candle). Canvas has no live binding to CSS custom
+  // properties, so redraws re-read them from the DOM — this observer just triggers that redraw
+  // whenever the active palette/surface actually changes.
+  useEffect(() => {
+    const el = ref.current;
+    const root = el?.closest(".lq-root");
+    if (!root) return;
+    const observer = new MutationObserver(() => setThemeTick((t) => t + 1));
+    observer.observe(root, { attributes: true, attributeFilter: ["data-lq-palette", "data-lq-surface"] });
+    return () => observer.disconnect();
+  }, [ref]);
 
   const volumeGap = showVolume ? 16 : 0;
   const volumeHeight = showVolume ? Math.round(dims.boundedHeight * 0.22) : 0;
@@ -299,6 +313,140 @@ export function CandlestickChart({
     }
   }
 
+  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrapper = ref.current;
+    if (!canvas || !wrapper || dims.boundedWidth <= 0 || dims.boundedHeight <= 0) return;
+
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = dims.boundedWidth * dpr;
+    canvas.height = dims.boundedHeight * dpr;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, dims.boundedWidth, dims.boundedHeight);
+
+    const style = getComputedStyle(wrapper);
+    const colorUp = style.getPropertyValue("--lq-color-up").trim();
+    const colorDown = style.getPropertyValue("--lq-color-down").trim();
+    const colorBg = style.getPropertyValue("--lq-color-bg").trim();
+    const colorText = style.getPropertyValue("--lq-color-text").trim();
+    const colorMuted = style.getPropertyValue("--lq-color-text-muted").trim();
+    const colorAccent = style.getPropertyValue("--lq-color-accent").trim();
+    const colorGrid = style.getPropertyValue("--lq-color-border-subtle").trim();
+    const isEink = wrapper.closest('[data-lq-palette="eink"]') !== null;
+
+    // Drawn first, underneath everything else — mirrors ChartAxis's own grid (same `ticks(5)`
+    // the SVG price axis would otherwise use), kept on canvas so it stays behind the candles
+    // instead of the SVG (which paints on top of the canvas) covering them.
+    ctx.save();
+    ctx.strokeStyle = colorGrid;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([2, 3]);
+    for (const tick of zoomedPriceScale.ticks(5)) {
+      const y = zoomedPriceScale(tick);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(dims.boundedWidth, y);
+      ctx.stroke();
+    }
+    ctx.restore();
+
+    if (showVolume) {
+      ctx.save();
+      ctx.translate(0, priceHeight + volumeGap);
+      for (const d of visible) {
+        const cx = zoomedXScale(d.date);
+        const up = d.close >= d.open;
+        const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
+        ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
+        ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
+        ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
+    }
+
+    for (const d of visible) {
+      const cx = zoomedXScale(d.date);
+      const up = d.close >= d.open;
+      const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
+      const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
+      const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+      const hueColor = up ? colorUp : colorDown;
+
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = isEink ? colorText : hueColor;
+      ctx.beginPath();
+      ctx.moveTo(cx, zoomedPriceScale(d.high));
+      ctx.lineTo(cx, zoomedPriceScale(d.low));
+      ctx.stroke();
+
+      // E-ink can't code up/down by hue, so it falls back to the standard hollow/filled OHLC convention.
+      ctx.fillStyle = isEink ? (up ? colorBg : colorText) : hueColor;
+      ctx.strokeStyle = isEink ? colorText : hueColor;
+      ctx.fillRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+      ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+    }
+
+    if (hovered) {
+      ctx.save();
+      ctx.strokeStyle = colorMuted;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      const hx = zoomedXScale(hovered.date);
+      ctx.beginPath();
+      ctx.moveTo(hx, 0);
+      ctx.lineTo(hx, dims.boundedHeight);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    for (const dr of drawings) {
+      ctx.strokeStyle = colorAccent;
+      ctx.lineWidth = hoveredDrawingId === dr.id ? 2.5 : 1.5;
+      ctx.beginPath();
+      ctx.moveTo(zoomedXScale(dr.x1), zoomedPriceScale(dr.y1));
+      ctx.lineTo(zoomedXScale(dr.x2), zoomedPriceScale(dr.y2));
+      ctx.stroke();
+    }
+
+    if (activeTool && pendingPoint && previewPoint) {
+      ctx.save();
+      ctx.strokeStyle = colorAccent;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(zoomedXScale(pendingPoint.x), zoomedPriceScale(pendingPoint.y));
+      ctx.lineTo(zoomedXScale(previewPoint.x), zoomedPriceScale(previewPoint.y));
+      ctx.stroke();
+      ctx.restore();
+    }
+  }, [
+    visible,
+    zoomedXScale,
+    zoomedPriceScale,
+    candleWidth,
+    showVolume,
+    volumeScale,
+    volumeHeight,
+    volumeGap,
+    priceHeight,
+    hovered,
+    drawings,
+    hoveredDrawingId,
+    activeTool,
+    pendingPoint,
+    previewPoint,
+    dims.boundedWidth,
+    dims.boundedHeight,
+    themeTick,
+    ref,
+  ]);
+
   if (dims.width === 0) return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }} />;
   if (data.length === 0) {
     return (
@@ -308,7 +456,6 @@ export function CandlestickChart({
     );
   }
 
-  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
   const dFmt = formatDate ?? d3.timeFormat("%d %b %Y");
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
@@ -345,6 +492,16 @@ export function CandlestickChart({
           </button>
         </div>
       )}
+      <canvas
+        ref={canvasRef}
+        className="lq-chart__canvas"
+        style={{
+          left: dims.margin.left,
+          top: dims.margin.top,
+          width: dims.boundedWidth,
+          height: dims.boundedHeight,
+        }}
+      />
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
         <defs>
           <clipPath id={clipId}>
@@ -352,108 +509,39 @@ export function CandlestickChart({
           </clipPath>
         </defs>
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-          <ChartAxis scale={zoomedPriceScale} orientation="left" grid gridLength={dims.boundedWidth} tickFormat={(v) => pFmt(Number(v))} />
+          <ChartAxis scale={zoomedPriceScale} orientation="left" tickFormat={(v) => pFmt(Number(v))} />
 
           <g clipPath={`url(#${clipId})`}>
-            {visible.map((d) => {
-              const cx = zoomedXScale(d.date);
-              const up = d.close >= d.open;
-              const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
-              const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
-              return (
-                <g key={d.date.getTime()} className={up ? "lq-candle lq-candle--up" : "lq-candle lq-candle--down"}>
-                  <line className="lq-candle-wick" x1={cx} x2={cx} y1={zoomedPriceScale(d.high)} y2={zoomedPriceScale(d.low)} />
-                  <rect
-                    className="lq-candle-body"
-                    x={cx - candleWidth / 2}
-                    y={bodyTop}
-                    width={candleWidth}
-                    height={Math.max(1, bodyBottom - bodyTop)}
-                  />
-                </g>
-              );
-            })}
-
-            {hovered && (
-              <line
-                className="lq-chart__crosshair-line"
-                x1={zoomedXScale(hovered.date)}
-                x2={zoomedXScale(hovered.date)}
-                y1={0}
-                y2={dims.boundedHeight}
-              />
-            )}
-
-            {showVolume && (
-              <g transform={`translate(0, ${priceHeight + volumeGap})`}>
-                {visible.map((d) => {
-                  const cx = zoomedXScale(d.date);
-                  const up = d.close >= d.open;
-                  const barHeight = volumeHeight - volumeScale(d.volume ?? 0);
-                  return (
-                    <rect
-                      key={d.date.getTime()}
-                      className={up ? "lq-candle-volume lq-candle-volume--up" : "lq-candle-volume lq-candle-volume--down"}
-                      x={cx - candleWidth / 2}
-                      y={volumeHeight - barHeight}
-                      width={candleWidth}
-                      height={Math.max(0, barHeight)}
-                    />
-                  );
-                })}
-              </g>
-            )}
-
             {drawings.map((dr) => {
+              const isHovered = hoveredDrawingId === dr.id;
+              if (!isHovered) return null;
               const x1 = zoomedXScale(dr.x1);
               const y1 = zoomedPriceScale(dr.y1);
               const x2 = zoomedXScale(dr.x2);
               const y2 = zoomedPriceScale(dr.y2);
-              const isHovered = hoveredDrawingId === dr.id;
               return (
                 <g key={dr.id}>
-                  <line
-                    className={["lq-chart__drawing-line", isHovered && "lq-chart__drawing-line--hover"].filter(Boolean).join(" ")}
-                    x1={x1}
-                    y1={y1}
-                    x2={x2}
-                    y2={y2}
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={x1}
+                    cy={y1}
+                    r={5}
+                    onPointerDown={handleEndpointPointerDown(dr.id, 1)}
+                    onPointerMove={handleEndpointPointerMove}
+                    onPointerUp={handleEndpointPointerUp}
                   />
-                  {isHovered && (
-                    <>
-                      <circle
-                        className="lq-chart__drawing-handle"
-                        cx={x1}
-                        cy={y1}
-                        r={5}
-                        onPointerDown={handleEndpointPointerDown(dr.id, 1)}
-                        onPointerMove={handleEndpointPointerMove}
-                        onPointerUp={handleEndpointPointerUp}
-                      />
-                      <circle
-                        className="lq-chart__drawing-handle"
-                        cx={x2}
-                        cy={y2}
-                        r={5}
-                        onPointerDown={handleEndpointPointerDown(dr.id, 2)}
-                        onPointerMove={handleEndpointPointerMove}
-                        onPointerUp={handleEndpointPointerUp}
-                      />
-                    </>
-                  )}
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={x2}
+                    cy={y2}
+                    r={5}
+                    onPointerDown={handleEndpointPointerDown(dr.id, 2)}
+                    onPointerMove={handleEndpointPointerMove}
+                    onPointerUp={handleEndpointPointerUp}
+                  />
                 </g>
               );
             })}
-
-            {activeTool && pendingPoint && previewPoint && (
-              <line
-                className="lq-chart__drawing-line lq-chart__drawing-line--preview"
-                x1={zoomedXScale(pendingPoint.x)}
-                y1={zoomedPriceScale(pendingPoint.y)}
-                x2={zoomedXScale(previewPoint.x)}
-                y2={zoomedPriceScale(previewPoint.y)}
-              />
-            )}
           </g>
 
           {showVolume && (

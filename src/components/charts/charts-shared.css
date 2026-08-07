@@ -9,6 +9,11 @@
   overflow: visible;
 }
 
+.lq-chart__canvas {
+  position: absolute;
+  pointer-events: none;
+}
+
 .lq-chart__overlay {
   fill: transparent;
   cursor: grab;
