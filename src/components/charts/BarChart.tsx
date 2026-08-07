@@ -118,12 +118,14 @@ export function BarChart({
     onChange: setCatTransformViaZoom,
     enabled: zoomable,
     scaleExtent: [1, 20],
+    size: catSize,
   });
   const valAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
     axis: valAxis,
     transform: valTransform,
     onChange: setValTransform,
     enabled: zoomable,
+    size: valSize,
   });
 
   const isZoomed = catTransform.k !== 1 || catTransform.x !== 0 || catTransform.y !== 0 || valTransform.k !== 1 || valTransform.x !== 0 || valTransform.y !== 0;

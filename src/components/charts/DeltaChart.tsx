@@ -130,12 +130,14 @@ export function DeltaChart({
     onChange: setCatTransformViaZoom,
     enabled: zoomable,
     scaleExtent: [1, 20],
+    size: dims.boundedWidth,
   });
   const valAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
     axis: "y",
     transform: valTransform,
     onChange: setValTransform,
     enabled: zoomable,
+    size: dims.boundedHeight,
   });
 
   const isZoomed = catTransform.k !== 1 || catTransform.x !== 0 || valTransform.k !== 1 || valTransform.y !== 0;

@@ -172,12 +172,14 @@ export function CandlestickChart({
     onChange: setXTransformViaZoom,
     enabled: zoomable,
     scaleExtent: [1, 20],
+    size: dims.boundedWidth,
   });
   const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
     axis: "y",
     transform: yTransform,
     onChange: setYTransform,
     enabled: zoomable,
+    size: priceHeight,
   });
 
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
@@ -511,39 +513,6 @@ export function CandlestickChart({
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
           <ChartAxis scale={zoomedPriceScale} orientation="left" tickFormat={(v) => pFmt(Number(v))} />
 
-          <g clipPath={`url(#${clipId})`}>
-            {drawings.map((dr) => {
-              const isHovered = hoveredDrawingId === dr.id;
-              if (!isHovered) return null;
-              const x1 = zoomedXScale(dr.x1);
-              const y1 = zoomedPriceScale(dr.y1);
-              const x2 = zoomedXScale(dr.x2);
-              const y2 = zoomedPriceScale(dr.y2);
-              return (
-                <g key={dr.id}>
-                  <circle
-                    className="lq-chart__drawing-handle"
-                    cx={x1}
-                    cy={y1}
-                    r={5}
-                    onPointerDown={handleEndpointPointerDown(dr.id, 1)}
-                    onPointerMove={handleEndpointPointerMove}
-                    onPointerUp={handleEndpointPointerUp}
-                  />
-                  <circle
-                    className="lq-chart__drawing-handle"
-                    cx={x2}
-                    cy={y2}
-                    r={5}
-                    onPointerDown={handleEndpointPointerDown(dr.id, 2)}
-                    onPointerMove={handleEndpointPointerMove}
-                    onPointerUp={handleEndpointPointerUp}
-                  />
-                </g>
-              );
-            })}
-          </g>
-
           {showVolume && (
             <g transform={`translate(0, ${priceHeight + volumeGap})`}>
               <ChartAxis scale={volumeScale} orientation="left" ticks={2} tickFormat={(v) => vFmt(Number(v))} />
@@ -589,6 +558,41 @@ export function CandlestickChart({
             onPointerUp={xAxisDrag.onPointerUp}
             onDoubleClick={resetX}
           />
+
+          {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
+              actually receive pointer events instead of the overlay swallowing them first. */}
+          <g clipPath={`url(#${clipId})`}>
+            {drawings.map((dr) => {
+              const isHovered = hoveredDrawingId === dr.id;
+              if (!isHovered) return null;
+              const x1 = zoomedXScale(dr.x1);
+              const y1 = zoomedPriceScale(dr.y1);
+              const x2 = zoomedXScale(dr.x2);
+              const y2 = zoomedPriceScale(dr.y2);
+              return (
+                <g key={dr.id}>
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={x1}
+                    cy={y1}
+                    r={5}
+                    onPointerDown={handleEndpointPointerDown(dr.id, 1)}
+                    onPointerMove={handleEndpointPointerMove}
+                    onPointerUp={handleEndpointPointerUp}
+                  />
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={x2}
+                    cy={y2}
+                    r={5}
+                    onPointerDown={handleEndpointPointerDown(dr.id, 2)}
+                    onPointerMove={handleEndpointPointerMove}
+                    onPointerUp={handleEndpointPointerUp}
+                  />
+                </g>
+              );
+            })}
+          </g>
         </g>
       </svg>
 

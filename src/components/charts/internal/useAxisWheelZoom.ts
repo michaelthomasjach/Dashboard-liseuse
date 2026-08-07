@@ -9,6 +9,10 @@ export interface UseAxisWheelZoomOptions {
   onChange: (transform: d3.ZoomTransform) => void;
   scaleExtent?: [number, number];
   enabled?: boolean;
+  /** boundedWidth/boundedHeight (or similar) of the strip — not used for math, only kept in the
+   *  effect's dependency array so the listener re-attaches once the ref's element actually mounts
+   *  (it's 0/absent on the first render, before the ResizeObserver reports real dimensions). */
+  size?: number;
 }
 
 /**
@@ -25,6 +29,7 @@ export function useAxisWheelZoom<T extends Element>({
   onChange,
   scaleExtent = [1, 20],
   enabled = true,
+  size = 0,
 }: UseAxisWheelZoomOptions): RefObject<T> {
   const ref = useRef<T>(null);
   const transformRef = useRef(transform);
@@ -53,7 +58,7 @@ export function useAxisWheelZoom<T extends Element>({
 
     el.addEventListener("wheel", handleWheel as EventListener, { passive: false });
     return () => el.removeEventListener("wheel", handleWheel as EventListener);
-  }, [axis, enabled, scaleMin, scaleMax]);
+  }, [axis, enabled, scaleMin, scaleMax, size]);
 
   return ref;
 }

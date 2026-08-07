@@ -125,12 +125,14 @@ export function LineAreaChart({
     transform,
     onChange: setXTransformViaZoom,
     enabled: zoomable,
+    size: dims.boundedWidth,
   });
   const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
     axis: "y",
     transform: yTransform,
     onChange: setYTransform,
     enabled: zoomable,
+    size: dims.boundedHeight,
   });
 
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
