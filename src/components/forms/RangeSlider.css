@@ -48,18 +48,20 @@
   border-radius: 0;
 }
 
-/* Grab the filled segment to shift the whole range — pad the hit area well
-   past the thin visual bar so it's easy to grab without widening the bar itself. */
-.lq-range-slider__fill--drag {
+/* Invisible hit-area sibling, sized independently from the visual fill bar —
+   grabbing it shifts the whole range. Kept as its own element (rather than
+   padding the visual bar with a content-box/background-clip trick) so it
+   can never get out of sync with the bar's actual position, e.g. when the
+   e-ink palette overrides the bar's own top/height. */
+.lq-range-slider__fill-hit {
+  position: absolute;
   top: -8px;
-  padding: 8px 0;
-  box-sizing: content-box;
-  background-clip: content-box;
+  bottom: -8px;
   cursor: grab;
   touch-action: none;
 }
 
-.lq-range-slider__fill--drag:active {
+.lq-range-slider__fill-hit:active {
   cursor: grabbing;
 }
 

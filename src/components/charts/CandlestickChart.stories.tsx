@@ -30,3 +30,18 @@ export const WithoutVolume: Story = {
     </div>
   ),
 };
+
+export const WithDrawingTools: Story = {
+  name: "Outils de dessin",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        Bouton "ligne de tendance" dans la barre d'outils à droite du graphe. 1er clic = début de la ligne, 2ème clic
+        = fin (la ligne suit le curseur entre les deux). Échap ou re-clic sur l'outil annule. Survoler une ligne
+        dessinée fait apparaître des poignées à ses extrémités — glisser une poignée pour la redéfinir. Les lignes
+        sont ancrées en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
+      </p>
+      <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools />
+    </div>
+  ),
+};

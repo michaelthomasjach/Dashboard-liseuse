@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
+import { useD3Zoom } from "./internal/useD3Zoom";
+import { useAxisDragRescale } from "./internal/useAxisDragRescale";
+import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
@@ -26,6 +29,9 @@ export interface DeltaChartProps {
   /** Dashed bridging lines between consecutive bars. Default true. */
   showConnectors?: boolean;
   showLegend?: boolean;
+  /** Pan/zoom the categorical axis — same drag/wheel/axis-rescale conventions as
+   *  `CandlestickChart` and `LineAreaChart`, useful once there are many steps. Default true. */
+  zoomable?: boolean;
   /** Shows a fullscreen toggle button in the toolbar. Default true. */
   fullscreenToggle?: boolean;
   margin?: Partial<ChartMargin>;
@@ -54,34 +60,36 @@ function computeBars(items: DeltaChartItem[]): ComputedBar[] {
 }
 
 const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 16, right: 16, bottom: 32, left: 64 };
+const MAX_CATEGORY_TICKS = 24;
 
 /** Waterfall / bridge chart: shows how a sequence of signed additions and subtractions build up to
- *  one or more totals — e.g. capital structure (market cap + debt + minority interest − cash = enterprise value). */
+ *  one or more totals — e.g. capital structure (market cap + debt + minority interest − cash = enterprise value).
+ *  Built on the same index-scale zoom/pan/axis-rescale primitives as `CandlestickChart`. */
 export function DeltaChart({
   items,
   height = 340,
   formatValue,
   showConnectors = true,
   showLegend = true,
+  zoomable = true,
   fullscreenToggle = true,
   margin,
   className,
 }: DeltaChartProps) {
+  const clipId = useId();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height: isFullscreen ? undefined : height });
   const [hoverId, setHoverId] = useState<string | null>(null);
+  const [catTransform, setCatTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
+  const [valTransform, setValTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
 
   const bars = useMemo(() => computeBars(items), [items]);
 
-  const bandScale = useMemo(
-    () =>
-      d3
-        .scaleBand()
-        .domain(items.map((i) => i.id))
-        .range([0, dims.boundedWidth])
-        .padding(0.35),
-    [items, dims.boundedWidth]
+  const indexScale = useMemo(
+    () => d3.scaleLinear().domain([0, Math.max(1, items.length)]).range([0, dims.boundedWidth]),
+    [items.length, dims.boundedWidth]
   );
+  const zoomedIndexScale = catTransform.rescaleX(indexScale);
 
   const valueScale = useMemo(() => {
     const values = bars.flatMap((b) => [b.top, b.bottom, 0]);
@@ -93,6 +101,52 @@ export function DeltaChart({
       .nice()
       .range([dims.boundedHeight, 0]);
   }, [bars, dims.boundedHeight]);
+  const zoomedValueScale = valTransform.rescaleY(valueScale);
+
+  const { ref: zoomRef, reset: resetCat, setTransform: setCatTransformViaZoom } = useD3Zoom<SVGRectElement>({
+    width: dims.boundedWidth,
+    height: dims.boundedHeight,
+    enabled: zoomable,
+    onZoom: setCatTransform,
+  });
+
+  const catAxisDrag = useAxisDragRescale({
+    axis: "x",
+    size: dims.boundedWidth,
+    transform: catTransform,
+    onChange: setCatTransformViaZoom,
+    scaleExtent: [1, 20],
+  });
+  const valAxisDrag = useAxisDragRescale({
+    axis: "y",
+    size: dims.boundedHeight,
+    transform: valTransform,
+    onChange: setValTransform,
+  });
+
+  const catAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "x",
+    transform: catTransform,
+    onChange: setCatTransformViaZoom,
+    enabled: zoomable,
+    scaleExtent: [1, 20],
+  });
+  const valAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "y",
+    transform: valTransform,
+    onChange: setValTransform,
+    enabled: zoomable,
+  });
+
+  const isZoomed = catTransform.k !== 1 || catTransform.x !== 0 || valTransform.k !== 1 || valTransform.y !== 0;
+
+  function resetZoom() {
+    resetCat();
+    setValTransform(d3.zoomIdentity);
+  }
+  function resetValAxis() {
+    setValTransform(d3.zoomIdentity);
+  }
 
   const labelFor = (id: string) => items.find((i) => i.id === id)?.label ?? id;
   const colorFor = (bar: ComputedBar) => {
@@ -102,6 +156,21 @@ export function DeltaChart({
   };
 
   const fmt = formatValue ?? ((v: number) => v.toLocaleString("fr-FR"));
+
+  const baseSlot = dims.boundedWidth / Math.max(1, items.length);
+  const barThickness = Math.max(4, Math.min(96, baseSlot * catTransform.k * 0.65));
+
+  const visible = useMemo(() => {
+    if (bars.length === 0) return [];
+    const [i0, i1] = zoomedIndexScale.domain();
+    const start = Math.max(0, Math.floor(i0) - 1);
+    const end = Math.min(bars.length, Math.ceil(i1) + 1);
+    return bars.slice(start, end).map((b, k) => ({ bar: b, i: start + k }));
+  }, [bars, zoomedIndexScale]);
+
+  const tickStep = Math.max(1, Math.ceil(visible.length / MAX_CATEGORY_TICKS));
+  const catTickValues = visible.filter((_, k) => k % tickStep === 0).map((v) => v.i + 0.5);
+  const catTickFormat = (v: number) => labelFor(items[Math.round(v - 0.5)]?.id ?? "");
 
   const wrapperClass = ["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ");
 
@@ -114,13 +183,18 @@ export function DeltaChart({
     );
   }
 
-  const zero = valueScale(0);
+  const zero = zoomedValueScale(0);
   const hovered = bars.find((b) => b.item.id === hoverId);
 
   return (
     <div ref={ref} className={wrapperClass}>
-      {fullscreenToggle && (
-        <div className="lq-chart__toolbar">
+      <div className="lq-chart__toolbar">
+        {zoomable && isZoomed && (
+          <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
+            Réinitialiser le zoom
+          </button>
+        )}
+        {fullscreenToggle && (
           <button
             type="button"
             className="lq-chart__icon-button"
@@ -129,51 +203,93 @@ export function DeltaChart({
           >
             {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
           </button>
-        </div>
-      )}
+        )}
+      </div>
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
+          </clipPath>
+        </defs>
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-          <ChartAxis scale={valueScale} orientation="left" grid gridLength={dims.boundedWidth} tickFormat={(v) => fmt(Number(v))} />
-          <ChartAxis scale={bandScale} orientation="bottom" transform={`translate(0, ${dims.boundedHeight})`} tickFormat={(id) => labelFor(String(id))} />
+          <ChartAxis scale={zoomedValueScale} orientation="left" grid gridLength={dims.boundedWidth} tickFormat={(v) => fmt(Number(v))} />
+          <ChartAxis
+            scale={zoomedIndexScale}
+            orientation="bottom"
+            transform={`translate(0, ${dims.boundedHeight})`}
+            tickValues={catTickValues}
+            tickFormat={catTickFormat}
+          />
 
-          <line className="lq-delta-chart__zero-line" x1={0} x2={dims.boundedWidth} y1={zero} y2={zero} />
+          <rect ref={zoomRef} className="lq-chart__overlay" width={dims.boundedWidth} height={dims.boundedHeight} />
 
-          {showConnectors &&
-            bars.slice(0, -1).map((bar, i) => {
-              const next = bars[i + 1];
-              if (next.item.isTotal) return null;
-              const x1 = (bandScale(bar.item.id) ?? 0) + bandScale.bandwidth();
-              const x2 = bandScale(next.item.id) ?? 0;
-              const y = valueScale(bar.cumulativeAfter);
-              return <line key={bar.item.id} className="lq-delta-chart__connector" x1={x1} x2={x2} y1={y} y2={y} />;
+          <g clipPath={`url(#${clipId})`}>
+            <line className="lq-delta-chart__zero-line" x1={0} x2={dims.boundedWidth} y1={zero} y2={zero} />
+
+            {showConnectors &&
+              visible.map(({ bar, i }, idx) => {
+                const next = visible[idx + 1];
+                if (!next || next.bar.item.isTotal) return null;
+                const x1 = zoomedIndexScale(i + 1);
+                const x2 = zoomedIndexScale(next.i);
+                const y = zoomedValueScale(bar.cumulativeAfter);
+                return <line key={bar.item.id} className="lq-delta-chart__connector" x1={x1} x2={x2} y1={y} y2={y} />;
+              })}
+
+            {visible.map(({ bar, i }) => {
+              const center = zoomedIndexScale(i + 0.5);
+              const x = center - barThickness / 2;
+              const y = zoomedValueScale(bar.top);
+              const barHeight = Math.max(1, zoomedValueScale(bar.bottom) - zoomedValueScale(bar.top));
+              return (
+                <rect
+                  key={bar.item.id}
+                  className="lq-delta-chart__bar"
+                  x={x}
+                  y={y}
+                  width={barThickness}
+                  height={barHeight}
+                  fill={colorFor(bar)}
+                  opacity={hoverId === bar.item.id ? 0.8 : 1}
+                  onPointerEnter={() => setHoverId(bar.item.id)}
+                  onPointerLeave={() => setHoverId(null)}
+                />
+              );
             })}
+          </g>
 
-          {bars.map((bar) => {
-            const x = bandScale(bar.item.id) ?? 0;
-            const y = valueScale(bar.top);
-            const barHeight = Math.max(1, valueScale(bar.bottom) - valueScale(bar.top));
-            return (
-              <rect
-                key={bar.item.id}
-                className="lq-delta-chart__bar"
-                x={x}
-                y={y}
-                width={bandScale.bandwidth()}
-                height={barHeight}
-                fill={colorFor(bar)}
-                opacity={hoverId === bar.item.id ? 0.8 : 1}
-                onPointerEnter={() => setHoverId(bar.item.id)}
-                onPointerLeave={() => setHoverId(null)}
-              />
-            );
-          })}
+          <rect
+            ref={valAxisWheelRef}
+            className="lq-chart__axis-drag lq-chart__axis-drag--y"
+            x={-dims.margin.left}
+            y={0}
+            width={dims.margin.left}
+            height={dims.boundedHeight}
+            onPointerDown={valAxisDrag.onPointerDown}
+            onPointerMove={valAxisDrag.onPointerMove}
+            onPointerUp={valAxisDrag.onPointerUp}
+            onDoubleClick={resetValAxis}
+          />
+          <rect
+            ref={catAxisWheelRef}
+            className="lq-chart__axis-drag lq-chart__axis-drag--x"
+            x={0}
+            y={dims.boundedHeight}
+            width={dims.boundedWidth}
+            height={dims.margin.bottom}
+            onPointerDown={catAxisDrag.onPointerDown}
+            onPointerMove={catAxisDrag.onPointerMove}
+            onPointerUp={catAxisDrag.onPointerUp}
+            onDoubleClick={resetCat}
+          />
         </g>
       </svg>
 
       {hovered &&
         (() => {
-          const x = dims.margin.left + (bandScale(hovered.item.id) ?? 0) + bandScale.bandwidth() / 2;
-          const y = dims.margin.top + valueScale(hovered.top);
+          const i = items.findIndex((it) => it.id === hovered.item.id);
+          const x = dims.margin.left + zoomedIndexScale(i + 0.5);
+          const y = dims.margin.top + zoomedValueScale(hovered.top);
           return (
             <ChartTooltip x={x} y={y} visible align={x > dims.width * 0.65 ? "left" : "right"}>
               <div className="lq-chart-tooltip__title">{hovered.item.label}</div>

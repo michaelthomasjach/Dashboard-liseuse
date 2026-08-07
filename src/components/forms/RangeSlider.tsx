@@ -143,11 +143,14 @@ export function RangeSlider({
             <div className="lq-range-slider__zero-tick" style={{ left: `${zeroPct}%` }} />
           </>
         ) : (
-          <div
-            className="lq-range-slider__fill lq-range-slider__fill--drag"
-            style={{ left: `${loPct}%`, width: `${hiPct - loPct}%` }}
-            onPointerDown={startDragRange}
-          />
+          <>
+            <div className="lq-range-slider__fill" style={{ left: `${loPct}%`, width: `${hiPct - loPct}%` }} />
+            <div
+              className="lq-range-slider__fill-hit"
+              style={{ left: `${loPct}%`, width: `${hiPct - loPct}%` }}
+              onPointerDown={startDragRange}
+            />
+          </>
         )}
         <button
           type="button"

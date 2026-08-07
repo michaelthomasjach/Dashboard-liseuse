@@ -1,12 +1,13 @@
-import { useId, useMemo, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
 import { useAxisDragRescale } from "./internal/useAxisDragRescale";
+import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
-import { MaximizeIcon, MinimizeIcon } from "../icons";
+import { MaximizeIcon, MinimizeIcon, TrendLineIcon } from "../icons";
 import "./charts-shared.css";
 import "./CandlestickChart.css";
 
@@ -19,6 +20,19 @@ export interface Candle {
   volume?: number;
 }
 
+export interface TrendLineDrawing {
+  id: string;
+  x1: Date;
+  y1: number;
+  x2: Date;
+  y2: number;
+}
+
+interface DataPoint {
+  x: Date;
+  y: number;
+}
+
 export interface CandlestickChartProps {
   data: Candle[];
   height?: number;
@@ -29,11 +43,29 @@ export interface CandlestickChartProps {
   formatVolume?: (v: number) => string;
   /** Shows a fullscreen toggle button in the toolbar. Default true. */
   fullscreenToggle?: boolean;
+  /** Shows a right-docked toolbar for drawing annotations directly on the chart (currently: trend line). Default false. */
+  drawingTools?: boolean;
+  /** Uncontrolled initial set of trend-line drawings. */
+  defaultDrawings?: TrendLineDrawing[];
+  /** Fires whenever a drawing is added or an endpoint is moved. */
+  onDrawingsChange?: (drawings: TrendLineDrawing[]) => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
 
 const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 8, right: 8, bottom: 24, left: 56 };
+/** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
+const DRAWING_HIT_DISTANCE = 8;
+
+function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lengthSq = dx * dx + dy * dy;
+  const t = lengthSq === 0 ? 0 : Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSq));
+  const cx = x1 + t * dx;
+  const cy = y1 + t * dy;
+  return Math.hypot(px - cx, py - cy);
+}
 
 export function CandlestickChart({
   data,
@@ -44,6 +76,9 @@ export function CandlestickChart({
   formatPrice,
   formatVolume,
   fullscreenToggle = true,
+  drawingTools = false,
+  defaultDrawings,
+  onDrawingsChange,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -51,6 +86,19 @@ export function CandlestickChart({
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+
+  const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
+  const [activeTool, setActiveTool] = useState<"trendline" | null>(null);
+  const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
+  const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
+  const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
+  const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
+  const drawingIdRef = useRef(0);
+
+  function commitDrawings(next: TrendLineDrawing[]) {
+    setDrawings(next);
+    onDrawingsChange?.(next);
+  }
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height: isFullscreen ? undefined : height });
@@ -85,7 +133,7 @@ export function CandlestickChart({
   const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: dims.boundedHeight,
-    enabled: zoomable,
+    enabled: zoomable && activeTool === null,
     scaleExtent: [1, 20],
     onZoom: setTransform,
   });
@@ -104,6 +152,20 @@ export function CandlestickChart({
     onChange: setYTransform,
   });
 
+  const xAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "x",
+    transform,
+    onChange: setXTransformViaZoom,
+    enabled: zoomable,
+    scaleExtent: [1, 20],
+  });
+  const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "y",
+    transform: yTransform,
+    onChange: setYTransform,
+    enabled: zoomable,
+  });
+
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
 
   function resetZoom() {
@@ -113,6 +175,83 @@ export function CandlestickChart({
 
   function resetYAxis() {
     setYTransform(d3.zoomIdentity);
+  }
+
+  function cancelDrawingTool() {
+    setActiveTool(null);
+    setPendingPoint(null);
+    setPreviewPoint(null);
+  }
+
+  function handleToolClick(tool: "trendline") {
+    if (activeTool === tool) {
+      cancelDrawingTool();
+    } else {
+      setActiveTool(tool);
+      setPendingPoint(null);
+      setPreviewPoint(null);
+    }
+  }
+
+  useEffect(() => {
+    if (!activeTool) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") cancelDrawingTool();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTool]);
+
+  function toDataPoint(e: { clientX: number; clientY: number }): DataPoint {
+    const rect = zoomRef.current!.getBoundingClientRect();
+    return {
+      x: zoomedXScale.invert(e.clientX - rect.left) as Date,
+      y: zoomedPriceScale.invert(e.clientY - rect.top),
+    };
+  }
+
+  function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
+    if (!activeTool) return;
+    const point = toDataPoint(e);
+    if (!pendingPoint) {
+      setPendingPoint(point);
+      setPreviewPoint(point);
+      return;
+    }
+    const drawing: TrendLineDrawing = {
+      id: `drawing-${drawingIdRef.current++}`,
+      x1: pendingPoint.x,
+      y1: pendingPoint.y,
+      x2: point.x,
+      y2: point.y,
+    };
+    commitDrawings([...drawings, drawing]);
+    cancelDrawingTool();
+  }
+
+  function handleEndpointPointerDown(drawingId: string, which: 1 | 2) {
+    return (e: React.PointerEvent<SVGCircleElement>) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragEndpointRef.current = { id: drawingId, which };
+    };
+  }
+
+  function handleEndpointPointerMove(e: React.PointerEvent<SVGCircleElement>) {
+    const drag = dragEndpointRef.current;
+    if (!drag) return;
+    const point = toDataPoint(e);
+    commitDrawings(
+      drawings.map((d) => {
+        if (d.id !== drag.id) return d;
+        return drag.which === 1 ? { ...d, x1: point.x, y1: point.y } : { ...d, x2: point.x, y2: point.y };
+      })
+    );
+  }
+
+  function handleEndpointPointerUp(e: React.PointerEvent<SVGCircleElement>) {
+    dragEndpointRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
   const slotWidth = data.length > 0 ? dims.boundedWidth / data.length : 0;
@@ -131,10 +270,33 @@ export function CandlestickChart({
     if (data.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
     const target = zoomedXScale.invert(mouseX);
     const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
     const index = Math.min(data.length - 1, Math.max(0, bisect(data, target as Date)));
     setHoverIndex(index);
+
+    if (activeTool && pendingPoint) {
+      setPreviewPoint({ x: zoomedXScale.invert(mouseX) as Date, y: zoomedPriceScale.invert(mouseY) });
+    } else if (!activeTool && drawings.length > 0) {
+      let closestId: string | null = null;
+      let closestDist = DRAWING_HIT_DISTANCE;
+      for (const dr of drawings) {
+        const d = distanceToSegment(
+          mouseX,
+          mouseY,
+          zoomedXScale(dr.x1),
+          zoomedPriceScale(dr.y1),
+          zoomedXScale(dr.x2),
+          zoomedPriceScale(dr.y2)
+        );
+        if (d < closestDist) {
+          closestDist = d;
+          closestId = dr.id;
+        }
+      }
+      setHoveredDrawingId(closestId);
+    }
   }
 
   if (dims.width === 0) return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }} />;
@@ -170,6 +332,19 @@ export function CandlestickChart({
           </button>
         )}
       </div>
+      {drawingTools && (
+        <div className="lq-chart__tools-toolbar">
+          <button
+            type="button"
+            className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+            onClick={() => handleToolClick("trendline")}
+            aria-label="Ligne de tendance"
+            aria-pressed={activeTool === "trendline"}
+          >
+            <TrendLineIcon size={14} />
+          </button>
+        </div>
+      )}
       <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
         <defs>
           <clipPath id={clipId}>
@@ -228,6 +403,57 @@ export function CandlestickChart({
                 })}
               </g>
             )}
+
+            {drawings.map((dr) => {
+              const x1 = zoomedXScale(dr.x1);
+              const y1 = zoomedPriceScale(dr.y1);
+              const x2 = zoomedXScale(dr.x2);
+              const y2 = zoomedPriceScale(dr.y2);
+              const isHovered = hoveredDrawingId === dr.id;
+              return (
+                <g key={dr.id}>
+                  <line
+                    className={["lq-chart__drawing-line", isHovered && "lq-chart__drawing-line--hover"].filter(Boolean).join(" ")}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                  />
+                  {isHovered && (
+                    <>
+                      <circle
+                        className="lq-chart__drawing-handle"
+                        cx={x1}
+                        cy={y1}
+                        r={5}
+                        onPointerDown={handleEndpointPointerDown(dr.id, 1)}
+                        onPointerMove={handleEndpointPointerMove}
+                        onPointerUp={handleEndpointPointerUp}
+                      />
+                      <circle
+                        className="lq-chart__drawing-handle"
+                        cx={x2}
+                        cy={y2}
+                        r={5}
+                        onPointerDown={handleEndpointPointerDown(dr.id, 2)}
+                        onPointerMove={handleEndpointPointerMove}
+                        onPointerUp={handleEndpointPointerUp}
+                      />
+                    </>
+                  )}
+                </g>
+              );
+            })}
+
+            {activeTool && pendingPoint && previewPoint && (
+              <line
+                className="lq-chart__drawing-line lq-chart__drawing-line--preview"
+                x1={zoomedXScale(pendingPoint.x)}
+                y1={zoomedPriceScale(pendingPoint.y)}
+                x2={zoomedXScale(previewPoint.x)}
+                y2={zoomedPriceScale(previewPoint.y)}
+              />
+            )}
           </g>
 
           {showVolume && (
@@ -240,14 +466,19 @@ export function CandlestickChart({
 
           <rect
             ref={zoomRef}
-            className="lq-chart__overlay"
+            className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
             width={dims.boundedWidth}
             height={dims.boundedHeight}
             onPointerMove={handlePointerMove}
-            onPointerLeave={() => setHoverIndex(null)}
+            onPointerLeave={() => {
+              setHoverIndex(null);
+              if (!dragEndpointRef.current) setHoveredDrawingId(null);
+            }}
+            onClick={handleOverlayClick}
           />
 
           <rect
+            ref={yAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--y"
             x={-dims.margin.left}
             y={0}
@@ -259,6 +490,7 @@ export function CandlestickChart({
             onDoubleClick={resetYAxis}
           />
           <rect
+            ref={xAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--x"
             x={0}
             y={dims.boundedHeight}

@@ -53,4 +53,6 @@ export {
   ArrowRightIcon,
   PlusIcon,
   CopyIcon,
+  CursorArrowIcon,
+  TrendLineIcon,
 } from "./icons";

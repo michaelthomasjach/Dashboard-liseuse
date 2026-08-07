@@ -370,3 +370,17 @@ export const CopyIcon = (props: IconProps) => (
     <path d="M15.5 8.5V5a1.5 1.5 0 0 0-1.5-1.5H5A1.5 1.5 0 0 0 3.5 5v9A1.5 1.5 0 0 0 5 15.5h3.5" />
   </IconBase>
 );
+
+export const CursorArrowIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M5 3.5 18.5 9.8 12.6 12.2 10 18.3Z" strokeLinejoin="round" />
+  </IconBase>
+);
+
+export const TrendLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 18 18 6" />
+    <circle cx="4" cy="18" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="18" cy="6" r="1.6" fill="currentColor" stroke="none" />
+  </IconBase>
+);

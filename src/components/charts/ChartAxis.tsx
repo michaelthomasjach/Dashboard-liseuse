@@ -8,6 +8,9 @@ export interface ChartAxisProps<Domain extends d3.AxisDomain = d3.AxisDomain> {
   transform?: string;
   ticks?: number;
   tickFormat?: (value: Domain, index: number) => string;
+  /** Explicit tick positions, e.g. one per visible bar on an index-based categorical axis.
+   *  Overrides the automatic `ticks` count when provided. */
+  tickValues?: Domain[];
   tickSizeOuter?: number;
   grid?: boolean;
   /** Length of grid lines (usually the plot's bounded width/height). Required when `grid` is true. */
@@ -26,6 +29,7 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
   transform,
   ticks = 5,
   tickFormat,
+  tickValues,
   tickSizeOuter = 0,
   grid = false,
   gridLength = 0,
@@ -37,7 +41,9 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     if (!g) return;
 
     const axis = orientation === "bottom" ? d3.axisBottom<Domain>(scale) : d3.axisLeft<Domain>(scale);
-    axis.ticks(ticks).tickSizeOuter(tickSizeOuter);
+    if (tickValues) axis.tickValues(tickValues);
+    else axis.ticks(ticks);
+    axis.tickSizeOuter(tickSizeOuter);
     if (tickFormat) axis.tickFormat(tickFormat);
     if (grid) axis.tickSizeInner(-gridLength);
 

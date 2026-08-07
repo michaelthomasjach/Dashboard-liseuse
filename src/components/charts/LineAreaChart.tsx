@@ -3,6 +3,7 @@ import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
 import { useAxisDragRescale } from "./internal/useAxisDragRescale";
+import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
@@ -117,6 +118,19 @@ export function LineAreaChart({
     size: dims.boundedHeight,
     transform: yTransform,
     onChange: setYTransform,
+  });
+
+  const xAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "x",
+    transform,
+    onChange: setXTransformViaZoom,
+    enabled: zoomable,
+  });
+  const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
+    axis: "y",
+    transform: yTransform,
+    onChange: setYTransform,
+    enabled: zoomable,
   });
 
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
@@ -261,6 +275,7 @@ export function LineAreaChart({
           />
 
           <rect
+            ref={yAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--y"
             x={-dims.margin.left}
             y={0}
@@ -272,6 +287,7 @@ export function LineAreaChart({
             onDoubleClick={resetYAxis}
           />
           <rect
+            ref={xAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--x"
             x={0}
             y={dims.boundedHeight}

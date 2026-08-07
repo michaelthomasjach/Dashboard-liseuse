@@ -5,7 +5,7 @@ export { BarChart } from "./BarChart";
 export type { BarChartProps, BarDatum } from "./BarChart";
 
 export { CandlestickChart } from "./CandlestickChart";
-export type { CandlestickChartProps, Candle } from "./CandlestickChart";
+export type { CandlestickChartProps, Candle, TrendLineDrawing } from "./CandlestickChart";
 
 export { GaugeChart } from "./GaugeChart";
 export type { GaugeChartProps, GaugeThreshold } from "./GaugeChart";
