@@ -13,7 +13,7 @@ export const Default: Story = {
   render: () => (
     <div style={{ maxWidth: 360 }}>
       <WeatherWidget
-        icon={<PartlyCloudyIcon />}
+        icon={<PartlyCloudyIcon animated />}
         temperature="16"
         condition="Partiellement nuageux"
         min="12"
@@ -36,7 +36,7 @@ export const Default: Story = {
 export const WithoutAlertOrForecast: Story = {
   render: () => (
     <div style={{ maxWidth: 360 }}>
-      <WeatherWidget icon={<SunIcon />} temperature="24" condition="Ensoleillé" min="18" max="26" />
+      <WeatherWidget icon={<SunIcon animated />} temperature="24" condition="Ensoleillé" min="18" max="26" />
     </div>
   ),
 };

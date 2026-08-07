@@ -1,4 +1,5 @@
 export type { IconProps } from "./IconBase";
+export type { AnimatedIconProps } from "./icons";
 export {
   SunIcon,
   MoonIcon,

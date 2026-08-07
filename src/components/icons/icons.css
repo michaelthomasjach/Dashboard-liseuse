@@ -1,0 +1,84 @@
+/* Opt-in icon animations (pass `animated` to the icon component). Off by
+   default so icons stay calm in dense UI (tables, forecast strips, buttons);
+   turn it on for the one "hero" instance where motion earns its place. */
+
+@keyframes lq-icon-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes lq-icon-sway {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes lq-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes lq-icon-raindrop {
+  0% {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+}
+
+.lq-icon-spin {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lq-icon-spin 7s linear infinite;
+}
+
+.lq-icon-sway {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lq-icon-sway 2.2s ease-in-out infinite;
+}
+
+.lq-icon-pulse {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lq-icon-pulse 3s ease-in-out infinite;
+}
+
+.lq-icon-raindrop {
+  animation: lq-icon-raindrop 1.1s ease-in infinite;
+}
+
+/* Real e-ink hardware can't animate smoothly. */
+.lq-root[data-lq-palette="eink"] .lq-icon-spin,
+.lq-root[data-lq-palette="eink"] .lq-icon-sway,
+.lq-root[data-lq-palette="eink"] .lq-icon-pulse,
+.lq-root[data-lq-palette="eink"] .lq-icon-raindrop {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-icon-spin,
+  .lq-icon-sway,
+  .lq-icon-pulse,
+  .lq-icon-raindrop {
+    animation: none;
+  }
+}

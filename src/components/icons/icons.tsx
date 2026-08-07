@@ -1,14 +1,21 @@
 import { IconBase, type IconProps } from "./IconBase";
+import "./icons.css";
 
-export const SunIcon = (props: IconProps) => (
-  <IconBase {...props}>
+/** Icons that support an optional idle-loop animation (sun spinning, rain falling…).
+ *  Off by default — pass `animated` on the one instance you want to bring to life. */
+export interface AnimatedIconProps extends IconProps {
+  animated?: boolean;
+}
+
+export const SunIcon = ({ animated, className, ...props }: AnimatedIconProps) => (
+  <IconBase className={[animated && "lq-icon-spin", className].filter(Boolean).join(" ") || undefined} {...props}>
     <circle cx="12" cy="12" r="4.5" />
     <path d="M12 2.5v2.2M12 19.3v2.2M4.2 4.2l1.55 1.55M18.25 18.25l1.55 1.55M2.5 12h2.2M19.3 12h2.2M4.2 19.8l1.55-1.55M18.25 5.75l1.55-1.55" />
   </IconBase>
 );
 
-export const MoonIcon = (props: IconProps) => (
-  <IconBase {...props}>
+export const MoonIcon = ({ animated, className, ...props }: AnimatedIconProps) => (
+  <IconBase className={[animated && "lq-icon-pulse", className].filter(Boolean).join(" ") || undefined} {...props}>
     <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a6.6 6.6 0 0 0 10.2 10.2Z" />
   </IconBase>
 );
@@ -19,23 +26,27 @@ export const CloudIcon = (props: IconProps) => (
   </IconBase>
 );
 
-export const PartlyCloudyIcon = (props: IconProps) => (
+export const PartlyCloudyIcon = ({ animated, ...props }: AnimatedIconProps) => (
   <IconBase {...props}>
-    <circle cx="8" cy="8" r="3.2" />
-    <path d="M8 2.8v1.6M3.4 8H5M8 12.6v-1M3.75 3.75l1.1 1.1M12.25 3.75l-1.1 1.1" />
+    <g className={animated ? "lq-icon-spin" : undefined}>
+      <circle cx="8" cy="8" r="3.2" />
+      <path d="M8 2.8v1.6M3.4 8H5M8 12.6v-1M3.75 3.75l1.1 1.1M12.25 3.75l-1.1 1.1" />
+    </g>
     <path d="M10 19h7.5a3.5 3.5 0 0 0 0-7 4.7 4.7 0 0 0-8.9 1.4A3 3 0 0 0 10 19Z" />
   </IconBase>
 );
 
-export const CloudRainIcon = (props: IconProps) => (
+export const CloudRainIcon = ({ animated, ...props }: AnimatedIconProps) => (
   <IconBase {...props}>
     <path d="M6.5 15.5h10a4 4 0 0 0 0-8 5.5 5.5 0 0 0-10.4 1.7A3.5 3.5 0 0 0 6.5 15.5Z" />
-    <path d="M8.5 18.5 7.5 20.5M12.5 18.5l-1 2M16.5 18.5l-1 2" />
+    <path className={animated ? "lq-icon-raindrop" : undefined} style={animated ? { animationDelay: "0ms" } : undefined} d="M8.5 18.5 7.5 20.5" />
+    <path className={animated ? "lq-icon-raindrop" : undefined} style={animated ? { animationDelay: "220ms" } : undefined} d="M12.5 18.5l-1 2" />
+    <path className={animated ? "lq-icon-raindrop" : undefined} style={animated ? { animationDelay: "440ms" } : undefined} d="M16.5 18.5l-1 2" />
   </IconBase>
 );
 
-export const WindIcon = (props: IconProps) => (
-  <IconBase {...props}>
+export const WindIcon = ({ animated, className, ...props }: AnimatedIconProps) => (
+  <IconBase className={[animated && "lq-icon-sway", className].filter(Boolean).join(" ") || undefined} {...props}>
     <path d="M3.5 8.5h11a2.6 2.6 0 1 0-2.4-3.6" />
     <path d="M3.5 13h14.8a2.6 2.6 0 1 1-2.4 3.6" />
     <path d="M3.5 17.3h8.2a2 2 0 1 1-1.8 2.8" />

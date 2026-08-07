@@ -78,7 +78,7 @@ export const Maison: Story = {
           />
 
           <WeatherWidget
-            icon={<PartlyCloudyIcon />}
+            icon={<PartlyCloudyIcon animated />}
             temperature="12"
             condition="Partiellement nuageux"
             min="11"

@@ -91,6 +91,10 @@ La lib ne bundle pas les fonts (pour rester légère et éviter les conflits de 
 **Thème**
 - `LqThemeProvider`, `useLqTheme`
 
+**Icônes**
+- Set d'icônes SVG (`SunIcon`, `MoonIcon`, `PartlyCloudyIcon`, `CloudRainIcon`, `WindIcon`, `CloudIcon`, etc.) — voir la story "Foundations/Animated Icons"
+- Certaines icônes météo acceptent une prop `animated` (boucle idle discrète) : soleil qui tourne lentement, lune qui respire (échelle/opacité), petit soleil du "partiellement nuageux" qui tourne (le nuage reste fixe), gouttes de pluie qui tombent en cascade décalée, vent qui ondule légèrement. Désactivé automatiquement sous la palette e-ink et `prefers-reduced-motion` (comme les autres animations décoratives)
+
 **Primitives** — brique de base réutilisable dans n'importe quel écran
 - `Panel`, `PanelRow` — carte de section avec titre/meta et lignes label/valeur
 - `Toggle` — interrupteur on/off
