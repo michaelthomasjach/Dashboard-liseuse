@@ -149,14 +149,21 @@
   cursor: crosshair;
 }
 
-.lq-chart__tools-toolbar {
+/* A real vertical zone next to the plot (its width is reserved via the chart's own right
+   margin, so the plot/axes never draw under it) — not a floating overlay stacked on top of
+   the candles. Spans the chart's full height, so it stays visible in fullscreen too, since
+   it lives inside the same element that becomes the fixed fullscreen overlay. */
+.lq-chart__tools-rail {
   position: absolute;
-  top: 38px;
+  top: 0;
   right: 0;
   z-index: 5;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 4px;
+  padding-top: 4px;
+  border-left: 1px solid var(--lq-color-border-subtle);
 }
 
 .lq-chart__icon-button--active {

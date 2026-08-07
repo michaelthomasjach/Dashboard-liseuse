@@ -55,6 +55,9 @@ export interface CandlestickChartProps {
 const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 8, right: 8, bottom: 24, left: 56 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 const DRAWING_HIT_DISTANCE = 8;
+/** Width of the drawing-tools rail. Added to the right margin so the plot/axes never draw
+ *  under it — the rail gets its own reserved strip instead of overlaying the chart. */
+const TOOLS_RAIL_WIDTH = 40;
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
@@ -102,7 +105,11 @@ export function CandlestickChart({
   }
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
-  const [ref, dims] = useChartDimensions(margin ?? DEFAULT_MARGIN, { height: isFullscreen ? undefined : height });
+  const baseMargin = margin ?? DEFAULT_MARGIN;
+  const resolvedMargin = drawingTools
+    ? { ...baseMargin, right: (baseMargin.right ?? DEFAULT_MARGIN.right ?? 8) + TOOLS_RAIL_WIDTH }
+    : baseMargin;
+  const [ref, dims] = useChartDimensions(resolvedMargin, { height: isFullscreen ? undefined : height });
 
   // The candles/volume/crosshair/drawings are drawn on a <canvas> for performance with large
   // datasets (versus one SVG node per candle). Canvas has no live binding to CSS custom
@@ -463,8 +470,14 @@ export function CandlestickChart({
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
 
   return (
-    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
-      <div className="lq-chart__toolbar">
+    <div
+      ref={ref}
+      className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}
+      onPointerLeave={() => {
+        if (!dragEndpointRef.current) setHoveredDrawingId(null);
+      }}
+    >
+      <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
         {zoomable && isZoomed && (
           <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
             Réinitialiser le zoom
@@ -482,7 +495,7 @@ export function CandlestickChart({
         )}
       </div>
       {drawingTools && (
-        <div className="lq-chart__tools-toolbar">
+        <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: dims.height }}>
           <button
             type="button"
             className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
@@ -528,10 +541,7 @@ export function CandlestickChart({
               width={dims.boundedWidth}
               height={dims.boundedHeight}
               onPointerMove={handlePointerMove}
-              onPointerLeave={() => {
-                setHoverIndex(null);
-                if (!dragEndpointRef.current) setHoveredDrawingId(null);
-              }}
+              onPointerLeave={() => setHoverIndex(null)}
               onClick={handleOverlayClick}
             />
 

@@ -10,6 +10,10 @@ const meta: Meta<typeof CandlestickChart> = {
 export default meta;
 type Story = StoryObj<typeof CandlestickChart>;
 
+// Generated once at module load (not inside `render`, which re-runs on every interaction) —
+// a real app would memoize its own data the same way rather than regenerate it per render.
+const LARGE_DATASET = generateCandles(10_000, 180, 44);
+
 export const Default: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
@@ -42,6 +46,20 @@ export const WithDrawingTools: Story = {
         sont ancrées en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools />
+    </div>
+  ),
+};
+
+export const LargeDataset: Story = {
+  name: "Grand volume de données (10 000 bougies)",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        10 000 bougies (~38 ans de séance). Les bougies, le volume, le crosshair et les lignes de dessin sont rendus
+        sur un seul <code>canvas</code> plutôt qu'un nœud SVG par bougie — zoom/pan/dessin restent fluides à cette
+        échelle. Molette ou glisser pour naviguer dans l'historique.
+      </p>
+      <CandlestickChart data={LARGE_DATASET} drawingTools />
     </div>
   ),
 };
