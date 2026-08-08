@@ -4,7 +4,7 @@ import "./ChartAxis.css";
 
 export interface ChartAxisProps<Domain extends d3.AxisDomain = d3.AxisDomain> {
   scale: d3.AxisScale<Domain>;
-  orientation: "bottom" | "left";
+  orientation: "bottom" | "left" | "right";
   transform?: string;
   ticks?: number;
   tickFormat?: (value: Domain, index: number) => string;
@@ -40,7 +40,8 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     const g = ref.current;
     if (!g) return;
 
-    const axis = orientation === "bottom" ? d3.axisBottom<Domain>(scale) : d3.axisLeft<Domain>(scale);
+    const axis =
+      orientation === "bottom" ? d3.axisBottom<Domain>(scale) : orientation === "right" ? d3.axisRight<Domain>(scale) : d3.axisLeft<Domain>(scale);
     if (tickValues) axis.tickValues(tickValues);
     else axis.ticks(ticks);
     axis.tickSizeOuter(tickSizeOuter);

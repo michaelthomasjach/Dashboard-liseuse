@@ -1,5 +1,6 @@
+import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart } from "./CandlestickChart";
+import { CandlestickChart, type TimeframeEntry } from "./CandlestickChart";
 import { generateCandles } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -14,15 +15,21 @@ type Story = StoryObj<typeof CandlestickChart>;
 // a real app would memoize its own data the same way rather than regenerate it per render.
 const LARGE_DATASET = generateCandles(10_000, 180, 44);
 
+const TIMEFRAMES: TimeframeEntry[] = [
+  { group: "Minutes", options: [{ label: "1 minute", value: "1m" }, { label: "5 minutes", value: "5m" }, { label: "15 minutes", value: "15m" }] },
+  { group: "Heures", options: [{ label: "1 heure", value: "1h" }, { label: "4 heures", value: "4h" }] },
+  { group: "Jours", options: [{ label: "1 jour", value: "1d" }, { label: "1 semaine", value: "1w" }, { label: "1 mois", value: "1M" }] },
+];
+
 export const Default: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         Molette pour zoomer, glisser dans le graphe pour naviguer (glisser pan aussi bien l'axe des prix que l'axe des
         dates à la fois — utile une fois rescalé verticalement pour retrouver des bougies sorties de l'écran). Glisser
-        sur l'axe des prix (gauche) rescale verticalement, glisser sur l'axe des dates (bas) rescale horizontalement —
-        jusqu'à n'afficher qu'une seule bougie. Survoler le graphe affiche le prix et la date exacts directement sur
-        les axes, au lieu d'une infobulle flottante. Bouton en haut à droite pour le plein écran.
+        sur l'axe des prix (droite) rescale verticalement, glisser sur l'axe des dates (bas) rescale horizontalement —
+        jusqu'à n'afficher qu'une seule bougie, sans jamais faire chevaucher les bougies entre elles. Survoler le
+        graphe affiche le prix et la date exacts directement sur les axes, au lieu d'une infobulle flottante.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 11)} />
     </div>
@@ -42,16 +49,39 @@ export const WithDrawingTools: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Bouton "ligne de tendance" dans la colonne d'outils à droite du graphe (une vraie zone réservée, pas des
+        Bouton "ligne de tendance" dans la colonne d'outils à gauche du graphe (une vraie zone réservée, pas des
         boutons superposés — elle reste visible en plein écran). 1er clic = début de la ligne, 2ème clic = fin (la
         ligne suit le curseur entre les deux). Échap ou re-clic sur l'outil annule. Survoler une ligne dessinée fait
         apparaître des poignées à ses extrémités — glisser une poignée pour la redéfinir, ou glisser directement sur
-        la ligne pour la déplacer entièrement. Les lignes sont ancrées en coordonnées date/prix : elles suivent le
-        zoom et le déplacement du graphe.
+        la ligne pour la déplacer entièrement. <strong>Double-clic sur une ligne</strong> pour l'éditer (texte,
+        épaisseur, couleur, coordonnées) dans une modale. Les lignes sont ancrées en coordonnées date/prix : elles
+        suivent le zoom et le déplacement du graphe.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools />
     </div>
   ),
+};
+
+export const WithTimeframeHeader: Story = {
+  name: "Sélecteur d'intervalle",
+  render: () => {
+    const [timeframe, setTimeframe] = useState("1d");
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Barre d'en-tête (pas flottante — un vrai bandeau qui prend sa propre place) avec un sélecteur d'intervalle
+          groupé, à côté des boutons zoom/plein écran. Le composant se contente d'afficher la sélection et de
+          remonter `onTimeframeChange` — c'est à l'app de rééchantillonner `data` dans le nouvel intervalle.
+        </p>
+        <CandlestickChart
+          data={generateCandles(220, 180, 55)}
+          timeframes={TIMEFRAMES}
+          timeframe={timeframe}
+          onTimeframeChange={setTimeframe}
+        />
+      </div>
+    );
+  },
 };
 
 export const LargeDataset: Story = {
@@ -63,7 +93,7 @@ export const LargeDataset: Story = {
         sur un seul <code>canvas</code> plutôt qu'un nœud SVG par bougie — zoom/pan/dessin restent fluides à cette
         échelle. Molette ou glisser pour naviguer dans l'historique.
       </p>
-      <CandlestickChart data={LARGE_DATASET} drawingTools />
+      <CandlestickChart data={LARGE_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" />
     </div>
   ),
 };

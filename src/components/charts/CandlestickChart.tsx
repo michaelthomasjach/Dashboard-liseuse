@@ -6,7 +6,11 @@ import { useAxisDragRescale } from "./internal/useAxisDragRescale";
 import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
-import { MaximizeIcon, MinimizeIcon, TrendLineIcon } from "../icons";
+import { Popover } from "../forms/Popover";
+import { TextField } from "../forms/TextField";
+import { NumberField } from "../forms/NumberField";
+import { Modal } from "../primitives/Modal";
+import { MaximizeIcon, MinimizeIcon, TrendLineIcon, ChevronDownIcon } from "../icons";
 import "./charts-shared.css";
 
 export interface Candle {
@@ -24,11 +28,46 @@ export interface TrendLineDrawing {
   y1: number;
   x2: Date;
   y2: number;
+  /** Optional label rendered above the line's midpoint. */
+  text?: string;
+  /** CSS color. Defaults to the theme's accent color. */
+  color?: string;
+  /** Line thickness in px. Default 1.5. */
+  strokeWidth?: number;
 }
 
 interface DataPoint {
   x: Date;
   y: number;
+}
+
+export interface TimeframeOption {
+  label: string;
+  value: string;
+}
+
+export interface TimeframeGroup {
+  group: string;
+  options: TimeframeOption[];
+}
+
+export type TimeframeEntry = TimeframeOption | TimeframeGroup;
+
+function isTimeframeGroup(entry: TimeframeEntry): entry is TimeframeGroup {
+  return "options" in entry;
+}
+
+function findTimeframeLabel(entries: TimeframeEntry[] | undefined, value: string | undefined): string | null {
+  if (!entries || !value) return null;
+  for (const entry of entries) {
+    if (isTimeframeGroup(entry)) {
+      const found = entry.options.find((o) => o.value === value);
+      if (found) return found.label;
+    } else if (entry.value === value) {
+      return entry.label;
+    }
+  }
+  return null;
 }
 
 export interface CandlestickChartProps {
@@ -39,24 +78,36 @@ export interface CandlestickChartProps {
   formatDate?: (d: Date) => string;
   formatPrice?: (v: number) => string;
   formatVolume?: (v: number) => string;
-  /** Shows a fullscreen toggle button in the toolbar. Default true. */
+  /** Shows a fullscreen toggle button in the header. Default true. */
   fullscreenToggle?: boolean;
-  /** Shows a right-docked toolbar for drawing annotations directly on the chart (currently: trend line). Default false. */
+  /** Shows a left-docked toolbar for drawing annotations directly on the chart (currently: trend line). Default false. */
   drawingTools?: boolean;
   /** Uncontrolled initial set of trend-line drawings. */
   defaultDrawings?: TrendLineDrawing[];
-  /** Fires whenever a drawing is added or an endpoint is moved. */
+  /** Fires whenever a drawing is added, moved, or edited. */
   onDrawingsChange?: (drawings: TrendLineDrawing[]) => void;
+  /** Timeframe/interval options shown as a dropdown in the header — flat, or grouped (e.g. one
+   *  group per "Minutes"/"Heures"/"Jours"), matching a typical trading-platform interval menu.
+   *  This only renders the picker and reports the choice via `onTimeframeChange`; resampling
+   *  `data` into the new interval is left to the caller. */
+  timeframes?: TimeframeEntry[];
+  /** Currently selected timeframe's `value`, to highlight it in the menu. */
+  timeframe?: string;
+  onTimeframeChange?: (value: string) => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
 
-const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 8, right: 8, bottom: 24, left: 56 };
+const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 8, right: 56, bottom: 24, left: 8 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 const DRAWING_HIT_DISTANCE = 8;
-/** Width of the drawing-tools rail. Added to the right margin so the plot/axes never draw
+/** Width of the drawing-tools rail. Added to the left margin so the plot/axes never draw
  *  under it — the rail gets its own reserved strip instead of overlaying the chart. */
 const TOOLS_RAIL_WIDTH = 40;
+/** Height of the (non-floating) header row holding the timeframe picker and reset/fullscreen
+ *  buttons — subtracted from the available height before laying out the plot itself. */
+const HEADER_HEIGHT = 40;
+const DEFAULT_DRAWING_COLOR = "#6c87c9";
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
@@ -66,6 +117,21 @@ function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: n
   const cx = x1 + t * dx;
   const cy = y1 + t * dy;
   return Math.hypot(px - cx, py - cy);
+}
+
+function toDateInputValue(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function fromDateInputValue(text: string, fallback: Date): Date {
+  const match = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return fallback;
+  const next = new Date(fallback);
+  next.setFullYear(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  return next;
 }
 
 export function CandlestickChart({
@@ -80,6 +146,9 @@ export function CandlestickChart({
   drawingTools = false,
   defaultDrawings,
   onDrawingsChange,
+  timeframes,
+  timeframe,
+  onTimeframeChange,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -94,9 +163,13 @@ export function CandlestickChart({
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
+  const [tfOpen, setTfOpen] = useState(false);
   const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
   const drawingIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const tfAnchorRef = useRef<HTMLButtonElement>(null);
   const [themeTick, setThemeTick] = useState(0);
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
@@ -124,9 +197,14 @@ export function CandlestickChart({
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
-    ? { ...baseMargin, right: (baseMargin.right ?? DEFAULT_MARGIN.right ?? 8) + TOOLS_RAIL_WIDTH }
+    ? { ...baseMargin, left: (baseMargin.left ?? DEFAULT_MARGIN.left ?? 8) + TOOLS_RAIL_WIDTH }
     : baseMargin;
   const [ref, dims] = useChartDimensions(resolvedMargin, { height: isFullscreen ? undefined : height });
+
+  const showHeader = fullscreenToggle || zoomable || !!timeframes?.length;
+  const headerSpace = showHeader ? HEADER_HEIGHT : 0;
+  const plotHeight = Math.max(0, dims.height - headerSpace);
+  const plotBoundedHeight = Math.max(0, plotHeight - dims.margin.top - dims.margin.bottom);
 
   // The candles/volume/crosshair/drawings are drawn on a <canvas> for performance with large
   // datasets (versus one SVG node per candle). Canvas has no live binding to CSS custom
@@ -142,8 +220,8 @@ export function CandlestickChart({
   }, [ref]);
 
   const volumeGap = showVolume ? 16 : 0;
-  const volumeHeight = showVolume ? Math.round(dims.boundedHeight * 0.22) : 0;
-  const priceHeight = Math.max(0, dims.boundedHeight - volumeHeight - volumeGap);
+  const volumeHeight = showVolume ? Math.round(plotBoundedHeight * 0.22) : 0;
+  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight - volumeGap);
 
   const xScale = useMemo(() => {
     const extent = d3.extent(data, (d) => d.date) as [Date, Date];
@@ -175,7 +253,7 @@ export function CandlestickChart({
 
   const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
-    height: dims.boundedHeight,
+    height: plotBoundedHeight,
     enabled: zoomable && activeTool === null,
     scaleExtent: [1, maxXZoom],
     onZoom: setTransform,
@@ -275,6 +353,31 @@ export function CandlestickChart({
     cancelDrawingTool();
   }
 
+  function handleOverlayDoubleClick() {
+    if (activeTool || !hoveredDrawingId) return;
+    const dr = drawings.find((d) => d.id === hoveredDrawingId);
+    if (!dr) return;
+    setEditingId(dr.id);
+    setDraft(dr);
+  }
+
+  function closeEditModal() {
+    setEditingId(null);
+    setDraft(null);
+  }
+
+  function saveEditModal() {
+    if (!editingId || !draft) return;
+    commitDrawings(drawings.map((d) => (d.id === editingId ? draft : d)));
+    closeEditModal();
+  }
+
+  function deleteEditingDrawing() {
+    if (!editingId) return;
+    commitDrawings(drawings.filter((d) => d.id !== editingId));
+    closeEditModal();
+  }
+
   function handleEndpointPointerDown(drawingId: string, which: 1 | 2) {
     return (e: React.PointerEvent<SVGCircleElement>) => {
       e.stopPropagation();
@@ -318,9 +421,13 @@ export function CandlestickChart({
   }, [data, visibleRange]);
 
   // Each candle fills up to 80% of the space actually available to it at the current zoom —
-  // with a single candle visible, that's 80% of the whole plot width, not a small fixed cap.
+  // with a single candle visible, that's 80% of the whole plot width. Deliberately no minimum
+  // pixel floor: with many candles crammed into a narrow view (e.g. fully zoomed out on a
+  // 10,000-candle dataset), 80% of their slot is still less than the slot itself, so neighbors
+  // never overlap — a floor like `max(1, ...)` would force overlap once the slot itself was
+  // narrower than that floor.
   const visibleCount = Math.max(1, visibleRange.end - visibleRange.start);
-  const candleWidth = Math.max(1, (dims.boundedWidth / visibleCount) * 0.8);
+  const candleWidth = Math.max(0.1, (dims.boundedWidth / visibleCount) * 0.8);
 
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
@@ -417,15 +524,15 @@ export function CandlestickChart({
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrapper = ref.current;
-    if (!canvas || !wrapper || dims.boundedWidth <= 0 || dims.boundedHeight <= 0) return;
+    if (!canvas || !wrapper || dims.boundedWidth <= 0 || plotBoundedHeight <= 0) return;
 
     const dpr = window.devicePixelRatio || 1;
     canvas.width = dims.boundedWidth * dpr;
-    canvas.height = dims.boundedHeight * dpr;
+    canvas.height = plotBoundedHeight * dpr;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, dims.boundedWidth, dims.boundedHeight);
+    ctx.clearRect(0, 0, dims.boundedWidth, plotBoundedHeight);
 
     const style = getComputedStyle(wrapper);
     const colorUp = style.getPropertyValue("--lq-color-up").trim();
@@ -435,6 +542,7 @@ export function CandlestickChart({
     const colorMuted = style.getPropertyValue("--lq-color-text-muted").trim();
     const colorAccent = style.getPropertyValue("--lq-color-accent").trim();
     const colorGrid = style.getPropertyValue("--lq-color-border-subtle").trim();
+    const fontFamily = style.getPropertyValue("--lq-font-family").trim() || "sans-serif";
     const isEink = wrapper.closest('[data-lq-palette="eink"]') !== null;
 
     // Drawn first, underneath everything else — mirrors ChartAxis's own grid (same `ticks(5)`
@@ -498,7 +606,7 @@ export function CandlestickChart({
       const hx = zoomedXScale(hovered.date);
       ctx.beginPath();
       ctx.moveTo(hx, 0);
-      ctx.lineTo(hx, dims.boundedHeight);
+      ctx.lineTo(hx, plotBoundedHeight);
       ctx.stroke();
       if (hoverY !== null) {
         ctx.beginPath();
@@ -510,12 +618,24 @@ export function CandlestickChart({
     }
 
     for (const dr of drawings) {
-      ctx.strokeStyle = colorAccent;
-      ctx.lineWidth = hoveredDrawingId === dr.id ? 2.5 : 1.5;
+      const lineColor = dr.color ?? colorAccent;
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      const x1 = zoomedXScale(dr.x1);
+      const y1 = zoomedPriceScale(dr.y1);
+      const x2 = zoomedXScale(dr.x2);
+      const y2 = zoomedPriceScale(dr.y2);
       ctx.beginPath();
-      ctx.moveTo(zoomedXScale(dr.x1), zoomedPriceScale(dr.y1));
-      ctx.lineTo(zoomedXScale(dr.x2), zoomedPriceScale(dr.y2));
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
       ctx.stroke();
+      if (dr.text) {
+        ctx.fillStyle = lineColor;
+        ctx.font = `600 11px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(dr.text, (x1 + x2) / 2, Math.min(y1, y2) - 6);
+      }
     }
 
     if (activeTool && pendingPoint && previewPoint) {
@@ -548,7 +668,7 @@ export function CandlestickChart({
     pendingPoint,
     previewPoint,
     dims.boundedWidth,
-    dims.boundedHeight,
+    plotBoundedHeight,
     themeTick,
     ref,
   ]);
@@ -565,25 +685,60 @@ export function CandlestickChart({
   const dFmt = formatDate ?? d3.timeFormat("%d %b %Y");
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
+  const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
 
   return (
-    <div
-      ref={ref}
-      className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}
-      onPointerLeave={() => {
-        if (!dragEndpointRef.current) updateHoveredDrawingId(null);
-      }}
-    >
-      <div className="lq-chart__plot" style={{ width: dims.width, height: dims.height }}>
-        {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
-            canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
-            box lines up with where the svg/canvas content actually starts. Explicitly sized
-            (not left to intrinsic sizing from its svg child) so it can never drift from `dims`
-            regardless of how the fullscreen flex container's own stretch/centering behaves —
-            in fullscreen .lq-chart is a flex column and .lq-chart__plot is its only flex item,
-            and relying on the svg's own width/height to indirectly size it was fragile enough
-            that the toolbar/rail (anchored to this box) kept ending up misplaced there. */}
-        <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
+      {showHeader && (
+        <div className="lq-chart__header" style={{ width: dims.width }}>
+          {timeframes && timeframes.length > 0 && (
+            <>
+              <button ref={tfAnchorRef} type="button" className="lq-chart__timeframe-trigger" onClick={() => setTfOpen((o) => !o)}>
+                {currentTimeframeLabel ?? "Intervalle"}
+                <ChevronDownIcon size={12} />
+              </button>
+              <Popover open={tfOpen} onClose={() => setTfOpen(false)} anchorRef={tfAnchorRef} placement="bottom">
+                <div className="lq-chart__timeframe-menu">
+                  {timeframes.map((entry) =>
+                    isTimeframeGroup(entry) ? (
+                      <div key={entry.group} className="lq-chart__timeframe-group">
+                        <div className="lq-chart__timeframe-group-label">{entry.group}</div>
+                        {entry.options.map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            className={["lq-chart__timeframe-option", opt.value === timeframe && "lq-chart__timeframe-option--selected"]
+                              .filter(Boolean)
+                              .join(" ")}
+                            onClick={() => {
+                              onTimeframeChange?.(opt.value);
+                              setTfOpen(false);
+                            }}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <button
+                        key={entry.value}
+                        type="button"
+                        className={["lq-chart__timeframe-option", entry.value === timeframe && "lq-chart__timeframe-option--selected"]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => {
+                          onTimeframeChange?.(entry.value);
+                          setTfOpen(false);
+                        }}
+                      >
+                        {entry.label}
+                      </button>
+                    )
+                  )}
+                </div>
+              </Popover>
+            </>
+          )}
           {zoomable && isZoomed && (
             <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
               Réinitialiser le zoom
@@ -600,8 +755,16 @@ export function CandlestickChart({
             </button>
           )}
         </div>
+      )}
+
+      <div className="lq-chart__plot" style={{ width: dims.width, height: plotHeight }}>
+        {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
+            canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
+            box lines up with where the svg/canvas content actually starts. Explicitly sized
+            (not left to intrinsic sizing from its svg child) so it can never drift from `dims`
+            regardless of how the fullscreen flex container's own stretch/centering behaves. */}
         {drawingTools && (
-          <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: dims.height }}>
+          <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: plotHeight }}>
             <button
               type="button"
               className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
@@ -620,31 +783,37 @@ export function CandlestickChart({
             left: dims.margin.left,
             top: dims.margin.top,
             width: dims.boundedWidth,
-            height: dims.boundedHeight,
+            height: plotBoundedHeight,
           }}
         />
-        <svg className="lq-chart__svg" width={dims.width} height={dims.height} role="img">
+        <svg className="lq-chart__svg" width={dims.width} height={plotHeight} role="img">
           <defs>
             <clipPath id={clipId}>
-              <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
+              <rect x={0} y={0} width={dims.boundedWidth} height={plotBoundedHeight} />
             </clipPath>
           </defs>
           <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-            <ChartAxis scale={zoomedPriceScale} orientation="left" tickFormat={(v) => pFmt(Number(v))} />
+            <ChartAxis scale={zoomedPriceScale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} tickFormat={(v) => pFmt(Number(v))} />
 
             {showVolume && (
               <g transform={`translate(0, ${priceHeight + volumeGap})`}>
-                <ChartAxis scale={volumeScale} orientation="left" ticks={2} tickFormat={(v) => vFmt(Number(v))} />
+                <ChartAxis
+                  scale={volumeScale}
+                  orientation="right"
+                  transform={`translate(${dims.boundedWidth}, 0)`}
+                  ticks={2}
+                  tickFormat={(v) => vFmt(Number(v))}
+                />
               </g>
             )}
 
-            <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${dims.boundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
+            <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${plotBoundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
 
             <rect
               ref={zoomRef}
               className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
               width={dims.boundedWidth}
-              height={dims.boundedHeight}
+              height={plotBoundedHeight}
               onPointerDown={handleOverlayPointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handleOverlayPointerUp}
@@ -653,14 +822,15 @@ export function CandlestickChart({
                 setHoverY(null);
               }}
               onClick={handleOverlayClick}
+              onDoubleClick={handleOverlayDoubleClick}
             />
 
             <rect
               ref={yAxisWheelRef}
               className="lq-chart__axis-drag lq-chart__axis-drag--y"
-              x={-dims.margin.left}
+              x={dims.boundedWidth}
               y={0}
-              width={dims.margin.left}
+              width={dims.margin.right}
               height={priceHeight}
               onPointerDown={yAxisDrag.onPointerDown}
               onPointerMove={yAxisDrag.onPointerMove}
@@ -671,7 +841,7 @@ export function CandlestickChart({
               ref={xAxisWheelRef}
               className="lq-chart__axis-drag lq-chart__axis-drag--x"
               x={0}
-              y={dims.boundedHeight}
+              y={plotBoundedHeight}
               width={dims.boundedWidth}
               height={dims.margin.bottom}
               onPointerDown={xAxisDrag.onPointerDown}
@@ -718,22 +888,87 @@ export function CandlestickChart({
         </svg>
 
         {hoverY !== null && (
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{ top: dims.margin.top + hoverY, width: dims.margin.left }}
-          >
+          <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
             {pFmt(zoomedPriceScale.invert(hoverY))}
           </div>
         )}
         {hovered && (
           <div
             className="lq-chart__axis-value lq-chart__axis-value--x"
-            style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + dims.boundedHeight }}
+            style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
           >
             {dFmt(hovered.date)}
           </div>
         )}
       </div>
+
+      {editingId && draft && (
+        <Modal
+          open
+          onClose={closeEditModal}
+          title="Modifier la ligne"
+          footer={
+            <div className="lq-chart__edit-drawing-footer">
+              <button type="button" className="lq-chart__reset-button" onClick={deleteEditingDrawing}>
+                Supprimer
+              </button>
+              <button type="button" className="lq-chart__confirm-button" onClick={saveEditModal}>
+                Enregistrer
+              </button>
+            </div>
+          }
+        >
+          <TextField
+            label="Texte"
+            placeholder="Étiquette (optionnel)"
+            value={draft.text ?? ""}
+            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+          />
+          <div className="lq-chart__edit-drawing-row">
+            <NumberField
+              label="Épaisseur"
+              min={1}
+              max={8}
+              step={0.5}
+              value={draft.strokeWidth ?? 1.5}
+              onChange={(v) => setDraft({ ...draft, strokeWidth: v === "" ? 1.5 : v })}
+            />
+            <div className="lq-field">
+              <label className="lq-field__label">Couleur</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={draft.color ?? DEFAULT_DRAWING_COLOR}
+                onChange={(e) => setDraft({ ...draft, color: e.target.value })}
+              />
+            </div>
+          </div>
+          <div className="lq-chart__edit-drawing-row">
+            <div className="lq-field">
+              <label className="lq-field__label">Début</label>
+              <input
+                type="date"
+                className="lq-chart__date-input"
+                value={toDateInputValue(draft.x1)}
+                onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
+              />
+            </div>
+            <NumberField label="Prix début" step={0.01} value={draft.y1} onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v })} />
+          </div>
+          <div className="lq-chart__edit-drawing-row">
+            <div className="lq-field">
+              <label className="lq-field__label">Fin</label>
+              <input
+                type="date"
+                className="lq-chart__date-input"
+                value={toDateInputValue(draft.x2)}
+                onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
+              />
+            </div>
+            <NumberField label="Prix fin" step={0.01} value={draft.y2} onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : v })} />
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
