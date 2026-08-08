@@ -225,6 +225,9 @@
 .lq-chart__axis-value {
   position: absolute;
   z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 3px;
   padding: 2px 6px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -235,34 +238,53 @@
   white-space: nowrap;
 }
 
-/* Quick-add button for a horizontal price line / vertical date line, anchored inside the
-   interactive plot itself (in line with the crosshair) rather than inside the axis-value badge
-   above — a button living out in the badge's margin area was unreachable, since moving the
-   pointer off the plot to reach it cleared the hover state (and hid the button) before the
-   click could land. */
+/* Quick-add button for a horizontal price line, englobed by the price badge itself (which
+   overlaps the chart by AXIS_VALUE_Y_OVERLAP to make room for it) instead of living outside as
+   a separate element. Transparent at rest so it blends into the badge's own background; only
+   a faint highlight appears right behind it on hover. The badge stays pointer-events:none (it
+   must never intercept hover/drag on the plot underneath) — this button opts back in. */
+.lq-chart__axis-value-add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lq-chart__axis-value-add:hover {
+  background-color: color-mix(in srgb, var(--lq-color-accent-contrast) 20%, transparent);
+}
+
+/* Quick-add button for a vertical date line — anchored inside the interactive plot itself (in
+   line with the crosshair), not inside the date badge below the plot: a button living there was
+   unreachable, since moving the pointer off the plot to reach it cleared the hover state (and
+   hid the button) before the click could land. Square, same accent background/text color as the
+   axis-value badges, so it reads as part of the same family despite being a separate element. */
 .lq-chart__crosshair-add {
   position: absolute;
   z-index: 999;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
+  width: 16px;
+  height: 16px;
   padding: 0;
-  color: var(--lq-color-text-muted);
-  background: none;
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-accent);
   border: none;
+  border-radius: 2px;
   cursor: pointer;
-  opacity: 0.75;
 }
 
 .lq-chart__crosshair-add:hover {
-  color: var(--lq-color-accent);
-  opacity: 1;
-}
-
-.lq-chart__crosshair-add--y {
-  transform: translateY(-50%);
+  background-color: color-mix(in srgb, var(--lq-color-accent) 85%, var(--lq-color-accent-contrast) 15%);
 }
 
 .lq-chart__crosshair-add--x {

@@ -107,10 +107,13 @@ const TOOLS_RAIL_WIDTH = 40;
 /** Height of the (non-floating) header row holding the timeframe picker and reset/fullscreen
  *  buttons — subtracted from the available height before laying out the plot itself. */
 const HEADER_HEIGHT = 40;
-/** Distance (px) the quick-add "+" buttons sit inset from the plot's own right/bottom edge —
- *  close to the price/date axis they mirror, but still inside the interactive rect so hovering
- *  them never counts as leaving the plot (see .lq-chart__plot's onPointerLeave). */
+/** Distance (px) the date "+" button sits inset from the plot's own bottom edge — close to the
+ *  date axis it mirrors, but still inside the interactive rect so hovering it never counts as
+ *  leaving the plot (see .lq-chart__plot's onPointerLeave). */
 const CROSSHAIR_ADD_INSET = 16;
+/** How far the price value badge's own left edge overlaps the chart, so its background
+ *  englobes the "+" button living at its start instead of the button sitting outside it. */
+const AXIS_VALUE_Y_OVERLAP = 20;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -994,24 +997,19 @@ export function CandlestickChart({
         </svg>
 
         {hoverY !== null && (
-          <>
-            <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
-              {pFmt(zoomedPriceScale.invert(hoverY))}
-            </div>
-            {/* Anchored inside the interactive plot itself (in line with the horizontal
-                crosshair), not in the axis-value badge out in the margin — a button living out
-                there was unreachable: moving the pointer off the plot to reach it fired the
-                overlay's own hover-leave first, so it vanished before the click could land. */}
-            <button
-              type="button"
-              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
-              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth - CROSSHAIR_ADD_INSET }}
-              onClick={addPriceLine}
-              aria-label="Ajouter une ligne de prix horizontale"
-            >
-              <PlusIcon size={8} />
+          // Overlaps the chart by AXIS_VALUE_Y_OVERLAP so the badge's own background englobes
+          // the "+" button too, instead of it living outside as a separate element — reachable
+          // either way since onPointerLeave lives on .lq-chart__plot (a real ancestor of both),
+          // not on the interactive rect itself.
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--y"
+            style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
+          >
+            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
+              <PlusIcon size={9} />
             </button>
-          </>
+            {pFmt(zoomedPriceScale.invert(hoverY))}
+          </div>
         )}
         {hoverVolumeY !== null && (
           <div
@@ -1029,8 +1027,10 @@ export function CandlestickChart({
             >
               {dFmt(hovered.date)}
             </div>
-            {/* Same reasoning as the price "+" above: anchored inside the plot, in line with
-                the vertical crosshair, instead of the unreachable badge below the plot. */}
+            {/* A standalone square button (not englobed by the date badge below the plot, since
+                that badge is unreachable — reaching it means leaving the interactive rect
+                entirely). Anchored inside the plot instead, in line with the vertical
+                crosshair. */}
             <button
               type="button"
               className="lq-chart__crosshair-add lq-chart__crosshair-add--x"
@@ -1038,7 +1038,7 @@ export function CandlestickChart({
               onClick={addDateLine}
               aria-label="Ajouter une ligne de date verticale"
             >
-              <PlusIcon size={8} />
+              <PlusIcon size={9} />
             </button>
           </>
         )}
