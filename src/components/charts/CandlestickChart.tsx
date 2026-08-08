@@ -19,6 +19,8 @@ import {
   HorizontalLineIcon,
   VerticalLineIcon,
   HorizontalRayIcon,
+  ExtendedLineIcon,
+  ChannelIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   PlusIcon,
@@ -59,12 +61,22 @@ export interface TrendLineDrawing {
    *  dragged horizontally (its date changes, never its price span, which always covers the full
    *  height); "ray" is a "horizontal" that starts at x1 instead of the dataset's own start —
    *  drawn from there to the right edge only, not spanning the full width — draggable in both
-   *  price and its start date, unlike "horizontal"/"vertical"'s single-axis handle. Omitted for
-   *  a regular hand-drawn trend line — set automatically by the axis "+" buttons. */
-  lineType?: "horizontal" | "vertical" | "ray";
+   *  price and its start date, unlike "horizontal"/"vertical"'s single-axis handle. "extended" is
+   *  a free two-point line like a regular trend line, except it's drawn all the way to the
+   *  price section's left/right edges instead of stopping at x1/x2 — those two points still
+   *  define its slope and are still what's draggable, the line just keeps going past them.
+   *  "channel" draws a second line parallel to x1/y1–x2/y2, offset by `channelOffset` (a plain
+   *  price delta, not a true perpendicular distance — same convention most trading platforms
+   *  use for this tool) — both lines are segments matching x1/x2's own date span, neither
+   *  extends. Omitted for a regular hand-drawn trend line — set automatically by the axis "+"
+   *  buttons. */
+  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel";
   /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
    *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
+  /** "channel" only: the second line's constant price offset from the first (x1/y1–x2/y2),
+   *  set by the tool's third click. */
+  channelOffset?: number;
 }
 
 interface DataPoint {
@@ -216,10 +228,12 @@ function computeIndicatorValues(data: Candle[], indicator: Indicator): (number |
   }
 }
 
-type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray";
+type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray" | "extended" | "channel";
 
 const DRAWING_TOOLS: { type: DrawingToolType; label: string; icon: typeof TrendLineIcon }[] = [
   { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
+  { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
+  { type: "channel", label: "Canal", icon: ChannelIcon },
   { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
   { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
   { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
@@ -362,6 +376,23 @@ function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: n
   return Math.hypot(px - cx, py - cy);
 }
 
+// "extended" lines keep their own two defining points (x1/y1/x2/y2, still what's draggable) but
+// draw all the way to the price section's left/right edges instead of stopping at them —
+// screen-space linear extrapolation along the same slope. A perfectly vertical segment (in
+// screen space) has nothing to extend into on the X axis, so it's returned unchanged.
+function extendSegmentToEdges(
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  xMin: number,
+  xMax: number
+): { x1: number; y1: number; x2: number; y2: number } {
+  if (x1 === x2) return { x1, y1, x2, y2 };
+  const slope = (y2 - y1) / (x2 - x1);
+  return { x1: xMin, y1: y1 + slope * (xMin - x1), x2: xMax, y2: y1 + slope * (xMax - x1) };
+}
+
 function toDateInputValue(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -418,6 +449,10 @@ export function CandlestickChart({
   const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
+  // "channel" only: its second point (fixing line 1), set between the tool's 2nd and 3rd clicks
+  // — pendingPoint/previewPoint alone are enough for every other tool's 2-click flow, channel
+  // needs a 3rd.
+  const [pendingSecondPoint, setPendingSecondPoint] = useState<DataPoint | null>(null);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
@@ -796,6 +831,7 @@ export function CandlestickChart({
     setActiveTool(null);
     setPendingPoint(null);
     setPreviewPoint(null);
+    setPendingSecondPoint(null);
   }
 
   function handleToolClick(tool: DrawingToolType) {
@@ -805,6 +841,7 @@ export function CandlestickChart({
       setActiveTool(tool);
       setPendingPoint(null);
       setPreviewPoint(null);
+      setPendingSecondPoint(null);
     }
   }
 
@@ -893,6 +930,46 @@ export function CandlestickChart({
       return;
     }
 
+    // "channel" needs a 3rd click (the tool's whole point): the first two fix line 1 exactly
+    // like a regular trend line, the third sets a constant price offset for a second line
+    // parallel to it — measured as the clicked point's own vertical distance from line 1 at
+    // that same date, not a true perpendicular distance (same simplification most trading
+    // platforms use for this tool).
+    if (activeTool === "channel") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      if (!pendingSecondPoint) {
+        setPendingSecondPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      const x1i = indexForDate(pendingPoint.x);
+      const x2i = indexForDate(pendingSecondPoint.x);
+      const onLineY =
+        x2i === x1i
+          ? pendingPoint.y
+          : pendingPoint.y + (pendingSecondPoint.y - pendingPoint.y) * ((indexForDate(point.x) - x1i) / (x2i - x1i));
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          x1: pendingPoint.x,
+          y1: pendingPoint.y,
+          x2: pendingSecondPoint.x,
+          y2: pendingSecondPoint.y,
+          lineType: "channel",
+          channelOffset: point.y - onLineY,
+        },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+
+    // "trendline" and "extended" share the same 2-click flow — "extended" only differs in how
+    // it's drawn (see the canvas draw effect), not in how it's placed.
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -904,6 +981,7 @@ export function CandlestickChart({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
+      ...(activeTool === "extended" ? { lineType: "extended" as const } : {}),
     };
     commitDrawings([...drawings, drawing]);
     cancelDrawingTool();
@@ -998,6 +1076,14 @@ export function CandlestickChart({
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
       const value = dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY);
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue, y1: value, y2: value } : d)));
+    } else if (dr.lineType === "channel") {
+      // A channel's 3rd handle only adjusts channelOffset (single axis, vertical) — line 1's own
+      // two endpoints already have their own draggable handles, same as a regular trend line.
+      // Recomputes the offset so line 2 passes through the new mouseY at the handle's own X (its
+      // line 2 midpoint) — the midpoint's line-1 price simplifies to a plain average of y1/y2.
+      const mouseY = e.clientY - rect.top;
+      const midPrice = (dr.y1 + dr.y2) / 2;
+      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, channelOffset: zoomedPriceScale.invert(mouseY) - midPrice } : d)));
     }
   }
 
@@ -1138,6 +1224,26 @@ export function CandlestickChart({
         } else if (dr.lineType === "vertical") {
           const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
           d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
+        } else if (dr.lineType === "extended") {
+          const extended = extendSegmentToEdges(
+            zoomedXScale(indexForDate(dr.x1) + 0.5),
+            zoomedPriceScale(dr.y1),
+            zoomedXScale(indexForDate(dr.x2) + 0.5),
+            zoomedPriceScale(dr.y2),
+            0,
+            dims.boundedWidth
+          );
+          d = distanceToSegment(mouseX, mouseY, extended.x1, extended.y1, extended.x2, extended.y2);
+        } else if (dr.lineType === "channel") {
+          const cx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const cy1 = zoomedPriceScale(dr.y1);
+          const cx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const cy2 = zoomedPriceScale(dr.y2);
+          const offsetPx = zoomedPriceScale(dr.y1 + (dr.channelOffset ?? 0)) - zoomedPriceScale(dr.y1);
+          d = Math.min(
+            distanceToSegment(mouseX, mouseY, cx1, cy1, cx2, cy2),
+            distanceToSegment(mouseX, mouseY, cx1, cy1 + offsetPx, cx2, cy2 + offsetPx)
+          );
         } else {
           d = distanceToSegment(
             mouseX,
@@ -1370,10 +1476,36 @@ export function CandlestickChart({
         x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
         y2 = zoomedPriceScale(dr.y2);
       }
+
+      // "extended" draws past x1/x2 to the price section's edges — computed separately from
+      // x1/y1/x2/y2 themselves, which stay the two defining (and draggable, and text-anchoring)
+      // points regardless of how far the line itself actually reaches.
+      let drawX1 = x1,
+        drawY1 = y1,
+        drawX2 = x2,
+        drawY2 = y2;
+      if (dr.lineType === "extended") {
+        const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth);
+        drawX1 = extended.x1;
+        drawY1 = extended.y1;
+        drawX2 = extended.x2;
+        drawY2 = extended.y2;
+      }
       ctx.beginPath();
-      ctx.moveTo(x1, y1);
-      ctx.lineTo(x2, y2);
+      ctx.moveTo(drawX1, drawY1);
+      ctx.lineTo(drawX2, drawY2);
       ctx.stroke();
+
+      // "channel" draws a second segment parallel to x1/x2, offset by channelOffset (a price
+      // delta — constant in pixel terms too, since zoomedPriceScale is linear).
+      if (dr.lineType === "channel") {
+        const offsetPx = zoomedPriceScale(dr.y1 + (dr.channelOffset ?? 0)) - zoomedPriceScale(dr.y1);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1 + offsetPx);
+        ctx.lineTo(x2, y2 + offsetPx);
+        ctx.stroke();
+      }
+
       if (dr.text) {
         const spansToRightEdge = dr.lineType === "horizontal" || dr.lineType === "ray";
         ctx.fillStyle = lineColor;
@@ -1390,10 +1522,51 @@ export function CandlestickChart({
       ctx.globalAlpha = 0.75;
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
-      ctx.beginPath();
-      ctx.moveTo(zoomedXScale(indexForDate(pendingPoint.x) + 0.5), zoomedPriceScale(pendingPoint.y));
-      ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
-      ctx.stroke();
+
+      if (activeTool === "channel" && pendingSecondPoint) {
+        // Line 1 is fixed now (points 1 and 2 already placed) — the live cursor (previewPoint)
+        // instead previews line 2's offset, the tool's 3rd/final click.
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(pendingSecondPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(pendingSecondPoint.y);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        const x1i = indexForDate(pendingPoint.x);
+        const x2i = indexForDate(pendingSecondPoint.x);
+        const onLineY =
+          x2i === x1i
+            ? pendingPoint.y
+            : pendingPoint.y + (pendingSecondPoint.y - pendingPoint.y) * ((indexForDate(previewPoint.x) - x1i) / (x2i - x1i));
+        const offsetPx = zoomedPriceScale(pendingPoint.y + (previewPoint.y - onLineY)) - zoomedPriceScale(pendingPoint.y);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1 + offsetPx);
+        ctx.lineTo(x2, y2 + offsetPx);
+        ctx.stroke();
+      } else {
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(previewPoint.y);
+        let drawX1 = x1,
+          drawY1 = y1,
+          drawX2 = x2,
+          drawY2 = y2;
+        if (activeTool === "extended") {
+          const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth);
+          drawX1 = extended.x1;
+          drawY1 = extended.y1;
+          drawX2 = extended.x2;
+          drawY2 = extended.y2;
+        }
+        ctx.beginPath();
+        ctx.moveTo(drawX1, drawY1);
+        ctx.lineTo(drawX2, drawY2);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -1521,6 +1694,7 @@ export function CandlestickChart({
     activeTool,
     pendingPoint,
     previewPoint,
+    pendingSecondPoint,
     visibleIndicators,
     indexForDate,
     dims.boundedWidth,
@@ -1958,6 +2132,10 @@ export function CandlestickChart({
                     />
                   );
                 }
+                // "extended"/"channel" and the regular trend line all share the same two
+                // independently-draggable endpoint handles (they're the two points that define
+                // the line's slope regardless of how far it's actually drawn) — "channel" gets a
+                // 3rd, single-axis handle on its own line 2 for channelOffset specifically.
                 const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
                 const y1 = zoomedPriceScale(dr.y1);
                 const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
@@ -1982,6 +2160,17 @@ export function CandlestickChart({
                       onPointerMove={handleEndpointPointerMove}
                       onPointerUp={handleEndpointPointerUp}
                     />
+                    {dr.lineType === "channel" && (
+                      <circle
+                        className="lq-chart__drawing-handle"
+                        cx={(x1 + x2) / 2}
+                        cy={zoomedPriceScale((dr.y1 + dr.y2) / 2 + (dr.channelOffset ?? 0))}
+                        r={5}
+                        onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                        onPointerMove={handleAxisHandlePointerMove}
+                        onPointerUp={handleAxisHandlePointerUp}
+                      />
+                    )}
                   </g>
                 );
               })}
@@ -2131,7 +2320,11 @@ export function CandlestickChart({
               />
             </div>
           )}
-          {!draft.lineType && (
+          {/* Regular trend line, "extended" (same two points, just drawn further — see the
+              canvas draw effect) and "channel" (line 1's own two points; its second, parallel
+              line is set by the "Décalage" field below instead of its own coordinates) all
+              share the same two-point editor. */}
+          {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel") && (
             <>
               <div className="lq-chart__edit-drawing-row">
                 <div className="lq-field">
@@ -2158,6 +2351,14 @@ export function CandlestickChart({
                 <NumberField label="Prix fin" step={0.01} value={draft.y2} onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : v })} />
               </div>
             </>
+          )}
+          {draft.lineType === "channel" && (
+            <NumberField
+              label="Décalage (ligne 2)"
+              step={0.01}
+              value={draft.channelOffset ?? 0}
+              onChange={(v) => setDraft({ ...draft, channelOffset: v === "" ? draft.channelOffset : v })}
+            />
           )}
         </Modal>
       )}

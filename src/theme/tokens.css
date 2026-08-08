@@ -7,6 +7,20 @@
  * CSS custom property so consumers can also override individual tokens.
  */
 
+/* border-box everywhere under .lq-root: without it, `width: 100%` + padding/border (a pattern
+   used throughout this library's form controls and overlays) renders wider than its container
+   instead of the padding/border eating into the specified width — the recurring root cause
+   behind several past overflow bugs (a modal's date input pushing it into a horizontal
+   scrollbar, an absolutely-positioned overlay's padding never visually taking effect), each
+   patched one class at a time before this existed. Scoped to .lq-root, not html/body, so it
+   can't leak into a consuming app's own unrelated content. */
+.lq-root,
+.lq-root *,
+.lq-root *::before,
+.lq-root *::after {
+  box-sizing: border-box;
+}
+
 .lq-root {
   --lq-font-space-grotesk: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --lq-font-manrope: "Manrope", ui-sans-serif, system-ui, sans-serif;

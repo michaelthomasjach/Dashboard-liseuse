@@ -58,5 +58,7 @@ export {
   HorizontalLineIcon,
   VerticalLineIcon,
   HorizontalRayIcon,
+  ExtendedLineIcon,
+  ChannelIcon,
   ActivityIcon,
 } from "./icons";

@@ -406,6 +406,25 @@ export const HorizontalRayIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Like TrendLineIcon, but the line runs past both dots to the edges of the icon instead of
+ *  stopping at them — the two dots still mark the two points that actually define its slope. */
+export const ExtendedLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 20 22 4" />
+    <circle cx="7" cy="16.5" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="17" cy="7.5" r="1.6" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+export const ChannelIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 19 16 6" />
+    <path d="M8 21 21 8" />
+    <circle cx="3" cy="19" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="16" cy="6" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
 export const ActivityIcon = (props: IconProps) => (
   <IconBase {...props}>
     <path d="M22 12h-4l-3 8-6-16-3 8H2" />
