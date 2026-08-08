@@ -639,7 +639,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 8px;
+  /* Right padding is 22px, not 25px: each action button already has 3px of its own padding
+     between its icon and the button's own edge (see .lq-chart__pane-header-action below), so
+     22 + 3 = the requested 25px between the rightmost icon itself and the pane's right edge —
+     which lines up with the price axis's own vertical line (this header is exactly
+     dims.boundedWidth wide, same as the plot). */
+  padding: 0 22px 0 8px;
   pointer-events: none;
 }
 
