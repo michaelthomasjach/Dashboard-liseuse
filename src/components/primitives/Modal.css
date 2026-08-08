@@ -18,14 +18,18 @@
   border: 1px solid var(--lq-color-border);
   border-radius: var(--lq-radius-lg);
   box-shadow: var(--lq-shadow-modal);
-  padding: var(--lq-space-5);
-  display: flex;
-  flex-direction: column;
-  gap: var(--lq-space-4);
 }
 
 .lq-root[data-lq-palette="eink"] .lq-modal {
   border-radius: 0;
+}
+
+.lq-modal__inner {
+  padding: var(--lq-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-4);
+  min-height: 100%;
 }
 
 .lq-modal--fullscreen {
@@ -33,6 +37,10 @@
   height: 92vh;
   max-width: none;
   max-height: none;
+}
+
+.lq-modal--fullscreen .lq-modal__inner {
+  height: 100%;
 }
 
 .lq-modal--fullscreen .lq-modal__body {

@@ -47,13 +47,21 @@ export function Modal({ open, onClose, title, children, footer, closeLabel = "Fe
         aria-label={typeof title === "string" ? title : undefined}
         onClick={(e) => e.stopPropagation()}
       >
-        {title && (
-          <header className="lq-modal__header">
-            <h2 className="lq-modal__title">{title}</h2>
-          </header>
-        )}
-        <div className="lq-modal__body">{children}</div>
-        {resolvedFooter && <footer className="lq-modal__footer">{resolvedFooter}</footer>}
+        {/* Padding lives here, not on .lq-modal itself: .lq-modal is the element with
+            overflow-y:auto, and a scrollbar on a *padded* box eats into that side's padding
+            instead of sitting outside it — the left padding stayed full while the right one
+            visually vanished under the scrollbar. Keeping .lq-modal unpadded means the
+            scrollbar renders flush with its border, outside this wrapper's box entirely, so
+            the padding here stays symmetric whether or not a scrollbar is showing. */}
+        <div className="lq-modal__inner">
+          {title && (
+            <header className="lq-modal__header">
+              <h2 className="lq-modal__title">{title}</h2>
+            </header>
+          )}
+          <div className="lq-modal__body">{children}</div>
+          {resolvedFooter && <footer className="lq-modal__footer">{resolvedFooter}</footer>}
+        </div>
       </div>
     </div>
   );

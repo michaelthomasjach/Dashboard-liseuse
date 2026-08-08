@@ -507,9 +507,18 @@
   gap: var(--lq-space-2);
 }
 
+/* min-width:0 on both: flex items default to min-width:auto, which floors their size at their
+   own content's intrinsic width — with two flex:1 buttons that can overflow the row (and thus
+   the modal) instead of shrinking evenly if that combined intrinsic width is ever a bit too wide
+   for the available space. */
 .lq-chart__edit-drawing-footer .lq-chart__reset-button {
   flex: 1;
+  min-width: 0;
   justify-content: center;
+}
+
+.lq-chart__edit-drawing-footer .lq-chart__confirm-button {
+  min-width: 0;
 }
 
 .lq-chart__color-input {
