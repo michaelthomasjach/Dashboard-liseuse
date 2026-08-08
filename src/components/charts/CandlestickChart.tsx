@@ -835,7 +835,15 @@ export function CandlestickChart({
         </div>
       )}
 
-      <div className="lq-chart__plot" style={{ width: dims.width, height: plotHeight }}>
+      <div
+        className="lq-chart__plot"
+        style={{ width: dims.width, height: plotHeight }}
+        onPointerLeave={() => {
+          setHoverIndex(null);
+          setHoverY(null);
+          setHoverVolumeY(null);
+        }}
+      >
         {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
             canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
             box lines up with where the svg/canvas content actually starts. Explicitly sized
@@ -915,11 +923,6 @@ export function CandlestickChart({
               onPointerDown={handleOverlayPointerDown}
               onPointerMove={handlePointerMove}
               onPointerUp={handleOverlayPointerUp}
-              onPointerLeave={() => {
-                setHoverIndex(null);
-                setHoverY(null);
-                setHoverVolumeY(null);
-              }}
               onClick={handleOverlayClick}
               onDoubleClick={handleOverlayDoubleClick}
             />
@@ -987,12 +990,24 @@ export function CandlestickChart({
         </svg>
 
         {hoverY !== null && (
-          <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
-            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
+          <>
+            <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
+              {pFmt(zoomedPriceScale.invert(hoverY))}
+            </div>
+            {/* Anchored inside the interactive plot itself (in line with the horizontal
+                crosshair), not in the axis-value badge out in the margin — a button living out
+                there was unreachable: moving the pointer off the plot to reach it fired the
+                overlay's own hover-leave first, so it vanished before the click could land. */}
+            <button
+              type="button"
+              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
+              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + 4 }}
+              onClick={addPriceLine}
+              aria-label="Ajouter une ligne de prix horizontale"
+            >
               <PlusIcon size={10} />
             </button>
-            {pFmt(zoomedPriceScale.invert(hoverY))}
-          </div>
+          </>
         )}
         {hoverVolumeY !== null && (
           <div
@@ -1003,15 +1018,25 @@ export function CandlestickChart({
           </div>
         )}
         {hovered && (
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--x"
-            style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
-          >
-            <button type="button" className="lq-chart__axis-value-add" onClick={addDateLine} aria-label="Ajouter une ligne de date verticale">
+          <>
+            <div
+              className="lq-chart__axis-value lq-chart__axis-value--x"
+              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
+            >
+              {dFmt(hovered.date)}
+            </div>
+            {/* Same reasoning as the price "+" above: anchored inside the plot, in line with
+                the vertical crosshair, instead of the unreachable badge below the plot. */}
+            <button
+              type="button"
+              className="lq-chart__crosshair-add lq-chart__crosshair-add--x"
+              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + 4 }}
+              onClick={addDateLine}
+              aria-label="Ajouter une ligne de date verticale"
+            >
               <PlusIcon size={10} />
             </button>
-            {dFmt(hovered.date)}
-          </div>
+          </>
         )}
       </div>
 

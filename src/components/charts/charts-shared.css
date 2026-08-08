@@ -225,9 +225,6 @@
 .lq-chart__axis-value {
   position: absolute;
   z-index: 6;
-  display: flex;
-  align-items: center;
-  gap: 3px;
   padding: 2px 6px;
   font-size: 0.7rem;
   font-weight: 600;
@@ -238,24 +235,38 @@
   white-space: nowrap;
 }
 
-/* The badge itself stays pointer-events:none (it must never intercept hover/drag on the plot
-   underneath it) — only this button opts back in, so it's the one clickable pixel in the whole
-   badge. */
-.lq-chart__axis-value-add {
+/* Quick-add button for a horizontal price line / vertical date line, anchored inside the
+   interactive plot itself (in line with the crosshair) rather than inside the axis-value badge
+   above — a button living out in the badge's margin area was unreachable, since moving the
+   pointer off the plot to reach it cleared the hover state (and hid the button) before the
+   click could land. */
+.lq-chart__crosshair-add {
+  position: absolute;
+  z-index: 999;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 16px;
+  height: 16px;
   padding: 0;
-  color: inherit;
-  background: none;
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-accent);
   border: none;
+  border-radius: 50%;
   cursor: pointer;
-  pointer-events: auto;
   opacity: 0.85;
 }
 
-.lq-chart__axis-value-add:hover {
+.lq-chart__crosshair-add:hover {
   opacity: 1;
+}
+
+.lq-chart__crosshair-add--y {
+  transform: translateY(-50%);
+}
+
+.lq-chart__crosshair-add--x {
+  transform: translateX(-50%);
 }
 
 /* No fixed width and anchored via `left` (set inline, at the exact axis position) instead of
