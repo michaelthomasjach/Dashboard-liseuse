@@ -1,9 +1,13 @@
 .lq-chart-axis__domain {
-  stroke: var(--lq-color-border);
+  /* Matches the chart's own outer border exactly (same token, same 1px) so the axis reads as
+     part of the same boundary instead of a visually distinct (darker/thicker) line. */
+  stroke: var(--lq-color-border-subtle);
+  stroke-width: 1px;
 }
 
 .lq-chart-axis__tick-line {
   stroke: var(--lq-color-border-subtle);
+  stroke-width: 1px;
 }
 
 .lq-chart-axis__grid-line {

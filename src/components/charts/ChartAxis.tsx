@@ -53,6 +53,31 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     selection.select(".domain").attr("class", "lq-chart-axis__domain");
     selection.selectAll(".tick line").attr("class", grid ? "lq-chart-axis__grid-line" : "lq-chart-axis__tick-line");
     selection.selectAll(".tick text").attr("class", "lq-chart-axis__label");
+
+    // d3's tick count is a target, not a guarantee — depending on how evenly the current domain
+    // divides into "nice" steps it can return noticeably more ticks than requested, crowding
+    // their labels into each other (most visible while zooming, since the domain keeps
+    // changing). Sweep the rendered labels in visual order and hide any one that would overlap
+    // the last label still shown, instead of letting them collide.
+    const horizontal = orientation === "bottom";
+    const measured = selection
+      .selectAll<SVGTextElement, unknown>(".tick text")
+      .nodes()
+      .map((node) => {
+        const box = node.getBBox();
+        return { node, start: horizontal ? box.x : box.y, end: horizontal ? box.x + box.width : box.y + box.height };
+      })
+      .sort((a, b) => a.start - b.start);
+
+    let lastEnd: number | null = null;
+    for (const m of measured) {
+      if (lastEnd !== null && m.start < lastEnd + 6) {
+        m.node.style.display = "none";
+      } else {
+        m.node.style.display = "";
+        lastEnd = m.end;
+      }
+    }
   });
 
   return <g ref={ref} className="lq-chart-axis" transform={transform} />;

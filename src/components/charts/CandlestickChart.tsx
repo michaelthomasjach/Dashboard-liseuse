@@ -219,9 +219,11 @@ export function CandlestickChart({
     return () => observer.disconnect();
   }, [ref]);
 
-  const volumeGap = showVolume ? 16 : 0;
+  // No breathing room between the price section and the volume section below it: the divider
+  // line itself is the only separation, flush against both (same "the border delimits the
+  // content" rule applied to the tools rail and the header above).
   const volumeHeight = showVolume ? Math.round(plotBoundedHeight * 0.22) : 0;
-  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight - volumeGap);
+  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight);
 
   // Padded by half the average inter-candle gap on each side, so the first/last candle get a
   // full slot like every other one — without this, their center sits exactly on the domain's
@@ -575,19 +577,19 @@ export function CandlestickChart({
     ctx.restore();
 
     if (showVolume) {
-      // Divider between the price plot and the volume plot below it, centered in the gap.
+      // Divider between the price plot and the volume plot below it — flush against both,
+      // no padding on either side (the line itself is the only separation).
       ctx.save();
       ctx.strokeStyle = colorGrid;
       ctx.lineWidth = 1;
-      const dividerY = priceHeight + volumeGap / 2;
       ctx.beginPath();
-      ctx.moveTo(0, dividerY);
-      ctx.lineTo(dims.boundedWidth, dividerY);
+      ctx.moveTo(0, priceHeight);
+      ctx.lineTo(dims.boundedWidth, priceHeight);
       ctx.stroke();
       ctx.restore();
 
       ctx.save();
-      ctx.translate(0, priceHeight + volumeGap);
+      ctx.translate(0, priceHeight);
       for (const d of visible) {
         const cx = zoomedXScale(d.date);
         const up = d.close >= d.open;
@@ -682,7 +684,6 @@ export function CandlestickChart({
     showVolume,
     volumeScale,
     volumeHeight,
-    volumeGap,
     priceHeight,
     hovered,
     hoverY,
@@ -825,7 +826,7 @@ export function CandlestickChart({
 
             {showVolume && (
               <>
-                <g transform={`translate(0, ${priceHeight + volumeGap})`}>
+                <g transform={`translate(0, ${priceHeight})`}>
                   <ChartAxis
                     scale={volumeScale}
                     orientation="right"
@@ -842,8 +843,8 @@ export function CandlestickChart({
                   className="lq-chart__price-volume-divider"
                   x1={dims.boundedWidth}
                   x2={dims.boundedWidth + dims.margin.right}
-                  y1={priceHeight + volumeGap / 2}
-                  y2={priceHeight + volumeGap / 2}
+                  y1={priceHeight}
+                  y2={priceHeight}
                 />
               </>
             )}
