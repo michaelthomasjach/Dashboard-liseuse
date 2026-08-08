@@ -34,6 +34,16 @@ export interface TrendLineDrawing {
   color?: string;
   /** Line thickness in px. Default 1.5. */
   strokeWidth?: number;
+  /** Constrains the line to one axis instead of a free-form two-point line: "horizontal" keeps
+   *  y1 === y2 and can only be dragged vertically (its price/volume changes, never its date
+   *  span, which always covers the full width); "vertical" keeps x1 === x2 and can only be
+   *  dragged horizontally (its date changes, never its price span, which always covers the full
+   *  height). Omitted for a regular hand-drawn trend line — set automatically by the axis "+"
+   *  buttons. */
+  lineType?: "horizontal" | "vertical";
+  /** Which value scale a "horizontal" line's y is expressed in. Ignored for "vertical" lines and
+   *  regular trend lines. Default "price". */
+  valueAxis?: "price" | "volume";
 }
 
 interface DataPoint {
@@ -108,12 +118,18 @@ const TOOLS_RAIL_WIDTH = 40;
  *  buttons — subtracted from the available height before laying out the plot itself. */
 const HEADER_HEIGHT = 40;
 /** Distance (px) the date "+" button sits inset from the plot's own bottom edge — close to the
- *  date axis it mirrors, but still inside the interactive rect so hovering it never counts as
- *  leaving the plot (see .lq-chart__plot's onPointerLeave). */
-const CROSSHAIR_ADD_INSET = 16;
-/** How far the price value badge's own left edge overlaps the chart, so its background
+ *  date axis it mirrors (but clear of the date label's own badge just below the plot), and
+ *  still inside the interactive rect so hovering it never counts as leaving the plot (see
+ *  .lq-chart__plot's onPointerLeave). */
+const CROSSHAIR_ADD_INSET = 28;
+/** How far the price/volume value badges' own left edge overlaps the chart, so their background
  *  englobes the "+" button living at its start instead of the button sitting outside it. */
 const AXIS_VALUE_Y_OVERLAP = 20;
+/** Single drag-handle position for an axis-constrained line, as a fraction of the plot's own
+ *  size along the axis it doesn't move on: a horizontal line's handle sits 1/4 of the width in
+ *  from the right edge, a vertical line's handle 1/4 of the height down from the top. */
+const AXIS_HANDLE_FRACTION_X = 0.75;
+const AXIS_HANDLE_FRACTION_Y = 0.25;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -175,6 +191,7 @@ export function CandlestickChart({
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [tfOpen, setTfOpen] = useState(false);
   const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
+  const dragAxisRef = useRef<{ id: string } | null>(null);
   const drawingIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
@@ -326,20 +343,32 @@ export function CandlestickChart({
     setYTransform(d3.zoomIdentity);
   }
 
-  // Both span the dataset's own (unzoomed) extent rather than the currently visible one, so
-  // they still reach edge to edge after the user zooms/pans away from where they were added —
-  // a price alert or a session marker shouldn't disappear just because the view moved.
+  // All three span the dataset's own (unzoomed) extent rather than the currently visible one,
+  // so they still reach edge to edge after the user zooms/pans away from where they were added
+  // — a price alert or a session marker shouldn't disappear just because the view moved. Marked
+  // with `lineType` so they drag along one axis only (see handlePointerMove/handleAxisHandle*)
+  // and render full-span instead of between their stored x1/x2 (see the canvas draw effect).
   function addPriceLine() {
     if (hoverY === null) return;
     const price = zoomedPriceScale.invert(hoverY);
     const [d0, d1] = xScale.domain() as [Date, Date];
-    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: price, x2: d1, y2: price }]);
+    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: price, x2: d1, y2: price, lineType: "horizontal" }]);
+  }
+
+  function addVolumeLine() {
+    if (hoverVolumeY === null) return;
+    const volume = volumeScale.invert(hoverVolumeY);
+    const [d0, d1] = xScale.domain() as [Date, Date];
+    commitDrawings([
+      ...drawings,
+      { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: volume, x2: d1, y2: volume, lineType: "horizontal", valueAxis: "volume" },
+    ]);
   }
 
   function addDateLine() {
     if (!hovered) return;
     const [p0, p1] = priceScale.domain() as [number, number];
-    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1 }]);
+    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1, lineType: "vertical" }]);
   }
 
   function cancelDrawingTool() {
@@ -444,6 +473,40 @@ export function CandlestickChart({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
+  // Single-handle drag for an axis-constrained line: sets its value directly from the pointer's
+  // absolute position (like the two-endpoint drag above), but along one axis only — a
+  // "horizontal" line's handle only ever changes y1/y2 (kept equal), a "vertical" line's handle
+  // only ever changes x1/x2 (kept equal).
+  function handleAxisHandlePointerDown(drawingId: string) {
+    return (e: React.PointerEvent<SVGCircleElement>) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragAxisRef.current = { id: drawingId };
+    };
+  }
+
+  function handleAxisHandlePointerMove(e: React.PointerEvent<SVGCircleElement>) {
+    const drag = dragAxisRef.current;
+    if (!drag) return;
+    const dr = drawings.find((d) => d.id === drag.id);
+    if (!dr) return;
+    const rect = zoomRef.current!.getBoundingClientRect();
+    if (dr.lineType === "horizontal") {
+      const mouseY = e.clientY - rect.top;
+      const value = dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY);
+      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: value, y2: value } : d)));
+    } else if (dr.lineType === "vertical") {
+      const mouseX = e.clientX - rect.left;
+      const dateValue = zoomedXScale.invert(mouseX) as Date;
+      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue } : d)));
+    }
+  }
+
+  function handleAxisHandlePointerUp(e: React.PointerEvent<SVGCircleElement>) {
+    dragAxisRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
   // Precise (unpadded) index range of candles actually inside the zoomed time domain — used
   // to size candles, separately from `visible` below (which pads a couple extra candles on
   // each side so partially-visible edge candles still render instead of popping in/out).
@@ -480,11 +543,22 @@ export function CandlestickChart({
       const drag = dragLineRef.current;
       const dxPixels = e.clientX - drag.startClientX;
       const dyPixels = e.clientY - drag.startClientY;
-      const newX1 = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
-      const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
-      const newX2 = zoomedXScale.invert(zoomedXScale(drag.orig.x2) + dxPixels) as Date;
-      const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
-      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2 } : d)));
+      if (drag.orig.lineType === "horizontal") {
+        // Dragging the body moves it exactly like its single handle would — only the
+        // perpendicular axis (here, price/volume) can change.
+        const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
+        const newValue = scale.invert(scale(drag.orig.y1) + dyPixels);
+        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: newValue, y2: newValue } : d)));
+      } else if (drag.orig.lineType === "vertical") {
+        const newDate = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
+        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate } : d)));
+      } else {
+        const newX1 = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
+        const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
+        const newX2 = zoomedXScale.invert(zoomedXScale(drag.orig.x2) + dxPixels) as Date;
+        const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
+        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2 } : d)));
+      }
       return;
     }
 
@@ -503,14 +577,18 @@ export function CandlestickChart({
       let closestId: string | null = null;
       let closestDist = DRAWING_HIT_DISTANCE;
       for (const dr of drawings) {
-        const d = distanceToSegment(
-          mouseX,
-          mouseY,
-          zoomedXScale(dr.x1),
-          zoomedPriceScale(dr.y1),
-          zoomedXScale(dr.x2),
-          zoomedPriceScale(dr.y2)
-        );
+        // Axis-constrained lines render full-span (see the canvas draw effect below) rather
+        // than between their stored x1/x2 pixel positions, so hit-testing has to match that.
+        let d: number;
+        if (dr.lineType === "horizontal") {
+          const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+          d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
+        } else if (dr.lineType === "vertical") {
+          const x = zoomedXScale(dr.x1);
+          d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
+        } else {
+          d = distanceToSegment(mouseX, mouseY, zoomedXScale(dr.x1), zoomedPriceScale(dr.y1), zoomedXScale(dr.x2), zoomedPriceScale(dr.y2));
+        }
         if (d < closestDist) {
           closestDist = d;
           closestId = dr.id;
@@ -646,14 +724,24 @@ export function CandlestickChart({
       ctx.restore();
     }
 
+    // Regular trend lines plus "horizontal" price lines (volume ones are drawn in the volume
+    // section below, "vertical" ones are drawn full-height further down, outside any clip).
     for (const dr of drawings) {
+      if (dr.lineType === "vertical" || (dr.lineType === "horizontal" && dr.valueAxis === "volume")) continue;
       const lineColor = dr.color ?? colorAccent;
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-      const x1 = zoomedXScale(dr.x1);
-      const y1 = zoomedPriceScale(dr.y1);
-      const x2 = zoomedXScale(dr.x2);
-      const y2 = zoomedPriceScale(dr.y2);
+      let x1: number, y1: number, x2: number, y2: number;
+      if (dr.lineType === "horizontal") {
+        x1 = 0;
+        x2 = dims.boundedWidth;
+        y1 = y2 = zoomedPriceScale(dr.y1);
+      } else {
+        x1 = zoomedXScale(dr.x1);
+        y1 = zoomedPriceScale(dr.y1);
+        x2 = zoomedXScale(dr.x2);
+        y2 = zoomedPriceScale(dr.y2);
+      }
       ctx.beginPath();
       ctx.moveTo(x1, y1);
       ctx.lineTo(x2, y2);
@@ -661,9 +749,9 @@ export function CandlestickChart({
       if (dr.text) {
         ctx.fillStyle = lineColor;
         ctx.font = `600 11px ${fontFamily}`;
-        ctx.textAlign = "center";
+        ctx.textAlign = dr.lineType === "horizontal" ? "right" : "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(dr.text, (x1 + x2) / 2, Math.min(y1, y2) - 6);
+        ctx.fillText(dr.text, dr.lineType === "horizontal" ? dims.boundedWidth - 4 : (x1 + x2) / 2, Math.min(y1, y2) - 6);
       }
     }
 
@@ -717,6 +805,48 @@ export function CandlestickChart({
         ctx.moveTo(0, hoverVolumeY);
         ctx.lineTo(dims.boundedWidth, hoverVolumeY);
         ctx.stroke();
+      }
+      for (const dr of drawings) {
+        if (!(dr.lineType === "horizontal" && dr.valueAxis === "volume")) continue;
+        const lineColor = dr.color ?? colorAccent;
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+        ctx.setLineDash([]);
+        const y = volumeScale(dr.y1);
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(dims.boundedWidth, y);
+        ctx.stroke();
+        if (dr.text) {
+          ctx.fillStyle = lineColor;
+          ctx.font = `600 11px ${fontFamily}`;
+          ctx.textAlign = "right";
+          ctx.textBaseline = "bottom";
+          ctx.fillText(dr.text, dims.boundedWidth - 4, y - 6);
+        }
+      }
+      ctx.restore();
+    }
+
+    // "Vertical" drawn lines span the full plot height (price and volume together), same as the
+    // hover crosshair below — deliberately outside either section's clip above.
+    for (const dr of drawings) {
+      if (dr.lineType !== "vertical") continue;
+      const lineColor = dr.color ?? colorAccent;
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      const x = zoomedXScale(dr.x1);
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, plotBoundedHeight);
+      ctx.stroke();
+      if (dr.text) {
+        ctx.fillStyle = lineColor;
+        ctx.font = `600 11px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillText(dr.text, x, plotBoundedHeight - 4);
       }
       ctx.restore();
     }
@@ -965,6 +1095,38 @@ export function CandlestickChart({
               {drawings.map((dr) => {
                 const isHovered = hoveredDrawingId === dr.id;
                 if (!isHovered) return null;
+                // Axis-constrained lines get a single handle at a fixed point along the axis
+                // they don't move on (never at their data endpoints, which aren't meaningful
+                // drag targets here — the whole line only has one degree of freedom).
+                if (dr.lineType === "horizontal") {
+                  const cy = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+                  return (
+                    <circle
+                      key={dr.id}
+                      className="lq-chart__drawing-handle"
+                      cx={dims.boundedWidth * AXIS_HANDLE_FRACTION_X}
+                      cy={cy}
+                      r={5}
+                      onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                      onPointerMove={handleAxisHandlePointerMove}
+                      onPointerUp={handleAxisHandlePointerUp}
+                    />
+                  );
+                }
+                if (dr.lineType === "vertical") {
+                  return (
+                    <circle
+                      key={dr.id}
+                      className="lq-chart__drawing-handle"
+                      cx={zoomedXScale(dr.x1)}
+                      cy={plotBoundedHeight * AXIS_HANDLE_FRACTION_Y}
+                      r={5}
+                      onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                      onPointerMove={handleAxisHandlePointerMove}
+                      onPointerUp={handleAxisHandlePointerUp}
+                    />
+                  );
+                }
                 const x1 = zoomedXScale(dr.x1);
                 const y1 = zoomedPriceScale(dr.y1);
                 const x2 = zoomedXScale(dr.x2);
@@ -1008,15 +1170,18 @@ export function CandlestickChart({
             <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
               <PlusIcon size={9} />
             </button>
-            {pFmt(zoomedPriceScale.invert(hoverY))}
+            <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
           </div>
         )}
         {hoverVolumeY !== null && (
           <div
             className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
+            style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
           >
-            {vFmt(volumeScale.invert(hoverVolumeY))}
+            <button type="button" className="lq-chart__axis-value-add" onClick={addVolumeLine} aria-label="Ajouter une ligne de volume horizontale">
+              <PlusIcon size={9} />
+            </button>
+            <span className="lq-chart__axis-value-text">{vFmt(volumeScale.invert(hoverVolumeY))}</span>
           </div>
         )}
         {hovered && (
@@ -1025,7 +1190,7 @@ export function CandlestickChart({
               className="lq-chart__axis-value lq-chart__axis-value--x"
               style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
             >
-              {dFmt(hovered.date)}
+              <span className="lq-chart__axis-value-text">{dFmt(hovered.date)}</span>
             </div>
             {/* A standalone square button (not englobed by the date badge below the plot, since
                 that badge is unreachable — reaching it means leaving the interactive rect
@@ -1085,30 +1250,59 @@ export function CandlestickChart({
               />
             </div>
           </div>
-          <div className="lq-chart__edit-drawing-row">
+          {/* A horizontal/vertical line only has one degree of freedom (see the single drag
+              handle above) — editing its two endpoints independently here would let them drift
+              apart and break that invariant, so it gets one field instead of the usual two. */}
+          {draft.lineType === "horizontal" && (
+            <NumberField
+              label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
+              step={0.01}
+              value={draft.y1}
+              onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v, y2: v === "" ? draft.y2 : v })}
+            />
+          )}
+          {draft.lineType === "vertical" && (
             <div className="lq-field">
-              <label className="lq-field__label">Début</label>
+              <label className="lq-field__label">Date</label>
               <input
                 type="date"
                 className="lq-chart__date-input"
                 value={toDateInputValue(draft.x1)}
-                onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
+                onChange={(e) => {
+                  const next = fromDateInputValue(e.target.value, draft.x1);
+                  setDraft({ ...draft, x1: next, x2: next });
+                }}
               />
             </div>
-            <NumberField label="Prix début" step={0.01} value={draft.y1} onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v })} />
-          </div>
-          <div className="lq-chart__edit-drawing-row">
-            <div className="lq-field">
-              <label className="lq-field__label">Fin</label>
-              <input
-                type="date"
-                className="lq-chart__date-input"
-                value={toDateInputValue(draft.x2)}
-                onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
-              />
-            </div>
-            <NumberField label="Prix fin" step={0.01} value={draft.y2} onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : v })} />
-          </div>
+          )}
+          {!draft.lineType && (
+            <>
+              <div className="lq-chart__edit-drawing-row">
+                <div className="lq-field">
+                  <label className="lq-field__label">Début</label>
+                  <input
+                    type="date"
+                    className="lq-chart__date-input"
+                    value={toDateInputValue(draft.x1)}
+                    onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
+                  />
+                </div>
+                <NumberField label="Prix début" step={0.01} value={draft.y1} onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v })} />
+              </div>
+              <div className="lq-chart__edit-drawing-row">
+                <div className="lq-field">
+                  <label className="lq-field__label">Fin</label>
+                  <input
+                    type="date"
+                    className="lq-chart__date-input"
+                    value={toDateInputValue(draft.x2)}
+                    onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
+                  />
+                </div>
+                <NumberField label="Prix fin" step={0.01} value={draft.y2} onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : v })} />
+              </div>
+            </>
+          )}
         </Modal>
       )}
     </div>

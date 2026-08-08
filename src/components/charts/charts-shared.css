@@ -221,14 +221,16 @@
 }
 
 /* Value badge pinned to an axis at the hovered position — replaces a floating OHLC tooltip
-   with the same "read the value off the axis" convention trading platforms use. */
+   with the same "read the value off the axis" convention trading platforms use. No padding of
+   its own: each child (the text, and the "+" button where present) carries its own padding
+   instead, so the button can span the badge's full height with none of its own — hovering it
+   then reads as a slice of the label itself lighting up, not a separately-padded chip floating
+   inside it. */
 .lq-chart__axis-value {
   position: absolute;
   z-index: 6;
   display: flex;
-  align-items: center;
-  gap: 3px;
-  padding: 2px 6px;
+  align-items: stretch;
   font-size: 0.7rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
@@ -238,22 +240,25 @@
   white-space: nowrap;
 }
 
-/* Quick-add button for a horizontal price line, englobed by the price badge itself (which
+.lq-chart__axis-value-text {
+  display: flex;
+  align-items: center;
+  padding: 2px 6px;
+}
+
+/* Quick-add button for a horizontal price/volume line, englobed by the badge itself (which
    overlaps the chart by AXIS_VALUE_Y_OVERLAP to make room for it) instead of living outside as
-   a separate element. Transparent at rest so it blends into the badge's own background; only
-   a faint highlight appears right behind it on hover. The badge stays pointer-events:none (it
+   a separate element. Transparent at rest so it blends into the badge's own background; only a
+   faint highlight appears right behind it on hover. The badge stays pointer-events:none (it
    must never intercept hover/drag on the plot underneath) — this button opts back in. */
 .lq-chart__axis-value-add {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 15px;
-  height: 15px;
-  padding: 0;
+  padding: 0 4px;
   color: inherit;
   background: none;
   border: none;
-  border-radius: 2px;
   cursor: pointer;
   pointer-events: auto;
 }
