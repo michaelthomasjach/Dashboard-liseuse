@@ -551,19 +551,34 @@
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   background-color: var(--lq-color-panel);
-  border: 1px solid var(--lq-color-border-subtle);
-  border-radius: var(--lq-radius-sm);
   pointer-events: auto;
+}
+
+/* Separates stacked entries with a plain rule instead of boxing each one in its own border —
+   same token/weight as the chart's other dividers (the price/volume divider, the outer chart
+   border), just applied between list items instead of around them. */
+.lq-chart__indicator-legend-item:not(:last-child) {
+  border-bottom: 1px solid var(--lq-color-border-subtle);
 }
 
 .lq-chart__indicator-legend-label {
   color: inherit;
 }
 
+.lq-chart__indicator-legend-label--hidden {
+  opacity: 0.5;
+}
+
+.lq-chart__indicator-legend-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
 /* Invisible until its own item is hovered/focused — same reveal pattern as
-   .lq-chart__tool-chevron. Double-clicking the label itself is the other way in, so this is a
-   discoverable shortcut rather than the only path to the settings modal. */
-.lq-chart__indicator-legend-gear {
+   .lq-chart__tool-chevron. Double-clicking the label itself opens settings too, so the gear is a
+   discoverable shortcut rather than the only path in. */
+.lq-chart__indicator-legend-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -575,12 +590,12 @@
   opacity: 0;
 }
 
-.lq-chart__indicator-legend-item:hover .lq-chart__indicator-legend-gear,
-.lq-chart__indicator-legend-gear:focus-visible {
+.lq-chart__indicator-legend-item:hover .lq-chart__indicator-legend-action,
+.lq-chart__indicator-legend-action:focus-visible {
   opacity: 0.85;
 }
 
-.lq-chart__indicator-legend-gear:hover {
+.lq-chart__indicator-legend-action:hover {
   color: var(--lq-color-text);
   opacity: 1;
 }

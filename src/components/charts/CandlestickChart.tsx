@@ -20,6 +20,9 @@ import {
   PlusIcon,
   ActivityIcon,
   SettingsIcon,
+  EyeIcon,
+  EyeOffIcon,
+  TrashIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -70,6 +73,9 @@ export interface Indicator {
   period: number;
   /** CSS color. Defaults to a color cycled from a small built-in palette. */
   color?: string;
+  /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the
+   *  legend's eye icon. Default false. */
+  hidden?: boolean;
 }
 
 interface IndicatorCatalogEntry {
@@ -261,6 +267,20 @@ const AXIS_HANDLE_FRACTION_Y = 0.25;
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 const MAX_DATE_TICKS = 12;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
+/** Extra empty slots reserved past the last candle, reachable by panning left (like TradingView's
+ *  right-side margin) — lets the chart be "shifted into the future" instead of always pinning the
+ *  most recent candle to the plot's right edge. Fixed in index-slot count (not a % of the
+ *  dataset), so it reads the same width regardless of how much history `data` holds. */
+const FUTURE_SPACE_CANDLES = 15;
+
+// A canvas 1px line drawn at an integer y (e.g. moveTo(0, 40)) straddles two physical pixel rows
+// half-and-half, so it rasterizes as a ~2px anti-aliased blur instead of a crisp line — unlike an
+// SVG/CSS border at the same nominal position, which renders crisp. Offsetting to the pixel's
+// center (y + 0.5) keeps the 1px stroke entirely within one row, matching the SVG-drawn dividers
+// these canvas lines are meant to continue seamlessly into.
+function snapPixel(v: number): number {
+  return Math.round(v) + 0.5;
+}
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
   const dx = x2 - x1;
@@ -401,6 +421,14 @@ export function CandlestickChart({
     closeIndicatorSettings();
   }
 
+  function toggleIndicatorHidden(id: string) {
+    commitIndicators(indicators.map((i) => (i.id === id ? { ...i, hidden: !i.hidden } : i)));
+  }
+
+  function removeIndicator(id: string) {
+    commitIndicators(indicators.filter((i) => i.id !== id));
+  }
+
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
@@ -439,8 +467,15 @@ export function CandlestickChart({
   // together instead of the flush, evenly-spaced rendering every trading platform actually uses.
   // Same index-scale approach as BarChart/DeltaChart's categorical axis. The [0, n] domain (vs.
   // [0, n-1]) reserves half a slot on each edge for free, so the first/last candle isn't clipped
-  // — no separate padding step needed, unlike the old time-scale version.
-  const xScale = useMemo(() => d3.scaleLinear().domain([0, Math.max(1, data.length)]).range([0, dims.boundedWidth]), [data.length, dims.boundedWidth]);
+  // — no separate padding step needed, unlike the old time-scale version. FUTURE_SPACE_CANDLES
+  // extends the domain (not just the visible window) past the last real candle, so panning left
+  // can reveal that reserved empty space — d3-zoom's own translateExtent (see useD3Zoom below)
+  // is set from this same scale's range, so it automatically follows the domain out that far and
+  // no further.
+  const xScale = useMemo(
+    () => d3.scaleLinear().domain([0, Math.max(1, data.length) + FUTURE_SPACE_CANDLES]).range([0, dims.boundedWidth]),
+    [data.length, dims.boundedWidth]
+  );
 
   const zoomedXScale = transform.rescaleX(xScale);
 
@@ -864,9 +899,15 @@ export function CandlestickChart({
   // pixel floor: with many candles crammed into a narrow view (e.g. fully zoomed out on a
   // 10,000-candle dataset), 80% of their slot is still less than the slot itself, so neighbors
   // never overlap — a floor like `max(1, ...)` would force overlap once the slot itself was
-  // narrower than that floor.
-  const visibleCount = Math.max(1, visibleRange.end - visibleRange.start);
-  const candleWidth = Math.max(0.1, (dims.boundedWidth / visibleCount) * 0.8);
+  // narrower than that floor. Sized off the zoomed scale's own (unclamped) domain span rather
+  // than `visibleRange` (which clamps to `data.length`) — otherwise, panned into the reserved
+  // future space with only a few real candles peeking in from the left, `visibleRange` would
+  // undercount the visible slots and render those candles too wide for the current zoom level.
+  const zoomedSlotCount = useMemo(() => {
+    const [i0, i1] = zoomedXScale.domain();
+    return Math.max(1, i1 - i0);
+  }, [zoomedXScale]);
+  const candleWidth = Math.max(0.1, (dims.boundedWidth / zoomedSlotCount) * 0.8);
 
   // Expensive (O(data.length) per indicator) — recomputed only when the data or the indicator
   // list itself changes, never on pan/zoom (which would otherwise redo this every frame).
@@ -1050,7 +1091,7 @@ export function CandlestickChart({
     ctx.lineWidth = 1;
     ctx.setLineDash([2, 3]);
     for (const tick of zoomedPriceScale.ticks(5)) {
-      const y = zoomedPriceScale(tick);
+      const y = snapPixel(zoomedPriceScale(tick));
       ctx.beginPath();
       ctx.moveTo(0, y);
       ctx.lineTo(dims.boundedWidth, y);
@@ -1081,7 +1122,7 @@ export function CandlestickChart({
     }
 
     visibleIndicators.forEach(({ indicator, points }, index) => {
-      if (points.length < 2) return;
+      if (indicator.hidden || points.length < 2) return;
       ctx.save();
       ctx.strokeStyle = indicator.color ?? defaultIndicatorColor(index);
       ctx.lineWidth = 1.5;
@@ -1162,8 +1203,9 @@ export function CandlestickChart({
       ctx.strokeStyle = colorGrid;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(0, priceHeight);
-      ctx.lineTo(dims.boundedWidth, priceHeight);
+      const dividerY = snapPixel(priceHeight);
+      ctx.moveTo(0, dividerY);
+      ctx.lineTo(dims.boundedWidth, dividerY);
       ctx.stroke();
       ctx.restore();
 
@@ -1453,18 +1495,42 @@ export function CandlestickChart({
                 style={{ color: indicator.color ?? defaultIndicatorColor(i) }}
                 onDoubleClick={() => openIndicatorSettings(indicator.id)}
               >
-                <span className="lq-chart__indicator-legend-label">{indicatorLabel(indicator)}</span>
-                {/* Invisible until this item is hovered (see charts-shared.css) — double-click
-                    the label itself opens the same settings modal, so the gear is a discoverable
-                    shortcut, not the only way in. */}
-                <button
-                  type="button"
-                  className="lq-chart__indicator-legend-gear"
-                  onClick={() => openIndicatorSettings(indicator.id)}
-                  aria-label={`Paramètres ${indicatorLabel(indicator)}`}
+                <span
+                  className={["lq-chart__indicator-legend-label", indicator.hidden && "lq-chart__indicator-legend-label--hidden"]
+                    .filter(Boolean)
+                    .join(" ")}
                 >
-                  <SettingsIcon size={11} />
-                </button>
+                  {indicatorLabel(indicator)}
+                </span>
+                {/* Invisible until this item is hovered (see charts-shared.css) — double-click
+                    the label itself opens the settings modal too, so the gear is a discoverable
+                    shortcut, not the only way in. */}
+                <div className="lq-chart__indicator-legend-actions">
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => toggleIndicatorHidden(indicator.id)}
+                    aria-label={indicator.hidden ? `Afficher ${indicatorLabel(indicator)}` : `Masquer ${indicatorLabel(indicator)}`}
+                  >
+                    {indicator.hidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => removeIndicator(indicator.id)}
+                    aria-label={`Supprimer ${indicatorLabel(indicator)}`}
+                  >
+                    <TrashIcon size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => openIndicatorSettings(indicator.id)}
+                    aria-label={`Paramètres ${indicatorLabel(indicator)}`}
+                  >
+                    <SettingsIcon size={11} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -1507,8 +1573,8 @@ export function CandlestickChart({
                   className="lq-chart__price-volume-divider"
                   x1={dims.boundedWidth}
                   x2={dims.boundedWidth + dims.margin.right}
-                  y1={priceHeight}
-                  y2={priceHeight}
+                  y1={snapPixel(priceHeight)}
+                  y2={snapPixel(priceHeight)}
                 />
               </>
             )}
@@ -1529,8 +1595,8 @@ export function CandlestickChart({
               className="lq-chart__axis-line-extension"
               x1={dims.boundedWidth}
               x2={dims.boundedWidth + dims.margin.right}
-              y1={plotBoundedHeight}
-              y2={plotBoundedHeight}
+              y1={snapPixel(plotBoundedHeight)}
+              y2={snapPixel(plotBoundedHeight)}
             />
 
             <rect

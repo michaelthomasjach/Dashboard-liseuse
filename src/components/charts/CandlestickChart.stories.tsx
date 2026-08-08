@@ -93,9 +93,11 @@ export const WithIndicators: Story = {
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles (SMA, EMA, WMA) —
         cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
-        actifs sont listés en haut à gauche du graphe ; survoler une entrée fait apparaître une roue crantée qui
-        ouvre ses paramètres (période, couleur) dans une modale, <strong>double-clic sur l'entrée</strong> fait la
-        même chose directement. Superposés sur le tracé des prix, ils suivent le zoom/déplacement comme les bougies.
+        actifs sont listés en haut à gauche du graphe, séparés par un simple trait (pas de bordure autour de chaque
+        entrée) ; survoler une entrée fait apparaître trois icônes : œil (masque/affiche le tracé sans le supprimer
+        de la liste), corbeille (suppression directe) et roue crantée (paramètres — période, couleur —{" "}
+        <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix, ils suivent
+        le zoom/déplacement comme les bougies.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators />
     </div>
