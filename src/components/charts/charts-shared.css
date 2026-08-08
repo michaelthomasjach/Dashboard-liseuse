@@ -639,6 +639,12 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Its `width` is set inline to a literal px value (dims.boundedWidth). Without border-box,
+     that's a content-box width — padding is added *on top* of it instead of eating into it, so
+     the flex content area (and anything anchored to its edge via justify-content) never actually
+     moves no matter how much padding is added here. border-box makes the specified width the
+     *total* box width, so padding correctly carves into the usable content area instead. */
+  box-sizing: border-box;
   /* Right padding is 22px, not 25px: each action button already has 3px of its own padding
      between its icon and the button's own edge (see .lq-chart__pane-header-action below), so
      22 + 3 = the requested 25px between the rightmost icon itself and the pane's right edge —

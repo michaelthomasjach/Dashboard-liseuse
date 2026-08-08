@@ -306,7 +306,7 @@ export interface CandlestickChartProps {
   className?: string;
 }
 
-const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 56, bottom: 24, left: 8 };
+const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 56, bottom: 24, left: 0 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 const DRAWING_HIT_DISTANCE = 8;
 /** Width of the drawing-tools rail. Added to the left margin so the plot/axes never draw
@@ -512,7 +512,7 @@ export function CandlestickChart({
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
-    ? { ...baseMargin, left: (baseMargin.left ?? DEFAULT_MARGIN.left ?? 8) + TOOLS_RAIL_WIDTH }
+    ? { ...baseMargin, left: (baseMargin.left ?? DEFAULT_MARGIN.left ?? 0) + TOOLS_RAIL_WIDTH }
     : baseMargin;
   const [ref, dims] = useChartDimensions(resolvedMargin, {
     width: isFullscreen ? undefined : width,
