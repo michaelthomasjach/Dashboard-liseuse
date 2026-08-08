@@ -54,36 +54,44 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     selection.selectAll(".tick line").attr("class", grid ? "lq-chart-axis__grid-line" : "lq-chart-axis__tick-line");
     selection.selectAll(".tick text").attr("class", "lq-chart-axis__label");
 
-    // d3's tick count is a target, not a guarantee — depending on how evenly the current domain
-    // divides into "nice" steps it can return noticeably more ticks than requested, crowding
-    // their labels into each other (most visible while zooming, since the domain keeps
-    // changing). Sweep the rendered labels in visual order and hide any one that would overlap
-    // the last label still shown, instead of letting them collide.
-    // Measured with getBoundingClientRect(), not getBBox(): getBBox() famously never includes
-    // an element's *own* transform (only the coordinate space its ancestors establish), so
-    // measuring either the text or its parent `.tick` group (both of which are positioned via
-    // their own `transform="translate(x,y)"`) reported every label at roughly the same
-    // untranslated position — nearly all of them then registered as colliding with the first
-    // and got hidden. getBoundingClientRect() accounts for the full transform chain, giving
-    // real, directly-comparable screen coordinates.
-    const horizontal = orientation === "bottom";
-    const measured = selection
-      .selectAll<SVGTextElement, unknown>(".tick text")
-      .nodes()
-      .map((node) => {
-        const rect = node.getBoundingClientRect();
-        return { node, start: horizontal ? rect.left : rect.top, end: horizontal ? rect.right : rect.bottom };
-      })
-      .sort((a, b) => a.start - b.start);
-
-    let lastEnd: number | null = null;
-    for (const m of measured) {
-      if (lastEnd !== null && m.start < lastEnd + 6) {
-        m.node.style.display = "none";
+    // A label is centered on its tick, so it can visually spill past the axis's own valid
+    // range even while the tick itself stays inside it — most obviously the first/last tick,
+    // sitting right at the domain's edge, whose label extends half its width/height past that
+    // edge. Hide any label whose own rendered extent falls outside `scale.range()` (converted
+    // to screen space via the axis group's CTM, since the range is expressed in the group's
+    // local coordinates). Judged purely against the axis's own bounds, tick by tick — not
+    // against neighboring labels: an earlier version hid labels based on collisions with their
+    // neighbors, which made hiding order-dependent and could hide labels that weren't actually
+    // overflowing anything.
+    const svg = g.ownerSVGElement;
+    const ctm = g.getScreenCTM();
+    if (svg && ctm) {
+      const horizontal = orientation === "bottom";
+      const [r0, r1] = scale.range() as unknown as [number, number];
+      const p1 = svg.createSVGPoint();
+      const p2 = svg.createSVGPoint();
+      if (horizontal) {
+        p1.x = r0;
+        p1.y = 0;
+        p2.x = r1;
+        p2.y = 0;
       } else {
-        m.node.style.display = "";
-        lastEnd = m.end;
+        p1.x = 0;
+        p1.y = r0;
+        p2.x = 0;
+        p2.y = r1;
       }
+      const s1 = p1.matrixTransform(ctm);
+      const s2 = p2.matrixTransform(ctm);
+      const zoneStart = horizontal ? Math.min(s1.x, s2.x) : Math.min(s1.y, s2.y);
+      const zoneEnd = horizontal ? Math.max(s1.x, s2.x) : Math.max(s1.y, s2.y);
+
+      selection.selectAll<SVGTextElement, unknown>(".tick text").each(function () {
+        const rect = this.getBoundingClientRect();
+        const start = horizontal ? rect.left : rect.top;
+        const end = horizontal ? rect.right : rect.bottom;
+        this.style.display = start < zoneStart || end > zoneEnd ? "none" : "";
+      });
     }
   });
 
