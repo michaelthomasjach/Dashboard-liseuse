@@ -1,6 +1,10 @@
 .lq-chart {
   position: relative;
   width: 100%;
+  /* border-box, not the browser default content-box: with width:100% a border would otherwise
+     add its own 2px on top of that 100%, overflowing the parent by that much. */
+  box-sizing: border-box;
+  border: 1px solid var(--lq-color-border-subtle);
 }
 
 .lq-chart__svg {
