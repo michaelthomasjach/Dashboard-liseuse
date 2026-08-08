@@ -59,22 +59,30 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     // their labels into each other (most visible while zooming, since the domain keeps
     // changing). Sweep the rendered labels in visual order and hide any one that would overlap
     // the last label still shown, instead of letting them collide.
+    // Measured off the `.tick` group, not the `<text>` itself: a tick's actual position comes
+    // from the `transform="translate(x,y)"` d3 sets on that group, and getBBox() only reflects
+    // an element's own transform, never an ancestor's — measuring the text directly reported
+    // every label at roughly the same (untranslated) local position, so almost all of them
+    // registered as colliding with the first and got hidden.
     const horizontal = orientation === "bottom";
     const measured = selection
-      .selectAll<SVGTextElement, unknown>(".tick text")
+      .selectAll<SVGGElement, unknown>(".tick")
       .nodes()
-      .map((node) => {
-        const box = node.getBBox();
-        return { node, start: horizontal ? box.x : box.y, end: horizontal ? box.x + box.width : box.y + box.height };
+      .map((tickNode) => {
+        const text = tickNode.querySelector<SVGTextElement>("text");
+        if (!text) return null;
+        const box = tickNode.getBBox();
+        return { text, start: horizontal ? box.x : box.y, end: horizontal ? box.x + box.width : box.y + box.height };
       })
+      .filter((m): m is { text: SVGTextElement; start: number; end: number } => m !== null)
       .sort((a, b) => a.start - b.start);
 
     let lastEnd: number | null = null;
     for (const m of measured) {
       if (lastEnd !== null && m.start < lastEnd + 6) {
-        m.node.style.display = "none";
+        m.text.style.display = "none";
       } else {
-        m.node.style.display = "";
+        m.text.style.display = "";
         lastEnd = m.end;
       }
     }

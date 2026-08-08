@@ -163,6 +163,7 @@ export function CandlestickChart({
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
+  const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [tfOpen, setTfOpen] = useState(false);
@@ -256,9 +257,11 @@ export function CandlestickChart({
 
   const zoomedPriceScale = yTransform.rescaleY(priceScale);
 
+  // 10% headroom on top of the tallest bar, so it doesn't reach all the way up to the
+  // price/volume divider — leaves a small visual gap between the bars and the line.
   const volumeScale = useMemo(() => {
     const max = d3.max(data, (d) => d.volume ?? 0) ?? 0;
-    return d3.scaleLinear().domain([0, max || 1]).range([volumeHeight, 0]);
+    return d3.scaleLinear().domain([0, (max || 1) * 1.1]).range([volumeHeight, 0]);
   }, [data, volumeHeight]);
 
   // High enough that zooming all the way in leaves roughly one candle's slot filling the
@@ -469,6 +472,7 @@ export function CandlestickChart({
     const index = Math.min(data.length - 1, Math.max(0, bisect(data, target as Date)));
     setHoverIndex(index);
     setHoverY(mouseY <= priceHeight ? mouseY : null);
+    setHoverVolumeY(showVolume && mouseY > priceHeight ? mouseY - priceHeight : null);
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: zoomedXScale.invert(mouseX) as Date, y: zoomedPriceScale.invert(mouseY) });
@@ -640,6 +644,13 @@ export function CandlestickChart({
         ctx.lineTo(dims.boundedWidth, hoverY);
         ctx.stroke();
       }
+      if (hoverVolumeY !== null) {
+        const y = priceHeight + hoverVolumeY;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(dims.boundedWidth, y);
+        ctx.stroke();
+      }
       ctx.restore();
     }
 
@@ -687,6 +698,7 @@ export function CandlestickChart({
     priceHeight,
     hovered,
     hoverY,
+    hoverVolumeY,
     drawings,
     hoveredDrawingId,
     activeTool,
@@ -791,9 +803,11 @@ export function CandlestickChart({
         {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its
             right border lands exactly where the plot content starts — sizing it to the
             constant alone left an unstyled gap equal to the base margin between the rail
-            and the first candle. */}
+            and the first candle. Height stops at the bounded plot area (candles + volume),
+            not the full `plotHeight` — the latter also includes the date-axis label strip
+            below it, which made the rail's border overshoot past where the plot visually ends. */}
         {drawingTools && (
-          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
+          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: dims.margin.top + plotBoundedHeight }}>
             <button
               type="button"
               className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
@@ -862,6 +876,7 @@ export function CandlestickChart({
               onPointerLeave={() => {
                 setHoverIndex(null);
                 setHoverY(null);
+                setHoverVolumeY(null);
               }}
               onClick={handleOverlayClick}
               onDoubleClick={handleOverlayDoubleClick}
@@ -932,6 +947,14 @@ export function CandlestickChart({
         {hoverY !== null && (
           <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
             {pFmt(zoomedPriceScale.invert(hoverY))}
+          </div>
+        )}
+        {hoverVolumeY !== null && (
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--y"
+            style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
+          >
+            {vFmt(volumeScale.invert(hoverVolumeY))}
           </div>
         )}
         {hovered && (
