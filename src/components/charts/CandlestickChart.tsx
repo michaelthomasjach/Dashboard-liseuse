@@ -20,6 +20,7 @@ import {
   VerticalLineIcon,
   HorizontalRayIcon,
   ChevronDownIcon,
+  ChevronUpIcon,
   PlusIcon,
   ActivityIcon,
   SettingsIcon,
@@ -338,6 +339,9 @@ const DEFAULT_DRAWING_COLOR = "#6c87c9";
  *  caps how far each edge of the visible domain can sit past [0, data.length] to this fraction
  *  of the viewport, at every zoom level. */
 const MAX_EMPTY_FRACTION = 0.5;
+/** Height (px) of a sub-pane's (currently just volume) header strip when collapsed — the full
+ *  pane shrinks to exactly this, full width, showing just its name and an expand button. */
+const VOLUME_PANE_COLLAPSED_HEIGHT = 40;
 
 // A canvas 1px line drawn at an integer y (e.g. moveTo(0, 40)) straddles two physical pixel rows
 // half-and-half, so it rasterizes as a ~2px anti-aliased blur instead of a crisp line — unlike an
@@ -432,6 +436,12 @@ export function CandlestickChart({
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
   const toolMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const [themeTick, setThemeTick] = useState(0);
+  // Local view state for the volume pane's own header (name/collapse/remove), layered on top of
+  // the `showVolume` prop rather than replacing it: `showVolume` is the caller's own on/off
+  // switch, this is the user's in-session view preference once it's on. Not lifted to a prop —
+  // no request for the app to control or persist it, same as the other UI-only toggles here
+  // (tool menu open, timeframe menu open…).
+  const [volumePaneState, setVolumePaneState] = useState<"expanded" | "collapsed" | "hidden">("expanded");
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
   // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
@@ -527,10 +537,14 @@ export function CandlestickChart({
     return () => observer.disconnect();
   }, [ref]);
 
+  const volumeVisible = showVolume && volumePaneState !== "hidden";
+  const volumeCollapsed = volumeVisible && volumePaneState === "collapsed";
+
   // No breathing room between the price section and the volume section below it: the divider
   // line itself is the only separation, flush against both (same "the border delimits the
-  // content" rule applied to the tools rail and the header above).
-  const volumeHeight = showVolume ? Math.round(plotBoundedHeight * 0.22) : 0;
+  // content" rule applied to the tools rail and the header above). Collapsed reduces the pane to
+  // its own fixed-height header strip instead of the usual proportional split.
+  const volumeHeight = !volumeVisible ? 0 : volumeCollapsed ? VOLUME_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * 0.22);
   const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight);
 
   // Positions candles by INDEX, not by literal calendar time — each candle i occupies the slot
@@ -832,7 +846,7 @@ export function CandlestickChart({
       const d0 = data[0].date;
       const d1 = data[data.length - 1].date;
       const drawing: TrendLineDrawing =
-        showVolume && mouseY > priceHeight
+        volumeVisible && mouseY > priceHeight
           ? {
               id: `drawing-${drawingIdRef.current++}`,
               x1: d0,
@@ -863,7 +877,7 @@ export function CandlestickChart({
       const rect = zoomRef.current!.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
       const drawing: TrendLineDrawing =
-        showVolume && mouseY > priceHeight
+        volumeVisible && mouseY > priceHeight
           ? {
               id: `drawing-${drawingIdRef.current++}`,
               x1: point.x,
@@ -896,7 +910,13 @@ export function CandlestickChart({
   }
 
   function handleOverlayDoubleClick() {
-    if (activeTool || !hoveredDrawingId) return;
+    if (activeTool) return;
+    // Double-clicking a drawing edits it (existing behavior) — double-clicking empty plot space
+    // resets the zoom instead, same gesture the axis strips already use for their own axis.
+    if (!hoveredDrawingId) {
+      resetZoom();
+      return;
+    }
     const dr = drawings.find((d) => d.id === hoveredDrawingId);
     if (!dr) return;
     setEditingId(dr.id);
@@ -1097,7 +1117,7 @@ export function CandlestickChart({
     const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
     setHoverIndex(index);
     setHoverY(mouseY <= priceHeight ? mouseY : null);
-    setHoverVolumeY(showVolume && mouseY > priceHeight ? mouseY - priceHeight : null);
+    setHoverVolumeY(volumeVisible && !volumeCollapsed && mouseY > priceHeight ? mouseY - priceHeight : null);
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
@@ -1379,9 +1399,10 @@ export function CandlestickChart({
 
     ctx.restore(); // end price-section clip
 
-    if (showVolume) {
+    if (volumeVisible) {
       // Divider between the price plot and the volume plot below it — flush against both,
-      // no padding on either side (the line itself is the only separation).
+      // no padding on either side (the line itself is the only separation). Drawn even
+      // collapsed, separating price from the pane's own header strip.
       ctx.save();
       ctx.strokeStyle = colorGrid;
       ctx.lineWidth = 1;
@@ -1392,51 +1413,55 @@ export function CandlestickChart({
       ctx.stroke();
       ctx.restore();
 
-      // Clipped to its own rectangle for the same reason as the price section above.
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, priceHeight, dims.boundedWidth, volumeHeight);
-      ctx.clip();
-      ctx.translate(0, priceHeight);
-      for (const { d, i } of visible) {
-        const cx = zoomedXScale(i + 0.5);
-        const up = d.close >= d.open;
-        const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
-        ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
-        ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
-        ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
-      }
-      ctx.globalAlpha = 1;
-      if (hoverVolumeY !== null) {
-        ctx.strokeStyle = colorMuted;
-        ctx.lineWidth = 1;
-        ctx.setLineDash([3, 3]);
+      // Collapsed, the pane is just its own header strip (an HTML overlay, see the JSX below) —
+      // nothing left to draw on the canvas underneath it.
+      if (!volumeCollapsed) {
+        // Clipped to its own rectangle for the same reason as the price section above.
+        ctx.save();
         ctx.beginPath();
-        ctx.moveTo(0, hoverVolumeY);
-        ctx.lineTo(dims.boundedWidth, hoverVolumeY);
-        ctx.stroke();
-      }
-      for (const dr of drawings) {
-        if (!((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
-        const lineColor = dr.color ?? colorAccent;
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-        ctx.setLineDash(dr.dashed ? [6, 4] : []);
-        const y = volumeScale(dr.y1);
-        const x = dr.lineType === "ray" ? zoomedXScale(indexForDate(dr.x1) + 0.5) : 0;
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(dims.boundedWidth, y);
-        ctx.stroke();
-        if (dr.text) {
-          ctx.fillStyle = lineColor;
-          ctx.font = `600 11px ${fontFamily}`;
-          ctx.textAlign = "right";
-          ctx.textBaseline = "bottom";
-          ctx.fillText(dr.text, dims.boundedWidth - 4, y - 6);
+        ctx.rect(0, priceHeight, dims.boundedWidth, volumeHeight);
+        ctx.clip();
+        ctx.translate(0, priceHeight);
+        for (const { d, i } of visible) {
+          const cx = zoomedXScale(i + 0.5);
+          const up = d.close >= d.open;
+          const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
+          ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
+          ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
+          ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
         }
+        ctx.globalAlpha = 1;
+        if (hoverVolumeY !== null) {
+          ctx.strokeStyle = colorMuted;
+          ctx.lineWidth = 1;
+          ctx.setLineDash([3, 3]);
+          ctx.beginPath();
+          ctx.moveTo(0, hoverVolumeY);
+          ctx.lineTo(dims.boundedWidth, hoverVolumeY);
+          ctx.stroke();
+        }
+        for (const dr of drawings) {
+          if (!((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
+          const lineColor = dr.color ?? colorAccent;
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+          ctx.setLineDash(dr.dashed ? [6, 4] : []);
+          const y = volumeScale(dr.y1);
+          const x = dr.lineType === "ray" ? zoomedXScale(indexForDate(dr.x1) + 0.5) : 0;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(dims.boundedWidth, y);
+          ctx.stroke();
+          if (dr.text) {
+            ctx.fillStyle = lineColor;
+            ctx.font = `600 11px ${fontFamily}`;
+            ctx.textAlign = "right";
+            ctx.textBaseline = "bottom";
+            ctx.fillText(dr.text, dims.boundedWidth - 4, y - 6);
+          }
+        }
+        ctx.restore();
       }
-      ctx.restore();
     }
 
     // "Vertical" drawn lines span the full plot height (price and volume together), same as the
@@ -1482,7 +1507,8 @@ export function CandlestickChart({
     zoomedXScale,
     zoomedPriceScale,
     candleWidth,
-    showVolume,
+    volumeVisible,
+    volumeCollapsed,
     volumeScale,
     volumeHeight,
     priceHeight,
@@ -1722,6 +1748,57 @@ export function CandlestickChart({
             ))}
           </div>
         )}
+        {/* Header strip for the volume pane — a fixed-height row pinned to the top of the pane
+            (whether expanded or collapsed, hence sharing VOLUME_PANE_COLLAPSED_HEIGHT: when
+            collapsed the pane *is* this row, when expanded it's just the top slice of it). Name
+            always visible; the remove/collapse actions only reveal on hover of the pane itself
+            (hoverVolumeY, already tracked by handlePointerMove — reused here instead of a CSS
+            :hover, since the hoverable zone is the whole pane, much bigger than this row).
+            pointer-events: none on the row itself so it never blocks the zoom/pan overlay or
+            drawing-tool clicks underneath — same pattern as .lq-chart__indicator-legend. */}
+        {volumeVisible && (
+          <div
+            className={["lq-chart__pane-header", volumeCollapsed && "lq-chart__pane-header--collapsed"].filter(Boolean).join(" ")}
+            style={{ top: dims.margin.top + priceHeight, left: dims.margin.left, width: dims.boundedWidth, height: VOLUME_PANE_COLLAPSED_HEIGHT }}
+          >
+            <span className="lq-chart__pane-header-label">Volume</span>
+            <div
+              className={["lq-chart__pane-header-actions", (volumeCollapsed || hoverVolumeY !== null) && "lq-chart__pane-header-actions--visible"]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {volumeCollapsed ? (
+                <button
+                  type="button"
+                  className="lq-chart__pane-header-action"
+                  onClick={() => setVolumePaneState("expanded")}
+                  aria-label="Agrandir le panneau Volume"
+                >
+                  <ChevronUpIcon size={12} />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => setVolumePaneState("hidden")}
+                    aria-label="Supprimer le panneau Volume"
+                  >
+                    <TrashIcon size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => setVolumePaneState("collapsed")}
+                    aria-label="Réduire le panneau Volume"
+                  >
+                    <ChevronDownIcon size={12} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         <canvas
           ref={canvasRef}
           className="lq-chart__canvas"
@@ -1741,17 +1818,19 @@ export function CandlestickChart({
           <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
             <ChartAxis scale={zoomedPriceScale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} tickFormat={(v) => pFmt(Number(v))} />
 
-            {showVolume && (
+            {volumeVisible && (
               <>
-                <g transform={`translate(0, ${priceHeight})`}>
-                  <ChartAxis
-                    scale={volumeScale}
-                    orientation="right"
-                    transform={`translate(${dims.boundedWidth}, 0)`}
-                    ticks={2}
-                    tickFormat={(v) => vFmt(Number(v))}
-                  />
-                </g>
+                {!volumeCollapsed && (
+                  <g transform={`translate(0, ${priceHeight})`}>
+                    <ChartAxis
+                      scale={volumeScale}
+                      orientation="right"
+                      transform={`translate(${dims.boundedWidth}, 0)`}
+                      ticks={2}
+                      tickFormat={(v) => vFmt(Number(v))}
+                    />
+                  </g>
+                )}
                 {/* Continues the canvas-drawn price/volume divider (which only covers
                     [0, boundedWidth], the canvas's own extent) across the price axis's
                     tick-label column so the divider reaches the full chart width and

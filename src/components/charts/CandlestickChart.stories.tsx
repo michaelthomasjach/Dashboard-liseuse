@@ -38,6 +38,10 @@ export const Default: Story = {
         graphe affiche le prix et la date exacts directement sur les axes, au lieu d'une infobulle flottante. Glisser
         au-delà de la première/dernière bougie révèle un espace vide ("passé"/"futur") au lieu de rester bloqué sur
         les bords — jusqu'à 50% de la largeur actuellement visible de chaque côté, quel que soit le niveau de zoom.
+        <strong>Double-clic sur le graphe</strong> réinitialise le zoom (comme le bouton dédié) — sauf sur une ligne
+        dessinée, où ça ouvre plutôt sa modale d'édition. Survoler le panneau volume fait apparaître, en haut à
+        droite, un bouton pour le réduire à un simple bandeau (nom + bouton pour l'agrandir de nouveau) et un pour le
+        supprimer entièrement.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 11)} height={STORY_HEIGHT} />
     </div>
@@ -123,7 +127,8 @@ export const WithIndicators: Story = {
         </a>
         ) — cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
         actifs sont listés en haut à gauche du graphe, séparés par un simple trait (pas de bordure autour de chaque
-        entrée) ; survoler une entrée fait apparaître trois icônes : œil (masque/affiche le tracé sans le supprimer
+        entrée, ni de fond tant qu'elle n'est pas survolée — le fond réapparaît seulement au survol) ; survoler une
+        entrée fait aussi apparaître trois icônes : œil (masque/affiche le tracé sans le supprimer
         de la liste), corbeille (suppression directe) et roue crantée (paramètres — période, couleur, écart-type pour
         Bollinger — <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix,
         ils suivent le zoom/déplacement comme les bougies ; Bollinger se dessine en bande (ligne médiane pleine,

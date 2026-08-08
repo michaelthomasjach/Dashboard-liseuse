@@ -572,8 +572,15 @@
   font-size: 0.7rem;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  background-color: var(--lq-color-panel);
   pointer-events: auto;
+}
+
+/* No background at rest — only appears on hover/focus, matching the same panel background
+   other labels/badges in this chart use (the header/rail buttons, the pre-hover version of this
+   very item). */
+.lq-chart__indicator-legend-item:hover,
+.lq-chart__indicator-legend-item:focus-within {
+  background-color: var(--lq-color-panel);
 }
 
 /* Separates stacked entries with a plain rule instead of boxing each one in its own border —
@@ -620,6 +627,64 @@
 .lq-chart__indicator-legend-action:hover {
   color: var(--lq-color-text);
   opacity: 1;
+}
+
+/* Header strip pinned to the top of a sub-pane (currently just volume — the same "name +
+   remove/collapse on hover" pattern will cover future panes, e.g. RSI/MACD). Stays
+   pointer-events:none itself (see .lq-chart__indicator-legend for the same reasoning) so it
+   never blocks the zoom/pan overlay underneath; only its action buttons opt back in. */
+.lq-chart__pane-header {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 8px;
+  pointer-events: none;
+}
+
+/* Collapsed, the header *is* the whole pane — it gets an opaque background and a top border (in
+   place of the canvas-drawn price/volume divider, which only spans the full pane's own rect and
+   wouldn't otherwise reach across this one) so it reads as a real, self-contained strip. */
+.lq-chart__pane-header--collapsed {
+  background-color: var(--lq-color-panel);
+  border-top: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-chart__pane-header-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--lq-color-text-muted);
+}
+
+/* Visibility is driven by a class from React (hoverVolumeY), not a plain :hover — the hoverable
+   zone is the whole pane, considerably bigger than this row alone. Always visible collapsed. */
+.lq-chart__pane-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+}
+
+.lq-chart__pane-header-actions--visible,
+.lq-chart__pane-header:focus-within .lq-chart__pane-header-actions {
+  opacity: 1;
+}
+
+.lq-chart__pane-header-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.lq-chart__pane-header-action:hover {
+  color: var(--lq-color-text);
 }
 
 .lq-chart__indicator-picker {
