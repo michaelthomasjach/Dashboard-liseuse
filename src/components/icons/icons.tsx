@@ -425,6 +425,18 @@ export const ChannelIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Horizontal rungs fanning out then back in — evokes stacked retracement levels rather than
+ *  any one specific ratio (the levels themselves are fixed constants, not part of the icon). */
+export const FibonacciIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 4h4" />
+    <path d="M4 8.5h9" />
+    <path d="M4 13h14" />
+    <path d="M4 17.5h9" />
+    <path d="M4 21h4" />
+  </IconBase>
+);
+
 export const ActivityIcon = (props: IconProps) => (
   <IconBase {...props}>
     <path d="M22 12h-4l-3 8-6-16-3 8H2" />

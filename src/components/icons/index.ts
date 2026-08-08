@@ -60,5 +60,6 @@ export {
   HorizontalRayIcon,
   ExtendedLineIcon,
   ChannelIcon,
+  FibonacciIcon,
   ActivityIcon,
 } from "./icons";

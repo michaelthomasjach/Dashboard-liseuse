@@ -21,6 +21,7 @@ import {
   HorizontalRayIcon,
   ExtendedLineIcon,
   ChannelIcon,
+  FibonacciIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   PlusIcon,
@@ -69,8 +70,11 @@ export interface TrendLineDrawing {
    *  price delta, not a true perpendicular distance — same convention most trading platforms
    *  use for this tool) — both lines are segments matching x1/x2's own date span, neither
    *  extends. Omitted for a regular hand-drawn trend line — set automatically by the axis "+"
-   *  buttons. */
-  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel";
+   *  buttons. "fibonacci" is a free two-point line like a regular trend line (same two draggable
+   *  endpoints, no extra points needed) whose price range between y1 (0%) and y2 (100%) is
+   *  sliced into the standard retracement ratios (see FIBONACCI_LEVELS) — each drawn as its own
+   *  horizontal segment spanning x1/x2's date range, labeled with its ratio and price. */
+  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci";
   /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
    *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
@@ -78,6 +82,12 @@ export interface TrendLineDrawing {
    *  set by the tool's third click. */
   channelOffset?: number;
 }
+
+/** Standard Fibonacci retracement ratios, 0 (y1) to 1 (y2) — the same default set most trading
+ *  platforms show (TradingView included). Not configurable per drawing: there was no request for
+ *  that, and hand-rolling a "which levels" UI for one tool would be a lot of surface area for a
+ *  set virtually everyone leaves at the defaults anyway. */
+const FIBONACCI_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 
 interface DataPoint {
   x: Date;
@@ -228,12 +238,13 @@ function computeIndicatorValues(data: Candle[], indicator: Indicator): (number |
   }
 }
 
-type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray" | "extended" | "channel";
+type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci";
 
 const DRAWING_TOOLS: { type: DrawingToolType; label: string; icon: typeof TrendLineIcon }[] = [
   { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
   { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
   { type: "channel", label: "Canal", icon: ChannelIcon },
+  { type: "fibonacci", label: "Retracement de Fibonacci", icon: FibonacciIcon },
   { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
   { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
   { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
@@ -968,8 +979,8 @@ export function CandlestickChart({
       return;
     }
 
-    // "trendline" and "extended" share the same 2-click flow — "extended" only differs in how
-    // it's drawn (see the canvas draw effect), not in how it's placed.
+    // "trendline", "extended" and "fibonacci" all share the same 2-click flow — they only differ
+    // in how they're drawn (see the canvas draw effect), not in how they're placed.
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -981,7 +992,7 @@ export function CandlestickChart({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
-      ...(activeTool === "extended" ? { lineType: "extended" as const } : {}),
+      ...(activeTool === "extended" || activeTool === "fibonacci" ? { lineType: activeTool } : {}),
     };
     commitDrawings([...drawings, drawing]);
     cancelDrawingTool();
@@ -1244,6 +1255,18 @@ export function CandlestickChart({
             distanceToSegment(mouseX, mouseY, cx1, cy1, cx2, cy2),
             distanceToSegment(mouseX, mouseY, cx1, cy1 + offsetPx, cx2, cy2 + offsetPx)
           );
+        } else if (dr.lineType === "fibonacci") {
+          const fx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const fx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          d = Math.min(
+            // The diagonal x1/y1–x2/y2 line itself, same as a regular trend line...
+            distanceToSegment(mouseX, mouseY, fx1, zoomedPriceScale(dr.y1), fx2, zoomedPriceScale(dr.y2)),
+            // ...plus whichever retracement level line is closest.
+            ...FIBONACCI_LEVELS.map((ratio) => {
+              const y = zoomedPriceScale(dr.y1 + (dr.y2 - dr.y1) * ratio);
+              return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
+            })
+          );
         } else {
           d = distanceToSegment(
             mouseX,
@@ -1504,6 +1527,31 @@ export function CandlestickChart({
         ctx.moveTo(x1, y1 + offsetPx);
         ctx.lineTo(x2, y2 + offsetPx);
         ctx.stroke();
+      }
+
+      // "fibonacci" slices y1 (0%) to y2 (100%) into the standard retracement ratios, each its
+      // own horizontal segment spanning x1/x2 — on top of the diagonal x1/y1–x2/y2 already drawn
+      // above, which is unaffected (drawX*/drawY* only differ from x1/y1/x2/y2 for "extended").
+      // Labeled directly (not through the `formatPrice` prop's pFmt — that's declared after this
+      // effect in source order, and pulling it in as a dependency would rerun the whole effect
+      // on every render since it's a fresh function each time, unless the caller memoizes it).
+      if (dr.lineType === "fibonacci") {
+        ctx.save();
+        ctx.setLineDash(dr.dashed ? [6, 4] : []);
+        ctx.font = `600 10px ${fontFamily}`;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        for (const ratio of FIBONACCI_LEVELS) {
+          const price = dr.y1 + (dr.y2 - dr.y1) * ratio;
+          const y = zoomedPriceScale(price);
+          ctx.beginPath();
+          ctx.moveTo(x1, y);
+          ctx.lineTo(x2, y);
+          ctx.stroke();
+          ctx.fillStyle = lineColor;
+          ctx.fillText(`${(ratio * 100).toFixed(1)}% · ${price.toFixed(2)}`, Math.max(x1, x2) - 4, y - 3);
+        }
+        ctx.restore();
       }
 
       if (dr.text) {
@@ -2321,10 +2369,11 @@ export function CandlestickChart({
             </div>
           )}
           {/* Regular trend line, "extended" (same two points, just drawn further — see the
-              canvas draw effect) and "channel" (line 1's own two points; its second, parallel
-              line is set by the "Décalage" field below instead of its own coordinates) all
-              share the same two-point editor. */}
-          {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel") && (
+              canvas draw effect), "channel" (line 1's own two points; its second, parallel line
+              is set by the "Décalage" field below instead of its own coordinates) and
+              "fibonacci" (its retracement levels are all derived from these same two points, 0%
+              at "Prix début" and 100% at "Prix fin") all share the same two-point editor. */}
+          {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel" || draft.lineType === "fibonacci") && (
             <>
               <div className="lq-chart__edit-drawing-row">
                 <div className="lq-field">

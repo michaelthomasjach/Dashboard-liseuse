@@ -79,12 +79,15 @@ export const WithDrawingTools: Story = {
         boutons superposés — elle reste visible en plein écran) — son chevron ouvre un menu avec les autres outils :{" "}
         <strong>ligne étendue</strong> (les 2 mêmes points qu'une ligne de tendance, mais le tracé continue jusqu'aux
         bords du graphe au lieu de s'arrêter dessus), <strong>canal</strong> (2 lignes parallèles — 2 clics pour la
-        première ligne comme une ligne de tendance, un 3ème pour l'écart de la seconde), ligne horizontale,{" "}
+        première ligne comme une ligne de tendance, un 3ème pour l'écart de la seconde),{" "}
+        <strong>retracement de Fibonacci</strong> (mêmes 2 points qu'une ligne de tendance — 0%/100% — découpés en
+        niveaux 23.6/38.2/50/61.8/78.6%, chacun étiqueté ratio + prix), ligne horizontale,{" "}
         <strong>ligne horizontale à partir d'une date</strong> ("ray" — démarre à la date cliquée au lieu de couvrir
         tout l'historique, avec une seule poignée déplaçable en date <em>et</em> en prix/volume) et ligne verticale.
-        1er/2ème clic = les deux points d'une ligne de tendance/étendue (la ligne suit le curseur entre les deux) ;
-        pour un canal, un 3ème clic fixe l'écart de la seconde ligne (elle aussi suit le curseur avant ce clic) ; les
-        outils à un seul point n'en demandent qu'un. Échap ou re-clic sur l'outil annule. Survoler une ligne dessinée
+        1er/2ème clic = les deux points d'une ligne de tendance/étendue/Fibonacci (la ligne suit le curseur entre les
+        deux) ; pour un canal, un 3ème clic fixe l'écart de la seconde ligne (elle aussi suit le curseur avant ce
+        clic) ; les outils à un seul point n'en demandent qu'un. Échap ou re-clic sur l'outil annule. Survoler une
+        ligne dessinée
         fait apparaître ses poignées — glisser une poignée pour la redéfinir, ou glisser directement sur la ligne
         pour la déplacer entièrement (un canal se déplace tout entier, écart compris).{" "}
         <strong>Double-clic sur une ligne</strong> pour l'éditer (texte, épaisseur, couleur,{" "}
