@@ -10,7 +10,17 @@ import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
 import { Modal } from "../primitives/Modal";
-import { MaximizeIcon, MinimizeIcon, TrendLineIcon, HorizontalLineIcon, VerticalLineIcon, ChevronDownIcon, PlusIcon } from "../icons";
+import {
+  MaximizeIcon,
+  MinimizeIcon,
+  TrendLineIcon,
+  HorizontalLineIcon,
+  VerticalLineIcon,
+  ChevronDownIcon,
+  PlusIcon,
+  ActivityIcon,
+  SettingsIcon,
+} from "../icons";
 import "./charts-shared.css";
 
 export interface Candle {
@@ -49,6 +59,97 @@ export interface TrendLineDrawing {
 interface DataPoint {
   x: Date;
   y: number;
+}
+
+export type IndicatorKind = "sma" | "ema" | "wma";
+
+export interface Indicator {
+  id: string;
+  kind: IndicatorKind;
+  /** Lookback window, in candles. */
+  period: number;
+  /** CSS color. Defaults to a color cycled from a small built-in palette. */
+  color?: string;
+}
+
+interface IndicatorCatalogEntry {
+  kind: IndicatorKind;
+  label: string;
+  shortLabel: string;
+  defaultPeriod: number;
+}
+
+const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
+  { kind: "sma", label: "Moyenne mobile simple (SMA)", shortLabel: "SMA", defaultPeriod: 20 },
+  { kind: "ema", label: "Moyenne mobile exponentielle (EMA)", shortLabel: "EMA", defaultPeriod: 20 },
+  { kind: "wma", label: "Moyenne mobile pondérée (WMA)", shortLabel: "WMA", defaultPeriod: 20 },
+];
+
+function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
+  return INDICATOR_CATALOG.find((entry) => entry.kind === kind) ?? INDICATOR_CATALOG[0];
+}
+
+function indicatorLabel(indicator: Indicator): string {
+  return `${indicatorCatalogEntry(indicator.kind).shortLabel}(${indicator.period})`;
+}
+
+const INDICATOR_COLORS = ["#e0a95c", "#6c87c9", "#7fb37f", "#c96c8f", "#9a7fd1"];
+
+function defaultIndicatorColor(index: number): string {
+  return INDICATOR_COLORS[((index % INDICATOR_COLORS.length) + INDICATOR_COLORS.length) % INDICATOR_COLORS.length];
+}
+
+// Each returns one value per candle (null during the warm-up period before enough history has
+// accumulated), so the result stays index-aligned with `data` — the draw effect windows it down
+// to the visible range the exact same way `visible` windows `data` itself.
+function computeSMAValues(data: Candle[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(data.length).fill(null);
+  let sum = 0;
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i].close;
+    if (i >= period) sum -= data[i - period].close;
+    if (i >= period - 1) result[i] = sum / period;
+  }
+  return result;
+}
+
+function computeEMAValues(data: Candle[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(data.length).fill(null);
+  if (data.length < period) return result;
+  const k = 2 / (period + 1);
+  let sum = 0;
+  for (let i = 0; i < period; i++) sum += data[i].close;
+  let ema = sum / period;
+  result[period - 1] = ema;
+  for (let i = period; i < data.length; i++) {
+    ema = data[i].close * k + ema * (1 - k);
+    result[i] = ema;
+  }
+  return result;
+}
+
+function computeWMAValues(data: Candle[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(data.length).fill(null);
+  const denom = (period * (period + 1)) / 2;
+  for (let i = period - 1; i < data.length; i++) {
+    let weighted = 0;
+    for (let j = 0; j < period; j++) weighted += data[i - period + 1 + j].close * (j + 1);
+    result[i] = weighted / denom;
+  }
+  return result;
+}
+
+function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | null)[] {
+  const period = Math.max(1, Math.round(indicator.period));
+  switch (indicator.kind) {
+    case "ema":
+      return computeEMAValues(data, period);
+    case "wma":
+      return computeWMAValues(data, period);
+    case "sma":
+    default:
+      return computeSMAValues(data, period);
+  }
 }
 
 type DrawingToolType = "trendline" | "horizontal" | "vertical";
@@ -104,6 +205,13 @@ export interface CandlestickChartProps {
   defaultDrawings?: TrendLineDrawing[];
   /** Fires whenever a drawing is added, moved, or edited. */
   onDrawingsChange?: (drawings: TrendLineDrawing[]) => void;
+  /** Shows a header button that opens the technical-indicator picker (SMA, EMA, WMA…) and the
+   *  active-indicator legend in the plot's top-left corner. Default false. */
+  showIndicators?: boolean;
+  /** Uncontrolled initial set of technical indicators. */
+  defaultIndicators?: Indicator[];
+  /** Fires whenever an indicator is added, edited, or removed. */
+  onIndicatorsChange?: (indicators: Indicator[]) => void;
   /** Timeframe/interval options shown as a dropdown in the header — flat, or grouped (e.g. one
    *  group per "Minutes"/"Heures"/"Jours"), matching a typical trading-platform interval menu.
    *  This only renders the picker and reports the choice via `onTimeframeChange`; resampling
@@ -177,6 +285,9 @@ export function CandlestickChart({
   drawingTools = false,
   defaultDrawings,
   onDrawingsChange,
+  showIndicators = false,
+  defaultIndicators,
+  onIndicatorsChange,
   timeframes,
   timeframe,
   onTimeframeChange,
@@ -202,9 +313,14 @@ export function CandlestickChart({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [tfOpen, setTfOpen] = useState(false);
+  const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
+  const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
+  const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
+  const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
   const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
   const dragAxisRef = useRef<{ id: string } | null>(null);
   const drawingIdRef = useRef(0);
+  const indicatorIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
   const toolMenuAnchorRef = useRef<HTMLButtonElement>(null);
@@ -232,6 +348,39 @@ export function CandlestickChart({
     onDrawingsChange?.(next);
   }
 
+  function commitIndicators(next: Indicator[]) {
+    setIndicators(next);
+    onIndicatorsChange?.(next);
+  }
+
+  function addIndicator(entry: IndicatorCatalogEntry) {
+    commitIndicators([...indicators, { id: `indicator-${indicatorIdRef.current++}`, kind: entry.kind, period: entry.defaultPeriod }]);
+  }
+
+  function openIndicatorSettings(id: string) {
+    const indicator = indicators.find((i) => i.id === id);
+    if (!indicator) return;
+    setEditingIndicatorId(id);
+    setIndicatorDraft(indicator);
+  }
+
+  function closeIndicatorSettings() {
+    setEditingIndicatorId(null);
+    setIndicatorDraft(null);
+  }
+
+  function saveIndicatorSettings() {
+    if (!editingIndicatorId || !indicatorDraft) return;
+    commitIndicators(indicators.map((i) => (i.id === editingIndicatorId ? indicatorDraft : i)));
+    closeIndicatorSettings();
+  }
+
+  function deleteEditingIndicator() {
+    if (!editingIndicatorId) return;
+    commitIndicators(indicators.filter((i) => i.id !== editingIndicatorId));
+    closeIndicatorSettings();
+  }
+
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
@@ -239,7 +388,7 @@ export function CandlestickChart({
     : baseMargin;
   const [ref, dims] = useChartDimensions(resolvedMargin, { height: isFullscreen ? undefined : height });
 
-  const showHeader = fullscreenToggle || zoomable || !!timeframes?.length;
+  const showHeader = fullscreenToggle || zoomable || !!timeframes?.length || showIndicators;
   const headerSpace = showHeader ? HEADER_HEIGHT : 0;
   const plotHeight = Math.max(0, dims.height - headerSpace);
   const plotBoundedHeight = Math.max(0, plotHeight - dims.margin.top - dims.margin.bottom);
@@ -588,6 +737,28 @@ export function CandlestickChart({
   const visibleCount = Math.max(1, visibleRange.end - visibleRange.start);
   const candleWidth = Math.max(0.1, (dims.boundedWidth / visibleCount) * 0.8);
 
+  // Expensive (O(data.length) per indicator) — recomputed only when the data or the indicator
+  // list itself changes, never on pan/zoom (which would otherwise redo this every frame).
+  const indicatorValues = useMemo(
+    () => indicators.map((indicator) => ({ indicator, values: computeIndicatorValues(data, indicator) })),
+    [data, indicators]
+  );
+
+  // Cheap: slices the precomputed arrays down to the same padded visible window `visible` uses,
+  // dropping the null (warm-up period) entries.
+  const visibleIndicators = useMemo(() => {
+    const start = Math.max(0, visibleRange.start - 2);
+    const end = Math.min(data.length, visibleRange.end + 2);
+    return indicatorValues.map(({ indicator, values }) => {
+      const points: { date: Date; value: number }[] = [];
+      for (let i = start; i < end; i++) {
+        const v = values[i];
+        if (v !== null) points.push({ date: data[i].date, value: v });
+      }
+      return { indicator, points };
+    });
+  }, [indicatorValues, data, visibleRange]);
+
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -767,6 +938,23 @@ export function CandlestickChart({
       ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
     }
 
+    visibleIndicators.forEach(({ indicator, points }, index) => {
+      if (points.length < 2) return;
+      ctx.save();
+      ctx.strokeStyle = indicator.color ?? defaultIndicatorColor(index);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      points.forEach((p, i) => {
+        const x = zoomedXScale(p.date);
+        const y = zoomedPriceScale(p.value);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    });
+
     if (hovered && hoverY !== null) {
       ctx.save();
       ctx.strokeStyle = colorMuted;
@@ -937,6 +1125,7 @@ export function CandlestickChart({
     activeTool,
     pendingPoint,
     previewPoint,
+    visibleIndicators,
     dims.boundedWidth,
     plotBoundedHeight,
     themeTick,
@@ -1010,6 +1199,16 @@ export function CandlestickChart({
                 </div>
               </Popover>
             </>
+          )}
+          {showIndicators && (
+            <button
+              type="button"
+              className="lq-chart__icon-button"
+              onClick={() => setIndicatorPickerOpen(true)}
+              aria-label="Ajouter un indicateur"
+            >
+              <ActivityIcon size={14} />
+            </button>
           )}
           {zoomable && isZoomed && (
             <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
@@ -1099,6 +1298,31 @@ export function CandlestickChart({
                 </Popover>
               </div>
             </div>
+          </div>
+        )}
+        {showIndicators && indicators.length > 0 && (
+          <div className="lq-chart__indicator-legend" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
+            {indicators.map((indicator, i) => (
+              <div
+                key={indicator.id}
+                className="lq-chart__indicator-legend-item"
+                style={{ color: indicator.color ?? defaultIndicatorColor(i) }}
+                onDoubleClick={() => openIndicatorSettings(indicator.id)}
+              >
+                <span className="lq-chart__indicator-legend-label">{indicatorLabel(indicator)}</span>
+                {/* Invisible until this item is hovered (see charts-shared.css) — double-click
+                    the label itself opens the same settings modal, so the gear is a discoverable
+                    shortcut, not the only way in. */}
+                <button
+                  type="button"
+                  className="lq-chart__indicator-legend-gear"
+                  onClick={() => openIndicatorSettings(indicator.id)}
+                  aria-label={`Paramètres ${indicatorLabel(indicator)}`}
+                >
+                  <SettingsIcon size={11} />
+                </button>
+              </div>
+            ))}
           </div>
         )}
         <canvas
@@ -1398,6 +1622,55 @@ export function CandlestickChart({
               </div>
             </>
           )}
+        </Modal>
+      )}
+
+      {indicatorPickerOpen && (
+        <Modal open onClose={() => setIndicatorPickerOpen(false)} title="Ajouter un indicateur">
+          <div className="lq-chart__indicator-picker">
+            {INDICATOR_CATALOG.map((entry) => (
+              <button key={entry.kind} type="button" className="lq-chart__indicator-picker-option" onClick={() => addIndicator(entry)}>
+                <span className="lq-chart__indicator-picker-name">{entry.label}</span>
+                <span className="lq-chart__indicator-picker-hint">Période par défaut : {entry.defaultPeriod}</span>
+              </button>
+            ))}
+          </div>
+        </Modal>
+      )}
+
+      {editingIndicatorId && indicatorDraft && (
+        <Modal
+          open
+          onClose={closeIndicatorSettings}
+          title={`Paramètres — ${indicatorLabel(indicatorDraft)}`}
+          footer={
+            <div className="lq-chart__edit-drawing-footer">
+              <button type="button" className="lq-chart__reset-button" onClick={deleteEditingIndicator}>
+                Supprimer
+              </button>
+              <button type="button" className="lq-chart__confirm-button" onClick={saveIndicatorSettings}>
+                Enregistrer
+              </button>
+            </div>
+          }
+        >
+          <NumberField
+            label="Période"
+            min={1}
+            max={500}
+            step={1}
+            value={indicatorDraft.period}
+            onChange={(v) => setIndicatorDraft({ ...indicatorDraft, period: v === "" ? indicatorDraft.period : v })}
+          />
+          <div className="lq-field">
+            <label className="lq-field__label">Couleur</label>
+            <input
+              type="color"
+              className="lq-chart__color-input"
+              value={indicatorDraft.color ?? defaultIndicatorColor(indicators.findIndex((i) => i.id === indicatorDraft.id))}
+              onChange={(e) => setIndicatorDraft({ ...indicatorDraft, color: e.target.value })}
+            />
+          </div>
         </Modal>
       )}
     </div>

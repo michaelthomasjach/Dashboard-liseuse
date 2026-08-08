@@ -86,6 +86,22 @@ export const WithTimeframeHeader: Story = {
   },
 };
 
+export const WithIndicators: Story = {
+  name: "Indicateurs techniques",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles (SMA, EMA, WMA) —
+        cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
+        actifs sont listés en haut à gauche du graphe ; survoler une entrée fait apparaître une roue crantée qui
+        ouvre ses paramètres (période, couleur) dans une modale, <strong>double-clic sur l'entrée</strong> fait la
+        même chose directement. Superposés sur le tracé des prix, ils suivent le zoom/déplacement comme les bougies.
+      </p>
+      <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators />
+    </div>
+  ),
+};
+
 export const AllFeatures: Story = {
   name: "Toutes les options",
   render: () => {
@@ -94,8 +110,10 @@ export const AllFeatures: Story = {
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-          Tout combiné : outils de dessin (`drawingTools`), plein écran (`fullscreenToggle`), sélecteur d'intervalle
-          (`timeframes`), zoom/pan (`zoomable`), et volume masquable (`showVolume`, coché ci-dessous).
+          Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
+          l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
+          sélecteur d'intervalle (`timeframes`), zoom/pan (`zoomable`), et volume masquable (`showVolume`, coché
+          ci-dessous).
         </p>
         <div style={{ marginBottom: 12 }}>
           <Checkbox checked={showVolume} onChange={setShowVolume} label="Afficher le volume" />
@@ -103,6 +121,7 @@ export const AllFeatures: Story = {
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
           drawingTools
+          showIndicators
           fullscreenToggle
           zoomable
           showVolume={showVolume}

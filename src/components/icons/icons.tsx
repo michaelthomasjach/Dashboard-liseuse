@@ -398,3 +398,9 @@ export const VerticalLineIcon = (props: IconProps) => (
     <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+export const ActivityIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M22 12h-4l-3 8-6-16-3 8H2" />
+  </IconBase>
+);

@@ -527,3 +527,95 @@
 .lq-chart__confirm-button:hover {
   opacity: 0.9;
 }
+
+/* List of active technical indicators, top-left of the plot. The container stays
+   pointer-events:none so its own padding never blocks the zoom/pan overlay underneath — each
+   item opts back in individually, since only they actually need to be clickable. */
+.lq-chart__indicator-legend {
+  position: absolute;
+  z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  pointer-events: none;
+}
+
+.lq-chart__indicator-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  pointer-events: auto;
+}
+
+.lq-chart__indicator-legend-label {
+  color: inherit;
+}
+
+/* Invisible until its own item is hovered/focused — same reveal pattern as
+   .lq-chart__tool-chevron. Double-clicking the label itself is the other way in, so this is a
+   discoverable shortcut rather than the only path to the settings modal. */
+.lq-chart__indicator-legend-gear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.lq-chart__indicator-legend-item:hover .lq-chart__indicator-legend-gear,
+.lq-chart__indicator-legend-gear:focus-visible {
+  opacity: 0.85;
+}
+
+.lq-chart__indicator-legend-gear:hover {
+  color: var(--lq-color-text);
+  opacity: 1;
+}
+
+.lq-chart__indicator-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lq-chart__indicator-picker-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  font-family: inherit;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart__indicator-picker-option:hover {
+  background-color: var(--lq-color-hover);
+  border-color: var(--lq-color-border);
+}
+
+.lq-chart__indicator-picker-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lq-chart__indicator-picker-hint {
+  font-size: 0.72rem;
+  color: var(--lq-color-text-muted);
+}

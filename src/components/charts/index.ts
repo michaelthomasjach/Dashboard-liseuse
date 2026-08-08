@@ -9,6 +9,8 @@ export type {
   CandlestickChartProps,
   Candle,
   TrendLineDrawing,
+  Indicator,
+  IndicatorKind,
   TimeframeOption,
   TimeframeGroup,
   TimeframeEntry,
