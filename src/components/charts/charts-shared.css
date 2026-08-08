@@ -162,17 +162,20 @@
 /* A real vertical zone next to the plot (its width is reserved via the chart's own left
    margin, so the plot/axes never draw under it) — not a floating overlay stacked on top of
    the candles. Spans the plot's full height, so it stays visible in fullscreen too, since
-   it lives inside the same element that becomes the fixed fullscreen overlay. */
+   it lives inside the same element that becomes the fixed fullscreen overlay. Opaque
+   background + high z-index so nothing drawn on the canvas (candles, drawings…) can ever
+   show through or visually spill past its border, whatever the current pan/zoom. */
 .lq-chart__tools-rail {
   position: absolute;
   top: 0;
   left: 0;
-  z-index: 5;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding-top: 4px;
+  background-color: var(--lq-color-bg);
   border-right: 1px solid var(--lq-color-border-subtle);
 }
 
@@ -235,6 +238,9 @@
    text overflow past its own right edge, i.e. into the chart, whenever it needed more room
    than the margin reserved for it). */
 .lq-chart__axis-value--y {
+  /* Below the toolbar/header (1000) but above everything else the canvas can draw, so a
+     dragged/zoomed price or volume value never renders underneath either of them. */
+  z-index: 999;
   transform: translateY(-50%);
 }
 
@@ -243,13 +249,17 @@
 }
 
 /* Real header row (not a floating overlay) holding the timeframe picker and reset/fullscreen
-   buttons, docked to the left per the app's convention (price axis lives on the right). */
+   buttons, docked to the left per the app's convention (price axis lives on the right). Opaque
+   background + high z-index for the same reason as .lq-chart__tools-rail above. */
 .lq-chart__header {
+  position: relative;
+  z-index: 1000;
   display: flex;
   align-items: center;
   gap: 6px;
   height: 40px;
   padding: 0 4px;
+  background-color: var(--lq-color-bg);
   border-bottom: 1px solid var(--lq-color-border-subtle);
   /* Its rendered height must match CandlestickChart's HEADER_HEIGHT constant exactly (used to
      size the plot below it) — without border-box the 1px border pushes the real height to 41px,

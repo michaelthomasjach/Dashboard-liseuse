@@ -564,6 +564,15 @@ export function CandlestickChart({
     const fontFamily = style.getPropertyValue("--lq-font-family").trim() || "sans-serif";
     const isEink = wrapper.closest('[data-lq-palette="eink"]') !== null;
 
+    // Everything in price space (gridlines, candles, drawings, the price hover line) is clipped
+    // to the price section's own rectangle — without this, panning/zooming the price axis could
+    // push candles/drawings visually down into the volume area below, since rescaling the scale
+    // doesn't clamp the pixels it produces to any particular range.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, dims.boundedWidth, priceHeight);
+    ctx.clip();
+
     // Drawn first, underneath everything else — mirrors ChartAxis's own grid (same `ticks(5)`
     // the SVG price axis would otherwise use), kept on canvas so it stays behind the candles
     // instead of the SVG (which paints on top of the canvas) covering them.
@@ -579,32 +588,6 @@ export function CandlestickChart({
       ctx.stroke();
     }
     ctx.restore();
-
-    if (showVolume) {
-      // Divider between the price plot and the volume plot below it — flush against both,
-      // no padding on either side (the line itself is the only separation).
-      ctx.save();
-      ctx.strokeStyle = colorGrid;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(0, priceHeight);
-      ctx.lineTo(dims.boundedWidth, priceHeight);
-      ctx.stroke();
-      ctx.restore();
-
-      ctx.save();
-      ctx.translate(0, priceHeight);
-      for (const d of visible) {
-        const cx = zoomedXScale(d.date);
-        const up = d.close >= d.open;
-        const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
-        ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
-        ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
-        ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
-      }
-      ctx.globalAlpha = 1;
-      ctx.restore();
-    }
 
     for (const d of visible) {
       const cx = zoomedXScale(d.date);
@@ -628,29 +611,15 @@ export function CandlestickChart({
       ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
     }
 
-    if (hovered) {
+    if (hovered && hoverY !== null) {
       ctx.save();
       ctx.strokeStyle = colorMuted;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
-      const hx = zoomedXScale(hovered.date);
       ctx.beginPath();
-      ctx.moveTo(hx, 0);
-      ctx.lineTo(hx, plotBoundedHeight);
+      ctx.moveTo(0, hoverY);
+      ctx.lineTo(dims.boundedWidth, hoverY);
       ctx.stroke();
-      if (hoverY !== null) {
-        ctx.beginPath();
-        ctx.moveTo(0, hoverY);
-        ctx.lineTo(dims.boundedWidth, hoverY);
-        ctx.stroke();
-      }
-      if (hoverVolumeY !== null) {
-        const y = priceHeight + hoverVolumeY;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(dims.boundedWidth, y);
-        ctx.stroke();
-      }
       ctx.restore();
     }
 
@@ -684,6 +653,62 @@ export function CandlestickChart({
       ctx.beginPath();
       ctx.moveTo(zoomedXScale(pendingPoint.x), zoomedPriceScale(pendingPoint.y));
       ctx.lineTo(zoomedXScale(previewPoint.x), zoomedPriceScale(previewPoint.y));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.restore(); // end price-section clip
+
+    if (showVolume) {
+      // Divider between the price plot and the volume plot below it — flush against both,
+      // no padding on either side (the line itself is the only separation).
+      ctx.save();
+      ctx.strokeStyle = colorGrid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, priceHeight);
+      ctx.lineTo(dims.boundedWidth, priceHeight);
+      ctx.stroke();
+      ctx.restore();
+
+      // Clipped to its own rectangle for the same reason as the price section above.
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, priceHeight, dims.boundedWidth, volumeHeight);
+      ctx.clip();
+      ctx.translate(0, priceHeight);
+      for (const d of visible) {
+        const cx = zoomedXScale(d.date);
+        const up = d.close >= d.open;
+        const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
+        ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
+        ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
+        ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
+      }
+      ctx.globalAlpha = 1;
+      if (hoverVolumeY !== null) {
+        ctx.strokeStyle = colorMuted;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, hoverVolumeY);
+        ctx.lineTo(dims.boundedWidth, hoverVolumeY);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // Vertical crosshair spans the full plot (price and volume together) — deliberately drawn
+    // outside either section's clip above.
+    if (hovered) {
+      ctx.save();
+      ctx.strokeStyle = colorMuted;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      const hx = zoomedXScale(hovered.date);
+      ctx.beginPath();
+      ctx.moveTo(hx, 0);
+      ctx.lineTo(hx, plotBoundedHeight);
       ctx.stroke();
       ctx.restore();
     }
