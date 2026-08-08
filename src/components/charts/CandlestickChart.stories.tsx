@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
 import { CandlestickChart, type TimeframeEntry } from "./CandlestickChart";
+import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -13,7 +14,8 @@ type Story = StoryObj<typeof CandlestickChart>;
 
 // Generated once at module load (not inside `render`, which re-runs on every interaction) —
 // a real app would memoize its own data the same way rather than regenerate it per render.
-const LARGE_DATASET = generateCandles(10_000, 180, 44);
+const MEDIUM_DATASET = generateCandles(2_500, 180, 44);
+const ALL_FEATURES_DATASET = generateCandles(600, 180, 66);
 
 const TIMEFRAMES: TimeframeEntry[] = [
   { group: "Minutes", options: [{ label: "1 minute", value: "1m" }, { label: "5 minutes", value: "5m" }, { label: "15 minutes", value: "15m" }] },
@@ -84,16 +86,45 @@ export const WithTimeframeHeader: Story = {
   },
 };
 
+export const AllFeatures: Story = {
+  name: "Toutes les options",
+  render: () => {
+    const [timeframe, setTimeframe] = useState("1d");
+    const [showVolume, setShowVolume] = useState(true);
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Tout combiné : outils de dessin (`drawingTools`), plein écran (`fullscreenToggle`), sélecteur d'intervalle
+          (`timeframes`), zoom/pan (`zoomable`), et volume masquable (`showVolume`, coché ci-dessous).
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <Checkbox checked={showVolume} onChange={setShowVolume} label="Afficher le volume" />
+        </div>
+        <CandlestickChart
+          data={ALL_FEATURES_DATASET}
+          drawingTools
+          fullscreenToggle
+          zoomable
+          showVolume={showVolume}
+          timeframes={TIMEFRAMES}
+          timeframe={timeframe}
+          onTimeframeChange={setTimeframe}
+        />
+      </div>
+    );
+  },
+};
+
 export const LargeDataset: Story = {
-  name: "Grand volume de données (10 000 bougies)",
+  name: "Grand volume de données (2 500 bougies)",
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        10 000 bougies (~38 ans de séance). Les bougies, le volume, le crosshair et les lignes de dessin sont rendus
+        2 500 bougies (~10 ans de séance). Les bougies, le volume, le crosshair et les lignes de dessin sont rendus
         sur un seul <code>canvas</code> plutôt qu'un nœud SVG par bougie — zoom/pan/dessin restent fluides à cette
         échelle. Molette ou glisser pour naviguer dans l'historique.
       </p>
-      <CandlestickChart data={LARGE_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" />
+      <CandlestickChart data={MEDIUM_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" />
     </div>
   ),
 };

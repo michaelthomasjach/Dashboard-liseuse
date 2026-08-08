@@ -223,9 +223,22 @@ export function CandlestickChart({
   const volumeHeight = showVolume ? Math.round(plotBoundedHeight * 0.22) : 0;
   const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight - volumeGap);
 
+  // Padded by half the average inter-candle gap on each side, so the first/last candle get a
+  // full slot like every other one — without this, their center sits exactly on the domain's
+  // edge, so half their body/wick (and volume bar) falls past x=0 or x=boundedWidth and is
+  // simply not drawn (the canvas doesn't paint outside its own box), leaving a gap between the
+  // outermost candle and the axis that grows every time the candles themselves get wider.
   const xScale = useMemo(() => {
     const extent = d3.extent(data, (d) => d.date) as [Date, Date];
-    return d3.scaleTime().domain(extent[0] ? extent : [new Date(), new Date()]).range([0, dims.boundedWidth]);
+    if (!extent[0] || !extent[1]) {
+      return d3.scaleTime().domain([new Date(), new Date()]).range([0, dims.boundedWidth]);
+    }
+    const avgGapMs = data.length > 1 ? (extent[1].getTime() - extent[0].getTime()) / (data.length - 1) : 24 * 60 * 60 * 1000;
+    const halfGap = avgGapMs / 2;
+    return d3
+      .scaleTime()
+      .domain([new Date(extent[0].getTime() - halfGap), new Date(extent[1].getTime() + halfGap)])
+      .range([0, dims.boundedWidth]);
   }, [data, dims.boundedWidth]);
 
   const zoomedXScale = transform.rescaleX(xScale);
@@ -562,6 +575,17 @@ export function CandlestickChart({
     ctx.restore();
 
     if (showVolume) {
+      // Divider between the price plot and the volume plot below it, centered in the gap.
+      ctx.save();
+      ctx.strokeStyle = colorGrid;
+      ctx.lineWidth = 1;
+      const dividerY = priceHeight + volumeGap / 2;
+      ctx.beginPath();
+      ctx.moveTo(0, dividerY);
+      ctx.lineTo(dims.boundedWidth, dividerY);
+      ctx.stroke();
+      ctx.restore();
+
       ctx.save();
       ctx.translate(0, priceHeight + volumeGap);
       for (const d of visible) {

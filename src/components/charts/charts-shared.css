@@ -246,6 +246,10 @@
   height: 40px;
   padding: 0 4px;
   border-bottom: 1px solid var(--lq-color-border-subtle);
+  /* Its rendered height must match CandlestickChart's HEADER_HEIGHT constant exactly (used to
+     size the plot below it) — without border-box the 1px border pushes the real height to 41px,
+     a mismatch that let .lq-chart__plot overflow the bottom of .lq-chart by that much. */
+  box-sizing: border-box;
 }
 
 .lq-chart__timeframe-trigger {
