@@ -1610,10 +1610,11 @@ export function CandlestickChart({
         }}
       >
         {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
-            canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
-            box lines up with where the svg/canvas content actually starts. Explicitly sized
-            (not left to intrinsic sizing from its svg child) so it can never drift from `dims`
-            regardless of how the fullscreen flex container's own stretch/centering behaves. */}
+            canvas is: .lq-chart carries fullscreen's own position:fixed/border and only
+            .lq-chart__plot's box lines up with where the svg/canvas content actually starts.
+            Explicitly sized (not left to intrinsic sizing from its svg child) so it can never
+            drift from `dims` regardless of how the fullscreen flex container's own
+            stretch/centering behaves. */}
         {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its
             right border lands exactly where the plot content starts — sizing it to the
             constant alone left an unstyled gap equal to the base margin between the rail

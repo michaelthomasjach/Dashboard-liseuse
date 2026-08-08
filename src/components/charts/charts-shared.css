@@ -13,11 +13,13 @@
   overflow: visible;
 }
 
-/* Positioning context for the canvas + svg pair, kept free of padding on purpose:
-   `.lq-chart` itself gets padding in fullscreen mode, and an absolutely-positioned
-   canvas is placed relative to its ancestor's padding box — ignoring that padding
-   — while the svg (normal flow) starts after it. Without this padding-free wrapper
-   the two would drift apart by the fullscreen padding amount. */
+/* Positioning context for the canvas + svg pair — deliberately its own element rather than
+   `.lq-chart` itself, which carries fullscreen's `position: fixed` (see .lq-chart--fullscreen):
+   an absolutely-positioned canvas is placed relative to its nearest positioned ancestor's
+   padding box, so if `.lq-chart` ever gained padding again the canvas (absolute) and the svg
+   (normal flow, starts after any padding) would drift apart by that amount. Neither element
+   has padding today, but keeping the canvas/svg pair's own positioning context separate from
+   the fixed/bordered box means it stays that way regardless of what `.lq-chart` itself does. */
 .lq-chart__plot {
   position: relative;
   flex-shrink: 0;
@@ -105,11 +107,20 @@
 
 .lq-chart--fullscreen {
   position: fixed;
-  inset: 0;
+  /* Inset *from* the viewport edge instead of `inset: 0` + its own `padding` — `.lq-chart` is
+     the same element that carries `border` and `box-sizing: border-box`, and combining a fixed,
+     edge-to-edge box with padding on top of that border put the border itself in a broken state
+     (`useChartDimensions`'s ResizeObserver reads this element's own content-box, which a
+     zero-inset fixed box with padding doesn't resolve the same way a plain non-fixed box does).
+     `inset` alone gives the exact same visual breathing room around the chart without ever
+     mixing padding into a fixed box's own border-box in the first place — no padding needed at
+     all now, so the box's own content box already starts right past the border, as it always
+     does outside fullscreen. */
+  inset: var(--lq-space-6);
   /* The base border (--lq-color-border-subtle) reads fine normally because there's a page
-     around the chart to contrast against; edge-to-edge in fullscreen there's nothing outside
-     it (the box itself fills the whole viewport) for a low-contrast border to read against, so
-     it goes from "subtle" to "invisible". The stronger, non-subtle border token keeps enough
+     around the chart to contrast against; even inset from the viewport edge, fullscreen still
+     has much less surrounding page than usual for a low-contrast border to read against, so it
+     goes from "subtle" to "barely there". The stronger, non-subtle border token keeps enough
      contrast against the fullscreen background on its own. */
   border-color: var(--lq-color-border);
   /* Below Modal (1000), Popover (1200) and Notification (2000+) — those portal to
@@ -123,7 +134,6 @@
   flex-direction: column;
   justify-content: center;
   background-color: var(--lq-color-bg);
-  padding: var(--lq-space-6);
   animation: lq-chart-fullscreen-in 150ms ease;
 }
 
