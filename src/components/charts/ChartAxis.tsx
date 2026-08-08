@@ -59,30 +59,29 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
     // their labels into each other (most visible while zooming, since the domain keeps
     // changing). Sweep the rendered labels in visual order and hide any one that would overlap
     // the last label still shown, instead of letting them collide.
-    // Measured off the `.tick` group, not the `<text>` itself: a tick's actual position comes
-    // from the `transform="translate(x,y)"` d3 sets on that group, and getBBox() only reflects
-    // an element's own transform, never an ancestor's — measuring the text directly reported
-    // every label at roughly the same (untranslated) local position, so almost all of them
-    // registered as colliding with the first and got hidden.
+    // Measured with getBoundingClientRect(), not getBBox(): getBBox() famously never includes
+    // an element's *own* transform (only the coordinate space its ancestors establish), so
+    // measuring either the text or its parent `.tick` group (both of which are positioned via
+    // their own `transform="translate(x,y)"`) reported every label at roughly the same
+    // untranslated position — nearly all of them then registered as colliding with the first
+    // and got hidden. getBoundingClientRect() accounts for the full transform chain, giving
+    // real, directly-comparable screen coordinates.
     const horizontal = orientation === "bottom";
     const measured = selection
-      .selectAll<SVGGElement, unknown>(".tick")
+      .selectAll<SVGTextElement, unknown>(".tick text")
       .nodes()
-      .map((tickNode) => {
-        const text = tickNode.querySelector<SVGTextElement>("text");
-        if (!text) return null;
-        const box = tickNode.getBBox();
-        return { text, start: horizontal ? box.x : box.y, end: horizontal ? box.x + box.width : box.y + box.height };
+      .map((node) => {
+        const rect = node.getBoundingClientRect();
+        return { node, start: horizontal ? rect.left : rect.top, end: horizontal ? rect.right : rect.bottom };
       })
-      .filter((m): m is { text: SVGTextElement; start: number; end: number } => m !== null)
       .sort((a, b) => a.start - b.start);
 
     let lastEnd: number | null = null;
     for (const m of measured) {
       if (lastEnd !== null && m.start < lastEnd + 6) {
-        m.text.style.display = "none";
+        m.node.style.display = "none";
       } else {
-        m.text.style.display = "";
+        m.node.style.display = "";
         lastEnd = m.end;
       }
     }

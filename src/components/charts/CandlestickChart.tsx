@@ -803,11 +803,10 @@ export function CandlestickChart({
         {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its
             right border lands exactly where the plot content starts — sizing it to the
             constant alone left an unstyled gap equal to the base margin between the rail
-            and the first candle. Height stops at the bounded plot area (candles + volume),
-            not the full `plotHeight` — the latter also includes the date-axis label strip
-            below it, which made the rail's border overshoot past where the plot visually ends. */}
+            and the first candle. Height spans the full plot (candles + volume + the date-axis
+            label strip below them), reaching all the way down to the chart's own bottom border. */}
         {drawingTools && (
-          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: dims.margin.top + plotBoundedHeight }}>
+          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
             <button
               type="button"
               className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
