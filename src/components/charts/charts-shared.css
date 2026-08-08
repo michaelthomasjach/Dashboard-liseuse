@@ -89,7 +89,8 @@
   fill: transparent;
 }
 
-.lq-chart__price-volume-divider {
+.lq-chart__price-volume-divider,
+.lq-chart__axis-line-extension {
   stroke: var(--lq-color-border-subtle);
   stroke-width: 1;
 }

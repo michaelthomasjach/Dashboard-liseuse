@@ -1458,6 +1458,18 @@ export function CandlestickChart({
             )}
 
             <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${plotBoundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
+            {/* The date axis's own domain line only spans [0, boundedWidth] — its own scale's
+                range, i.e. the canvas/plot area — so it stopped short of the chart's actual
+                right edge, leaving the price-axis label column above it without a matching
+                line underneath. Same fix as the price/volume divider above: continue it across
+                that column with a plain SVG line. */}
+            <line
+              className="lq-chart__axis-line-extension"
+              x1={dims.boundedWidth}
+              x2={dims.boundedWidth + dims.margin.right}
+              y1={plotBoundedHeight}
+              y2={plotBoundedHeight}
+            />
 
             <rect
               ref={zoomRef}
