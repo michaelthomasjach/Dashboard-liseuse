@@ -170,13 +170,16 @@
   top: 0;
   left: 0;
   z-index: 1000;
+  background-color: var(--lq-color-bg);
+  border-right: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-chart__tools-rail-items {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 4px;
   padding-top: 4px;
-  background-color: var(--lq-color-bg);
-  border-right: 1px solid var(--lq-color-border-subtle);
 }
 
 .lq-chart__icon-button--active {
