@@ -10,7 +10,7 @@ import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
 import { Modal } from "../primitives/Modal";
-import { MaximizeIcon, MinimizeIcon, TrendLineIcon, ChevronDownIcon, PlusIcon } from "../icons";
+import { MaximizeIcon, MinimizeIcon, TrendLineIcon, HorizontalLineIcon, VerticalLineIcon, ChevronDownIcon, PlusIcon } from "../icons";
 import "./charts-shared.css";
 
 export interface Candle {
@@ -50,6 +50,14 @@ interface DataPoint {
   x: Date;
   y: number;
 }
+
+type DrawingToolType = "trendline" | "horizontal" | "vertical";
+
+const DRAWING_TOOLS: { type: DrawingToolType; label: string; icon: typeof TrendLineIcon }[] = [
+  { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
+  { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
+  { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
+];
 
 export interface TimeframeOption {
   label: string;
@@ -181,7 +189,11 @@ export function CandlestickChart({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
-  const [activeTool, setActiveTool] = useState<"trendline" | null>(null);
+  const [activeTool, setActiveTool] = useState<DrawingToolType | null>(null);
+  // Which tool the rail's single button currently represents — stays selected across draws,
+  // independent of whether drawing is actually active right now. Changed via the flyout menu.
+  const [selectedToolType, setSelectedToolType] = useState<DrawingToolType>("trendline");
+  const [toolMenuOpen, setToolMenuOpen] = useState(false);
   const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
@@ -195,6 +207,7 @@ export function CandlestickChart({
   const drawingIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
+  const toolMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const [themeTick, setThemeTick] = useState(0);
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
@@ -377,7 +390,7 @@ export function CandlestickChart({
     setPreviewPoint(null);
   }
 
-  function handleToolClick(tool: "trendline") {
+  function handleToolClick(tool: DrawingToolType) {
     if (activeTool === tool) {
       cancelDrawingTool();
     } else {
@@ -385,6 +398,15 @@ export function CandlestickChart({
       setPendingPoint(null);
       setPreviewPoint(null);
     }
+  }
+
+  // Picking a tool from the flyout menu only changes what the rail's single button represents —
+  // it doesn't start drawing. The user still has to click that button afterward, same as any
+  // other tool selection.
+  function handleSelectToolType(type: DrawingToolType) {
+    setSelectedToolType(type);
+    setToolMenuOpen(false);
+    cancelDrawingTool();
   }
 
   useEffect(() => {
@@ -407,6 +429,39 @@ export function CandlestickChart({
   function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
     if (!activeTool) return;
     const point = toDataPoint(e);
+
+    // Axis-constrained lines only have one degree of freedom, so a single click places them —
+    // no pending/preview step like the free trend line below.
+    if (activeTool === "horizontal") {
+      const rect = zoomRef.current!.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const [d0, d1] = xScale.domain() as [Date, Date];
+      const drawing: TrendLineDrawing =
+        showVolume && mouseY > priceHeight
+          ? {
+              id: `drawing-${drawingIdRef.current++}`,
+              x1: d0,
+              y1: volumeScale.invert(mouseY - priceHeight),
+              x2: d1,
+              y2: volumeScale.invert(mouseY - priceHeight),
+              lineType: "horizontal",
+              valueAxis: "volume",
+            }
+          : { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: point.y, x2: d1, y2: point.y, lineType: "horizontal" };
+      commitDrawings([...drawings, drawing]);
+      cancelDrawingTool();
+      return;
+    }
+    if (activeTool === "vertical") {
+      const [p0, p1] = priceScale.domain() as [number, number];
+      commitDrawings([
+        ...drawings,
+        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: p0, x2: point.x, y2: p1, lineType: "vertical" },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -901,6 +956,8 @@ export function CandlestickChart({
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
   const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
+  const selectedTool = DRAWING_TOOLS.find((t) => t.type === selectedToolType) ?? DRAWING_TOOLS[0];
+  const SelectedToolIcon = selectedTool.icon;
 
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
@@ -994,15 +1051,53 @@ export function CandlestickChart({
         {drawingTools && (
           <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
             <div className="lq-chart__tools-rail-items">
-              <button
-                type="button"
-                className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => handleToolClick("trendline")}
-                aria-label="Ligne de tendance"
-                aria-pressed={activeTool === "trendline"}
-              >
-                <TrendLineIcon size={14} />
-              </button>
+              {/* The chevron is invisible until this group (button or chevron) is hovered —
+                  see .lq-chart__tool-chevron in charts-shared.css. Picking a tool from its menu
+                  only changes what this button represents; the user still has to click it
+                  afterward to actually start drawing (see handleSelectToolType). */}
+              <div className="lq-chart__tool-group">
+                <button
+                  type="button"
+                  className={["lq-chart__icon-button", activeTool !== null && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                  onClick={() => handleToolClick(selectedToolType)}
+                  aria-label={selectedTool.label}
+                  aria-pressed={activeTool !== null}
+                >
+                  <SelectedToolIcon size={14} />
+                </button>
+                <button
+                  ref={toolMenuAnchorRef}
+                  type="button"
+                  className={["lq-chart__tool-chevron", toolMenuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
+                  onClick={() => setToolMenuOpen((o) => !o)}
+                  aria-label="Autres outils de dessin"
+                >
+                  <ChevronDownIcon size={8} />
+                </button>
+                <Popover open={toolMenuOpen} onClose={() => setToolMenuOpen(false)} anchorRef={toolMenuAnchorRef} placement="bottom">
+                  <div className="lq-chart__tool-menu">
+                    {DRAWING_TOOLS.map((opt) => {
+                      const OptionIcon = opt.icon;
+                      return (
+                        <button
+                          key={opt.type}
+                          type="button"
+                          className={[
+                            "lq-chart__tool-menu-option",
+                            opt.type === selectedToolType && "lq-chart__tool-menu-option--selected",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
+                          onClick={() => handleSelectToolType(opt.type)}
+                        >
+                          <OptionIcon size={14} />
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Popover>
+              </div>
             </div>
           </div>
         )}

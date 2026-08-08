@@ -55,4 +55,6 @@ export {
   CopyIcon,
   CursorArrowIcon,
   TrendLineIcon,
+  HorizontalLineIcon,
+  VerticalLineIcon,
 } from "./icons";

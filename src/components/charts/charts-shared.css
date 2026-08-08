@@ -182,6 +182,77 @@
   padding-top: 4px;
 }
 
+.lq-chart__tool-group {
+  position: relative;
+}
+
+/* Invisible until the tool button or the chevron itself is hovered/focused — the group covers
+   both, since the chevron is a descendant of it (hovering the chevron always also counts as
+   hovering the group). Forced visible while its own menu is open so it doesn't vanish out from
+   under an open menu. */
+.lq-chart__tool-chevron {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  padding: 0;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.lq-chart__tool-group:hover .lq-chart__tool-chevron,
+.lq-chart__tool-chevron:focus-visible,
+.lq-chart__tool-chevron--visible {
+  opacity: 1;
+}
+
+.lq-chart__tool-chevron:hover {
+  color: var(--lq-color-text);
+  border-color: var(--lq-color-border);
+}
+
+.lq-chart__tool-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--lq-space-2);
+  min-width: 170px;
+}
+
+.lq-chart__tool-menu-option {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart__tool-menu-option:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__tool-menu-option--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
+  font-weight: 700;
+}
+
 .lq-chart__icon-button--active {
   color: var(--lq-color-accent-contrast);
   background-color: var(--lq-color-accent);

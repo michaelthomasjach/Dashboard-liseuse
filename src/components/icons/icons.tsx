@@ -384,3 +384,17 @@ export const TrendLineIcon = (props: IconProps) => (
     <circle cx="18" cy="6" r="1.6" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+export const HorizontalLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 12h16" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+export const VerticalLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M12 4v16" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+  </IconBase>
+);
