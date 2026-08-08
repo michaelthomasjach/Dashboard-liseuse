@@ -129,7 +129,7 @@ const HEADER_HEIGHT = 40;
  *  date axis it mirrors (but clear of the date label's own badge just below the plot), and
  *  still inside the interactive rect so hovering it never counts as leaving the plot (see
  *  .lq-chart__plot's onPointerLeave). */
-const CROSSHAIR_ADD_INSET = 28;
+const CROSSHAIR_ADD_INSET = 20;
 /** How far the price/volume value badges' own left edge overlaps the chart, so their background
  *  englobes the "+" button living at its start instead of the button sitting outside it. */
 const AXIS_VALUE_Y_OVERLAP = 20;

@@ -197,6 +197,8 @@ npm run typecheck
 npm run build        # build de la lib (dist/) — types + ESM + CJS + CSS
 ```
 
+Chaque story a un onglet **Docs** généré automatiquement (`@storybook/addon-docs`, `tags: ["autodocs"]` dans `.storybook/preview.tsx`) avec un bouton **Show code** sous le rendu — le JSX exact de la story, prêt à copier-coller. `Foundations/Icons` liste tous les icônes exportés par le kit (générés depuis les exports du module, pas une liste à maintenir à la main) ; `Foundations/Animated Icons` détaille en plus le comparatif statique/`animated` des icônes météo.
+
 ## Publication
 
 ```bash

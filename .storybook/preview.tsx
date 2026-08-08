@@ -46,6 +46,9 @@ export const globalTypes = {
 };
 
 const preview: Preview = {
+  // Generates a "Docs" entry per story file with a "Show code" toggle under each canvas —
+  // lets consumers copy-paste the exact JSX a story renders straight out of Storybook.
+  tags: ["autodocs"],
   parameters: {
     controls: {
       matchers: {
