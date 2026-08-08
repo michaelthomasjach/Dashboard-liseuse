@@ -107,6 +107,10 @@ const TOOLS_RAIL_WIDTH = 40;
 /** Height of the (non-floating) header row holding the timeframe picker and reset/fullscreen
  *  buttons — subtracted from the available height before laying out the plot itself. */
 const HEADER_HEIGHT = 40;
+/** Distance (px) the quick-add "+" buttons sit inset from the plot's own right/bottom edge —
+ *  close to the price/date axis they mirror, but still inside the interactive rect so hovering
+ *  them never counts as leaving the plot (see .lq-chart__plot's onPointerLeave). */
+const CROSSHAIR_ADD_INSET = 16;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -1001,11 +1005,11 @@ export function CandlestickChart({
             <button
               type="button"
               className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
-              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + 4 }}
+              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth - CROSSHAIR_ADD_INSET }}
               onClick={addPriceLine}
               aria-label="Ajouter une ligne de prix horizontale"
             >
-              <PlusIcon size={10} />
+              <PlusIcon size={8} />
             </button>
           </>
         )}
@@ -1030,11 +1034,11 @@ export function CandlestickChart({
             <button
               type="button"
               className="lq-chart__crosshair-add lq-chart__crosshair-add--x"
-              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + 4 }}
+              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight - CROSSHAIR_ADD_INSET }}
               onClick={addDateLine}
               aria-label="Ajouter une ligne de date verticale"
             >
-              <PlusIcon size={10} />
+              <PlusIcon size={8} />
             </button>
           </>
         )}
