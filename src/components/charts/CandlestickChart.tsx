@@ -98,7 +98,7 @@ export interface CandlestickChartProps {
   className?: string;
 }
 
-const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 8, right: 56, bottom: 24, left: 8 };
+const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 56, bottom: 24, left: 8 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 const DRAWING_HIT_DISTANCE = 8;
 /** Width of the drawing-tools rail. Added to the left margin so the plot/axes never draw
@@ -787,8 +787,12 @@ export function CandlestickChart({
             box lines up with where the svg/canvas content actually starts. Explicitly sized
             (not left to intrinsic sizing from its svg child) so it can never drift from `dims`
             regardless of how the fullscreen flex container's own stretch/centering behaves. */}
+        {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its
+            right border lands exactly where the plot content starts — sizing it to the
+            constant alone left an unstyled gap equal to the base margin between the rail
+            and the first candle. */}
         {drawingTools && (
-          <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height: plotHeight }}>
+          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
             <button
               type="button"
               className={["lq-chart__icon-button", activeTool === "trendline" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
@@ -820,15 +824,28 @@ export function CandlestickChart({
             <ChartAxis scale={zoomedPriceScale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} tickFormat={(v) => pFmt(Number(v))} />
 
             {showVolume && (
-              <g transform={`translate(0, ${priceHeight + volumeGap})`}>
-                <ChartAxis
-                  scale={volumeScale}
-                  orientation="right"
-                  transform={`translate(${dims.boundedWidth}, 0)`}
-                  ticks={2}
-                  tickFormat={(v) => vFmt(Number(v))}
+              <>
+                <g transform={`translate(0, ${priceHeight + volumeGap})`}>
+                  <ChartAxis
+                    scale={volumeScale}
+                    orientation="right"
+                    transform={`translate(${dims.boundedWidth}, 0)`}
+                    ticks={2}
+                    tickFormat={(v) => vFmt(Number(v))}
+                  />
+                </g>
+                {/* Continues the canvas-drawn price/volume divider (which only covers
+                    [0, boundedWidth], the canvas's own extent) across the price axis's
+                    tick-label column so the divider reaches the full chart width and
+                    visually separates the price ticks from the volume ticks too. */}
+                <line
+                  className="lq-chart__price-volume-divider"
+                  x1={dims.boundedWidth}
+                  x2={dims.boundedWidth + dims.margin.right}
+                  y1={priceHeight + volumeGap / 2}
+                  y2={priceHeight + volumeGap / 2}
                 />
-              </g>
+              </>
             )}
 
             <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${plotBoundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />

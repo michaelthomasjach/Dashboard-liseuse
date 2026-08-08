@@ -89,6 +89,11 @@
   fill: transparent;
 }
 
+.lq-chart__price-volume-divider {
+  stroke: var(--lq-color-border-subtle);
+  stroke-width: 1;
+}
+
 .lq-chart__axis-drag--x {
   cursor: ew-resize;
 }
