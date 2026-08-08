@@ -14,6 +14,11 @@ export const Default: Story = {
     const [value, setValue] = useState<Date | null>(new Date());
     return (
       <div style={{ maxWidth: 280 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Liste déroulante par pas de 15 minutes (défaut) — scroller et cliquer un créneau. Pour une heure précise
+          hors de la grille, tape-la directement dans le champ au-dessus de la liste (ex. "9:07"), Entrée ou clic
+          ailleurs pour valider.
+        </p>
         <DateTimePicker label="Date et heure du rendez-vous" value={value} onChange={setValue} />
       </div>
     );

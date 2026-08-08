@@ -9,10 +9,15 @@ export interface ModalProps {
   /** Defaults to a full-width "Fermer" button; pass null to omit, or your own footer. */
   footer?: ReactNode | null;
   closeLabel?: string;
+  /** `"default"` is the small centered dialog; `"fullscreen"` takes up nearly the whole
+   *  viewport (a thin margin all round) — for a detail view or editor that needs real room
+   *  instead of a small popup. Default "default". */
+  size?: "default" | "fullscreen";
 }
 
-/** Centered dialog used for a row's detail view (e.g. the light color/temperature picker). */
-export function Modal({ open, onClose, title, children, footer, closeLabel = "Fermer" }: ModalProps) {
+/** Centered dialog used for a row's detail view (e.g. the light color/temperature picker).
+ *  Use `size="fullscreen"` for content that needs the whole screen instead. */
+export function Modal({ open, onClose, title, children, footer, closeLabel = "Fermer", size = "default" }: ModalProps) {
   useEffect(() => {
     if (!open) return;
     const onKeyDown = (e: KeyboardEvent) => {
@@ -36,7 +41,7 @@ export function Modal({ open, onClose, title, children, footer, closeLabel = "Fe
   return (
     <div className="lq-modal__overlay" onClick={onClose}>
       <div
-        className="lq-modal"
+        className={["lq-modal", size === "fullscreen" && "lq-modal--fullscreen"].filter(Boolean).join(" ")}
         role="dialog"
         aria-modal="true"
         aria-label={typeof title === "string" ? title : undefined}

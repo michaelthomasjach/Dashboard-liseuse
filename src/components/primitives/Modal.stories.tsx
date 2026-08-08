@@ -39,3 +39,21 @@ export const LightDetail: Story = {
     );
   },
 };
+
+export const Fullscreen: Story = {
+  name: "Plein écran (quasi-total)",
+  render: () => {
+    const [open, setOpen] = useState(true);
+    return (
+      <>
+        <Button onClick={() => setOpen(true)}>Ouvrir la modale plein écran</Button>
+        <Modal open={open} onClose={() => setOpen(false)} title="Éditeur" size="fullscreen">
+          <p style={{ color: "var(--lq-color-text-muted)" }}>
+            `size="fullscreen"` occupe presque tout le viewport (96vw × 92vh) au lieu de la petite boîte centrée par
+            défaut — pour un éditeur ou une vue de détail qui a besoin de place.
+          </p>
+        </Modal>
+      </>
+    );
+  },
+};

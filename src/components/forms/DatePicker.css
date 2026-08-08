@@ -162,62 +162,67 @@
 .lq-date-picker__time {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: var(--lq-space-3);
+  gap: var(--lq-space-2);
   padding: var(--lq-space-3);
   border-left: 1px solid var(--lq-color-border-subtle);
-  min-width: 100px;
+  width: 116px;
 }
 
-.lq-date-picker__time-display {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.lq-date-picker__time-stepper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-}
-
-.lq-date-picker__time-stepper button {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 20px;
-  color: var(--lq-color-text-muted);
-  background: none;
+/* Precise entry: type any time here (e.g. "9:07"), even off the list's step grid. */
+.lq-date-picker__time-input {
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-bg);
   border: 1px solid var(--lq-color-border-subtle);
   border-radius: var(--lq-radius-sm);
+}
+
+.lq-date-picker__time-input:focus-visible {
+  outline: none;
+  border-color: var(--lq-color-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lq-color-focus-ring) 30%, transparent);
+}
+
+/* Coarse entry: scroll and click one of the fixed-step (default 15 min) options. */
+.lq-date-picker__time-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  border: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-date-picker__time-option {
+  display: block;
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
   cursor: pointer;
 }
 
-.lq-date-picker__time-stepper button:hover {
-  color: var(--lq-color-text);
+.lq-date-picker__time-option:hover {
   background-color: var(--lq-color-hover);
 }
 
-.lq-date-picker__time-value {
-  font-size: 1.4rem;
+.lq-date-picker__time-option--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  color: var(--lq-color-text);
-  padding: 2px 0;
-}
-
-.lq-date-picker__time-colon {
-  align-self: center;
-  font-size: 1.4rem;
-  font-weight: 700;
-  color: var(--lq-color-text-muted);
 }
 
 .lq-date-picker__time-confirm {
   width: 100%;
-  margin-top: auto;
   padding: var(--lq-space-2) var(--lq-space-3);
   font-family: inherit;
   font-size: 0.8rem;

@@ -16,6 +16,7 @@
    the two would drift apart by the fullscreen padding amount. */
 .lq-chart__plot {
   position: relative;
+  flex-shrink: 0;
 }
 
 .lq-chart__canvas {

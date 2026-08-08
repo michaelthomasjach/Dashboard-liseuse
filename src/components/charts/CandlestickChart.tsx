@@ -300,17 +300,27 @@ export function CandlestickChart({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  const slotWidth = data.length > 0 ? dims.boundedWidth / data.length : 0;
-  const candleWidth = Math.max(1, Math.min(24, slotWidth * transform.k * 0.6));
+  // Precise (unpadded) index range of candles actually inside the zoomed time domain — used
+  // to size candles, separately from `visible` below (which pads a couple extra candles on
+  // each side so partially-visible edge candles still render instead of popping in/out).
+  const visibleRange = useMemo(() => {
+    if (data.length === 0) return { start: 0, end: 0 };
+    const [d0, d1] = zoomedXScale.domain();
+    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
+    return { start: bisect(data, d0 as Date), end: bisect(data, d1 as Date) };
+  }, [data, zoomedXScale]);
 
   const visible = useMemo(() => {
     if (data.length === 0) return [];
-    const [d0, d1] = zoomedXScale.domain();
-    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
-    const start = Math.max(0, bisect(data, d0 as Date) - 2);
-    const end = Math.min(data.length, bisect(data, d1 as Date) + 2);
+    const start = Math.max(0, visibleRange.start - 2);
+    const end = Math.min(data.length, visibleRange.end + 2);
     return data.slice(start, end);
-  }, [data, zoomedXScale]);
+  }, [data, visibleRange]);
+
+  // Each candle fills up to 80% of the space actually available to it at the current zoom —
+  // with a single candle visible, that's 80% of the whole plot width, not a small fixed cap.
+  const visibleCount = Math.max(1, visibleRange.end - visibleRange.start);
+  const candleWidth = Math.max(1, (dims.boundedWidth / visibleCount) * 0.8);
 
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
@@ -564,10 +574,15 @@ export function CandlestickChart({
         if (!dragEndpointRef.current) updateHoveredDrawingId(null);
       }}
     >
-      <div className="lq-chart__plot">
+      <div className="lq-chart__plot" style={{ width: dims.width, height: dims.height }}>
         {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
             canvas is: .lq-chart carries padding in fullscreen mode and only .lq-chart__plot's
-            box lines up with where the svg/canvas content actually starts. */}
+            box lines up with where the svg/canvas content actually starts. Explicitly sized
+            (not left to intrinsic sizing from its svg child) so it can never drift from `dims`
+            regardless of how the fullscreen flex container's own stretch/centering behaves —
+            in fullscreen .lq-chart is a flex column and .lq-chart__plot is its only flex item,
+            and relying on the svg's own width/height to indirectly size it was fragile enough
+            that the toolbar/rail (anchored to this box) kept ending up misplaced there. */}
         <div className="lq-chart__toolbar" style={drawingTools ? { right: TOOLS_RAIL_WIDTH } : undefined}>
           {zoomable && isZoomed && (
             <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
