@@ -10,7 +10,7 @@ import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
 import { Modal } from "../primitives/Modal";
-import { MaximizeIcon, MinimizeIcon, TrendLineIcon, ChevronDownIcon } from "../icons";
+import { MaximizeIcon, MinimizeIcon, TrendLineIcon, ChevronDownIcon, PlusIcon } from "../icons";
 import "./charts-shared.css";
 
 export interface Candle {
@@ -317,6 +317,22 @@ export function CandlestickChart({
 
   function resetYAxis() {
     setYTransform(d3.zoomIdentity);
+  }
+
+  // Both span the dataset's own (unzoomed) extent rather than the currently visible one, so
+  // they still reach edge to edge after the user zooms/pans away from where they were added —
+  // a price alert or a session marker shouldn't disappear just because the view moved.
+  function addPriceLine() {
+    if (hoverY === null) return;
+    const price = zoomedPriceScale.invert(hoverY);
+    const [d0, d1] = xScale.domain() as [Date, Date];
+    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: price, x2: d1, y2: price }]);
+  }
+
+  function addDateLine() {
+    if (!hovered) return;
+    const [p0, p1] = priceScale.domain() as [number, number];
+    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1 }]);
   }
 
   function cancelDrawingTool() {
@@ -972,6 +988,9 @@ export function CandlestickChart({
 
         {hoverY !== null && (
           <div className="lq-chart__axis-value lq-chart__axis-value--y" style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}>
+            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
+              <PlusIcon size={10} />
+            </button>
             {pFmt(zoomedPriceScale.invert(hoverY))}
           </div>
         )}
@@ -988,6 +1007,9 @@ export function CandlestickChart({
             className="lq-chart__axis-value lq-chart__axis-value--x"
             style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
           >
+            <button type="button" className="lq-chart__axis-value-add" onClick={addDateLine} aria-label="Ajouter une ligne de date verticale">
+              <PlusIcon size={10} />
+            </button>
             {dFmt(hovered.date)}
           </div>
         )}
