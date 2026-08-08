@@ -17,6 +17,10 @@ type Story = StoryObj<typeof CandlestickChart>;
 const MEDIUM_DATASET = generateCandles(2_500, 180, 44);
 const ALL_FEATURES_DATASET = generateCandles(600, 180, 66);
 
+// Taller than the `height` prop's own default (380) — a more realistic size for these demos,
+// which otherwise felt cramped compared to how the chart gets used in a real dashboard.
+const STORY_HEIGHT = 640;
+
 const TIMEFRAMES: TimeframeEntry[] = [
   { group: "Minutes", options: [{ label: "1 minute", value: "1m" }, { label: "5 minutes", value: "5m" }, { label: "15 minutes", value: "15m" }] },
   { group: "Heures", options: [{ label: "1 heure", value: "1h" }, { label: "4 heures", value: "4h" }] },
@@ -33,7 +37,7 @@ export const Default: Story = {
         jusqu'à n'afficher qu'une seule bougie, sans jamais faire chevaucher les bougies entre elles. Survoler le
         graphe affiche le prix et la date exacts directement sur les axes, au lieu d'une infobulle flottante.
       </p>
-      <CandlestickChart data={generateCandles(220, 180, 11)} />
+      <CandlestickChart data={generateCandles(220, 180, 11)} height={STORY_HEIGHT} />
     </div>
   ),
 };
@@ -42,6 +46,20 @@ export const WithoutVolume: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <CandlestickChart data={generateCandles(120, 90, 22)} showVolume={false} height={320} />
+    </div>
+  ),
+};
+
+export const CustomSize: Story = {
+  name: "Dimensions personnalisées",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        `width`/`height` (px) : par défaut le graphe remplit 100% de son conteneur en largeur et fait 380px de haut —
+        passe l'un ou l'autre pour fixer une taille explicite à la place (ignorés en plein écran, qui remplit
+        toujours le viewport).
+      </p>
+      <CandlestickChart data={generateCandles(180, 140, 88)} width={640} height={480} />
     </div>
   ),
 };
@@ -59,7 +77,7 @@ export const WithDrawingTools: Story = {
         épaisseur, couleur, coordonnées) dans une modale. Les lignes sont ancrées en coordonnées date/prix : elles
         suivent le zoom et le déplacement du graphe.
       </p>
-      <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools />
+      <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools height={STORY_HEIGHT} />
     </div>
   ),
 };
@@ -80,6 +98,7 @@ export const WithTimeframeHeader: Story = {
           timeframes={TIMEFRAMES}
           timeframe={timeframe}
           onTimeframeChange={setTimeframe}
+          height={STORY_HEIGHT}
         />
       </div>
     );
@@ -99,7 +118,7 @@ export const WithIndicators: Story = {
         <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix, ils suivent
         le zoom/déplacement comme les bougies.
       </p>
-      <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators />
+      <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators height={STORY_HEIGHT} />
     </div>
   ),
 };
@@ -133,6 +152,7 @@ export const AllFeatures: Story = {
           timeframes={TIMEFRAMES}
           timeframe={timeframe}
           onTimeframeChange={setTimeframe}
+          height={STORY_HEIGHT}
         />
       </div>
     );
@@ -150,7 +170,7 @@ export const LargeDataset: Story = {
         (`initialVisibleCandles`, appliqué une seule fois au montage) plutôt que tout l'historique dézoomé — clic sur
         "Réinitialiser le zoom" pour voir les 2 500.
       </p>
-      <CandlestickChart data={MEDIUM_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" />
+      <CandlestickChart data={MEDIUM_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
     </div>
   ),
 };
@@ -172,7 +192,7 @@ export const WithYAutoScaling: Story = {
         <div style={{ marginBottom: 12 }}>
           <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
         </div>
-        <CandlestickChart data={MEDIUM_DATASET} YAutoScaling={yAutoScaling} timeframes={TIMEFRAMES} timeframe="1d" />
+        <CandlestickChart data={MEDIUM_DATASET} YAutoScaling={yAutoScaling} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
       </div>
     );
   },

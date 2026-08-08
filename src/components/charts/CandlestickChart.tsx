@@ -197,6 +197,12 @@ function findTimeframeLabel(entries: TimeframeEntry[] | undefined, value: string
 
 export interface CandlestickChartProps {
   data: Candle[];
+  /** Fixed pixel width. Omitted (default): fills 100% of the parent container's width, like
+   *  every other chart in this library — pass a number only to opt out of that. Ignored while
+   *  in fullscreen (the toggle always fills the viewport). */
+  width?: number;
+  /** Fixed pixel height. Default 380. Ignored while in fullscreen (the toggle always fills the
+   *  viewport). */
   height?: number;
   zoomable?: boolean;
   showVolume?: boolean;
@@ -309,6 +315,7 @@ function fromDateInputValue(text: string, fallback: Date): Date {
 
 export function CandlestickChart({
   data,
+  width,
   height = 380,
   zoomable = true,
   showVolume = true,
@@ -434,7 +441,10 @@ export function CandlestickChart({
   const resolvedMargin = drawingTools
     ? { ...baseMargin, left: (baseMargin.left ?? DEFAULT_MARGIN.left ?? 8) + TOOLS_RAIL_WIDTH }
     : baseMargin;
-  const [ref, dims] = useChartDimensions(resolvedMargin, { height: isFullscreen ? undefined : height });
+  const [ref, dims] = useChartDimensions(resolvedMargin, {
+    width: isFullscreen ? undefined : width,
+    height: isFullscreen ? undefined : height,
+  });
 
   const showHeader = fullscreenToggle || zoomable || !!timeframes?.length || showIndicators;
   const headerSpace = showHeader ? HEADER_HEIGHT : 0;
@@ -1318,10 +1328,11 @@ export function CandlestickChart({
     ref,
   ]);
 
-  if (dims.width === 0) return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }} />;
+  if (dims.width === 0)
+    return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width, height: isFullscreen ? undefined : height }} />;
   if (data.length === 0) {
     return (
-      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }}>
+      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width, height: isFullscreen ? undefined : height }}>
         <div className="lq-chart__empty">Aucune donnée</div>
       </div>
     );
@@ -1335,7 +1346,7 @@ export function CandlestickChart({
   const SelectedToolIcon = selectedTool.icon;
 
   return (
-    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
       {showHeader && (
         <div className="lq-chart__header" style={{ width: dims.width }}>
           {timeframes && timeframes.length > 0 && (

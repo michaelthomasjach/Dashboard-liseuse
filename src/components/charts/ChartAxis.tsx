@@ -87,10 +87,15 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
       const zoneEnd = horizontal ? Math.max(s1.x, s2.x) : Math.max(s1.y, s2.y);
 
       selection.selectAll<SVGTextElement, unknown>(".tick text").each(function () {
+        // `visibility`, not `display: none` — a display:none element has an empty
+        // getBoundingClientRect() (all zeros), so once hidden it would measure as
+        // trivially overflowing forever (0 < zoneStart is almost always true) and could
+        // never be re-measured back into view on a later tick. visibility:hidden keeps
+        // the real box available to measure while still not painting it.
         const rect = this.getBoundingClientRect();
         const start = horizontal ? rect.left : rect.top;
         const end = horizontal ? rect.right : rect.bottom;
-        this.style.display = start < zoneStart || end > zoneEnd ? "none" : "";
+        this.style.visibility = start < zoneStart || end > zoneEnd ? "hidden" : "";
       });
     }
   });

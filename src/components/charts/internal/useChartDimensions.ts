@@ -23,15 +23,18 @@ const DEFAULT_MARGIN: ChartMargin = { top: 16, right: 16, bottom: 32, left: 48 }
  * number of pixels, or omitted to derive it from `aspectRatio` (height = width / ratio)
  * or, failing that, the wrapper's own observed height — pass `height: undefined`
  * (e.g. while in fullscreen mode, see `useFullscreen`) to let the chart fill
- * whatever height its container actually has.
+ * whatever height its container actually has. `width` works the same way, fixed
+ * instead of following the wrapper's own (usually 100%-of-parent) observed width —
+ * the caller is responsible for also giving the wrapper an inline width matching it,
+ * since this hook only measures, it doesn't itself size the element.
  */
 export function useChartDimensions(
   margin: Partial<ChartMargin> = {},
-  options: { height?: number; aspectRatio?: number } = {}
+  options: { width?: number; height?: number; aspectRatio?: number } = {}
 ): [RefObject<HTMLDivElement>, ChartDimensions] {
   const ref = useRef<HTMLDivElement>(null);
   const resolvedMargin: ChartMargin = { ...DEFAULT_MARGIN, ...margin };
-  const [size, setSize] = useState({ width: 0, height: options.height ?? 320 });
+  const [size, setSize] = useState({ width: options.width ?? 0, height: options.height ?? 320 });
 
   useEffect(() => {
     const el = ref.current;
@@ -40,14 +43,14 @@ export function useChartDimensions(
     const observer = new ResizeObserver((entries) => {
       const entry = entries[0];
       if (!entry) return;
-      const width = entry.contentRect.width;
+      const width = options.width ?? entry.contentRect.width;
       const height = options.height ?? (options.aspectRatio ? width / options.aspectRatio : entry.contentRect.height || 320);
       setSize({ width, height });
     });
 
     observer.observe(el);
     return () => observer.disconnect();
-  }, [options.height, options.aspectRatio]);
+  }, [options.width, options.height, options.aspectRatio]);
 
   const boundedWidth = Math.max(0, size.width - resolvedMargin.left - resolvedMargin.right);
   const boundedHeight = Math.max(0, size.height - resolvedMargin.top - resolvedMargin.bottom);

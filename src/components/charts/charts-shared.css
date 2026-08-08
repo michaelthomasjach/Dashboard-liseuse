@@ -106,7 +106,19 @@
 .lq-chart--fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  /* The base border (--lq-color-border-subtle) reads fine normally because there's a page
+     around the chart to contrast against; edge-to-edge in fullscreen there's nothing outside
+     it (the box itself fills the whole viewport) for a low-contrast border to read against, so
+     it goes from "subtle" to "invisible". The stronger, non-subtle border token keeps enough
+     contrast against the fullscreen background on its own. */
+  border-color: var(--lq-color-border);
+  /* Below Modal (1000), Popover (1200) and Notification (2000+) — those portal to
+     document.body as siblings of this element, so they only render on top of it if
+     their own z-index actually beats it. This was previously 3000 (higher than all of
+     them), which silently hid any dropdown/modal opened while the chart was
+     fullscreen — it painted, just behind the chart. Still comfortably above ordinary
+     in-flow page content. */
+  z-index: 500;
   display: flex;
   flex-direction: column;
   justify-content: center;
