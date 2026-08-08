@@ -35,7 +35,9 @@ export const Default: Story = {
         dates à la fois — utile une fois rescalé verticalement pour retrouver des bougies sorties de l'écran). Glisser
         sur l'axe des prix (droite) rescale verticalement, glisser sur l'axe des dates (bas) rescale horizontalement —
         jusqu'à n'afficher qu'une seule bougie, sans jamais faire chevaucher les bougies entre elles. Survoler le
-        graphe affiche le prix et la date exacts directement sur les axes, au lieu d'une infobulle flottante.
+        graphe affiche le prix et la date exacts directement sur les axes, au lieu d'une infobulle flottante. Glisser
+        au-delà de la première/dernière bougie révèle un espace vide ("passé"/"futur") au lieu de rester bloqué sur
+        les bords — jusqu'à 50% de la largeur actuellement visible de chaque côté, quel que soit le niveau de zoom.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 11)} height={STORY_HEIGHT} />
     </div>
@@ -70,12 +72,15 @@ export const WithDrawingTools: Story = {
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         Bouton "ligne de tendance" dans la colonne d'outils à gauche du graphe (une vraie zone réservée, pas des
-        boutons superposés — elle reste visible en plein écran). 1er clic = début de la ligne, 2ème clic = fin (la
-        ligne suit le curseur entre les deux). Échap ou re-clic sur l'outil annule. Survoler une ligne dessinée fait
-        apparaître des poignées à ses extrémités — glisser une poignée pour la redéfinir, ou glisser directement sur
-        la ligne pour la déplacer entièrement. <strong>Double-clic sur une ligne</strong> pour l'éditer (texte,
-        épaisseur, couleur, coordonnées) dans une modale. Les lignes sont ancrées en coordonnées date/prix : elles
-        suivent le zoom et le déplacement du graphe.
+        boutons superposés — elle reste visible en plein écran) — son chevron ouvre un menu avec les autres outils :
+        ligne horizontale, <strong>ligne horizontale à partir d'une date</strong> ("ray" — démarre à la date cliquée
+        au lieu de couvrir tout l'historique, avec une seule poignée déplaçable en date <em>et</em> en prix/volume) et
+        ligne verticale. 1er clic = début de la ligne de tendance, 2ème clic = fin (la ligne suit le curseur entre les
+        deux) ; les autres outils ne demandent qu'un seul clic. Échap ou re-clic sur l'outil annule. Survoler une
+        ligne dessinée fait apparaître ses poignées — glisser une poignée pour la redéfinir, ou glisser directement
+        sur la ligne pour la déplacer entièrement. <strong>Double-clic sur une ligne</strong> pour l'éditer (texte,
+        épaisseur, couleur, <strong>pointillés</strong>, coordonnées) dans une modale. Les lignes sont ancrées en
+        coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools height={STORY_HEIGHT} />
     </div>
@@ -110,13 +115,19 @@ export const WithIndicators: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles (SMA, EMA, WMA) —
-        cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
+        Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles — SMA, EMA, WMA
+        (calculés en interne) plus <strong>VWAP</strong> et <strong>bandes de Bollinger</strong> (calculés via la
+        librairie npm{" "}
+        <a href="https://www.npmjs.com/package/technicalindicators" target="_blank" rel="noreferrer">
+          technicalindicators
+        </a>
+        ) — cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
         actifs sont listés en haut à gauche du graphe, séparés par un simple trait (pas de bordure autour de chaque
         entrée) ; survoler une entrée fait apparaître trois icônes : œil (masque/affiche le tracé sans le supprimer
-        de la liste), corbeille (suppression directe) et roue crantée (paramètres — période, couleur —{" "}
-        <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix, ils suivent
-        le zoom/déplacement comme les bougies.
+        de la liste), corbeille (suppression directe) et roue crantée (paramètres — période, couleur, écart-type pour
+        Bollinger — <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix,
+        ils suivent le zoom/déplacement comme les bougies ; Bollinger se dessine en bande (ligne médiane pleine,
+        bornes fines, remplissage translucide) au lieu d'une simple ligne.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators height={STORY_HEIGHT} />
     </div>

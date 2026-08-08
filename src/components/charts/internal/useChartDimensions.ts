@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 
 export interface ChartMargin {
   top: number;
@@ -35,6 +35,23 @@ export function useChartDimensions(
   const ref = useRef<HTMLDivElement>(null);
   const resolvedMargin: ChartMargin = { ...DEFAULT_MARGIN, ...margin };
   const [size, setSize] = useState({ width: options.width ?? 0, height: options.height ?? 320 });
+
+  // Re-measures synchronously (before paint) whenever a fixed width/height/aspectRatio is added,
+  // removed, or changed — most notably toggling fullscreen, which flips `height`/`width` between
+  // a fixed number and `undefined` (see `useFullscreen`). ResizeObserver's own callback fires
+  // asynchronously; relying on it alone left `size` stale for a render or two right after the
+  // CSS class actually changed (the canvas redraws correctly every render off the same `dims`,
+  // but ChartAxis's own persistent tick DOM was mutated in place using that stale, differently
+  // sized scale — most visibly right after exiting fullscreen, where its ticks briefly kept the
+  // fullscreen-sized layout and rendered past the now-smaller chart's edges).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const rect = el.getBoundingClientRect();
+    const width = options.width ?? rect.width;
+    const height = options.height ?? (options.aspectRatio ? width / options.aspectRatio : rect.height || 320);
+    setSize({ width, height });
+  }, [options.width, options.height, options.aspectRatio]);
 
   useEffect(() => {
     const el = ref.current;

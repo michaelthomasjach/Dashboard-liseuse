@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
+import { VWAP, BollingerBands } from "technicalindicators";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
 import { useAxisDragRescale } from "./internal/useAxisDragRescale";
@@ -9,6 +10,7 @@ import { ChartAxis } from "./ChartAxis";
 import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
+import { Checkbox } from "../forms/Checkbox";
 import { Modal } from "../primitives/Modal";
 import {
   MaximizeIcon,
@@ -16,6 +18,7 @@ import {
   TrendLineIcon,
   HorizontalLineIcon,
   VerticalLineIcon,
+  HorizontalRayIcon,
   ChevronDownIcon,
   PlusIcon,
   ActivityIcon,
@@ -47,15 +50,19 @@ export interface TrendLineDrawing {
   color?: string;
   /** Line thickness in px. Default 1.5. */
   strokeWidth?: number;
+  /** Dashed instead of solid. Default false. */
+  dashed?: boolean;
   /** Constrains the line to one axis instead of a free-form two-point line: "horizontal" keeps
    *  y1 === y2 and can only be dragged vertically (its price/volume changes, never its date
    *  span, which always covers the full width); "vertical" keeps x1 === x2 and can only be
    *  dragged horizontally (its date changes, never its price span, which always covers the full
-   *  height). Omitted for a regular hand-drawn trend line — set automatically by the axis "+"
-   *  buttons. */
-  lineType?: "horizontal" | "vertical";
-  /** Which value scale a "horizontal" line's y is expressed in. Ignored for "vertical" lines and
-   *  regular trend lines. Default "price". */
+   *  height); "ray" is a "horizontal" that starts at x1 instead of the dataset's own start —
+   *  drawn from there to the right edge only, not spanning the full width — draggable in both
+   *  price and its start date, unlike "horizontal"/"vertical"'s single-axis handle. Omitted for
+   *  a regular hand-drawn trend line — set automatically by the axis "+" buttons. */
+  lineType?: "horizontal" | "vertical" | "ray";
+  /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
+   *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
 }
 
@@ -64,13 +71,23 @@ interface DataPoint {
   y: number;
 }
 
-export type IndicatorKind = "sma" | "ema" | "wma";
+export type IndicatorKind = "sma" | "ema" | "wma" | "vwap" | "bollinger";
+
+/** A 3-line band value (Bollinger) instead of a single line's value — the draw effect tells the
+ *  two apart with a plain `typeof value === "number"` check. */
+export interface IndicatorBand {
+  upper: number;
+  middle: number;
+  lower: number;
+}
 
 export interface Indicator {
   id: string;
   kind: IndicatorKind;
-  /** Lookback window, in candles. */
+  /** Lookback window, in candles. Ignored by "vwap" (a cumulative, unwindowed average). */
   period: number;
+  /** Band width, in standard deviations. Only used by "bollinger". Default 2. */
+  stdDev?: number;
   /** CSS color. Defaults to a color cycled from a small built-in palette. */
   color?: string;
   /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the
@@ -83,12 +100,16 @@ interface IndicatorCatalogEntry {
   label: string;
   shortLabel: string;
   defaultPeriod: number;
+  hasPeriod: boolean;
+  hasStdDev: boolean;
 }
 
 const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
-  { kind: "sma", label: "Moyenne mobile simple (SMA)", shortLabel: "SMA", defaultPeriod: 20 },
-  { kind: "ema", label: "Moyenne mobile exponentielle (EMA)", shortLabel: "EMA", defaultPeriod: 20 },
-  { kind: "wma", label: "Moyenne mobile pondérée (WMA)", shortLabel: "WMA", defaultPeriod: 20 },
+  { kind: "sma", label: "Moyenne mobile simple (SMA)", shortLabel: "SMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
+  { kind: "ema", label: "Moyenne mobile exponentielle (EMA)", shortLabel: "EMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
+  { kind: "wma", label: "Moyenne mobile pondérée (WMA)", shortLabel: "WMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
+  { kind: "vwap", label: "Volume Weighted Average Price (VWAP)", shortLabel: "VWAP", defaultPeriod: 0, hasPeriod: false, hasStdDev: false },
+  { kind: "bollinger", label: "Bandes de Bollinger", shortLabel: "BB", defaultPeriod: 20, hasPeriod: true, hasStdDev: true },
 ];
 
 function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
@@ -96,7 +117,10 @@ function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
 }
 
 function indicatorLabel(indicator: Indicator): string {
-  return `${indicatorCatalogEntry(indicator.kind).shortLabel}(${indicator.period})`;
+  const entry = indicatorCatalogEntry(indicator.kind);
+  if (!entry.hasPeriod) return entry.shortLabel;
+  if (entry.hasStdDev) return `${entry.shortLabel}(${indicator.period},${indicator.stdDev ?? 2})`;
+  return `${entry.shortLabel}(${indicator.period})`;
 }
 
 const INDICATOR_COLORS = ["#e0a95c", "#6c87c9", "#7fb37f", "#c96c8f", "#9a7fd1"];
@@ -145,24 +169,58 @@ function computeWMAValues(data: Candle[], period: number): (number | null)[] {
   return result;
 }
 
-function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | null)[] {
+// VWAP (from the `technicalindicators` npm package) is cumulative rather than windowed, so it
+// returns one value per input bar with no warm-up gap — still routed through the same
+// null-padding shape as the hand-rolled indicators above purely so every `IndicatorKind` shares
+// one result type.
+function computeVWAPValues(data: Candle[]): (number | null)[] {
+  if (data.length === 0) return [];
+  const values = VWAP.calculate({
+    high: data.map((d) => d.high),
+    low: data.map((d) => d.low),
+    close: data.map((d) => d.close),
+    volume: data.map((d) => d.volume ?? 0),
+  });
+  const offset = data.length - values.length;
+  const result: (number | null)[] = new Array(offset).fill(null);
+  return result.concat(values);
+}
+
+// `technicalindicators`'s calculate() trims the warm-up period off the front of its result
+// instead of null-padding it (e.g. 10 closes at period 5 comes back as 6 values, not 10) — every
+// indicator here left-pads by that same trimmed amount so the result stays index-aligned with
+// `data`, same convention as the hand-rolled SMA/EMA/WMA above.
+function computeBollingerValues(data: Candle[], period: number, stdDev: number): (IndicatorBand | null)[] {
+  if (data.length === 0) return [];
+  const values = BollingerBands.calculate({ period, stdDev, values: data.map((d) => d.close) });
+  const offset = data.length - values.length;
+  const result: (IndicatorBand | null)[] = new Array(offset).fill(null);
+  return result.concat(values.map((v) => ({ upper: v.upper, middle: v.middle, lower: v.lower })));
+}
+
+function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | IndicatorBand | null)[] {
   const period = Math.max(1, Math.round(indicator.period));
   switch (indicator.kind) {
     case "ema":
       return computeEMAValues(data, period);
     case "wma":
       return computeWMAValues(data, period);
+    case "vwap":
+      return computeVWAPValues(data);
+    case "bollinger":
+      return computeBollingerValues(data, period, indicator.stdDev ?? 2);
     case "sma":
     default:
       return computeSMAValues(data, period);
   }
 }
 
-type DrawingToolType = "trendline" | "horizontal" | "vertical";
+type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray";
 
 const DRAWING_TOOLS: { type: DrawingToolType; label: string; icon: typeof TrendLineIcon }[] = [
   { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
   { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
+  { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
   { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
 ];
 
@@ -273,11 +331,13 @@ const AXIS_HANDLE_FRACTION_Y = 0.25;
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 const MAX_DATE_TICKS = 12;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
-/** Extra empty slots reserved past the last candle, reachable by panning left (like TradingView's
- *  right-side margin) — lets the chart be "shifted into the future" instead of always pinning the
- *  most recent candle to the plot's right edge. Fixed in index-slot count (not a % of the
- *  dataset), so it reads the same width regardless of how much history `data` holds. */
-const FUTURE_SPACE_CANDLES = 15;
+/** How far past the data's own edges panning can reveal empty "future"/"past" space, as a
+ *  fraction of the *current* viewport width — not a fixed candle count, which would feel
+ *  enormous zoomed in (a handful of real candles next to a huge empty block) and negligible
+ *  zoomed out. See the custom `constrain` passed to useD3Zoom below for the derivation: it
+ *  caps how far each edge of the visible domain can sit past [0, data.length] to this fraction
+ *  of the viewport, at every zoom level. */
+const MAX_EMPTY_FRACTION = 0.5;
 
 // A canvas 1px line drawn at an integer y (e.g. moveTo(0, 40)) straddles two physical pixel rows
 // half-and-half, so it rasterizes as a ~2px anti-aliased blur instead of a crisp line — unlike an
@@ -401,7 +461,10 @@ export function CandlestickChart({
   }
 
   function addIndicator(entry: IndicatorCatalogEntry) {
-    commitIndicators([...indicators, { id: `indicator-${indicatorIdRef.current++}`, kind: entry.kind, period: entry.defaultPeriod }]);
+    commitIndicators([
+      ...indicators,
+      { id: `indicator-${indicatorIdRef.current++}`, kind: entry.kind, period: entry.defaultPeriod, stdDev: entry.hasStdDev ? 2 : undefined },
+    ]);
   }
 
   function openIndicatorSettings(id: string) {
@@ -477,13 +540,13 @@ export function CandlestickChart({
   // together instead of the flush, evenly-spaced rendering every trading platform actually uses.
   // Same index-scale approach as BarChart/DeltaChart's categorical axis. The [0, n] domain (vs.
   // [0, n-1]) reserves half a slot on each edge for free, so the first/last candle isn't clipped
-  // — no separate padding step needed, unlike the old time-scale version. FUTURE_SPACE_CANDLES
-  // extends the domain (not just the visible window) past the last real candle, so panning left
-  // can reveal that reserved empty space — d3-zoom's own translateExtent (see useD3Zoom below)
-  // is set from this same scale's range, so it automatically follows the domain out that far and
-  // no further.
+  // — no separate padding step needed, unlike the old time-scale version. Panning past [0, n]
+  // into "future"/"past" empty space is handled separately (see MAX_EMPTY_FRACTION and the
+  // custom zoom `constrain` below) rather than baked into this domain — that keeps `xScale`
+  // itself a simple, stable 1:1 mapping of the real data, and the empty-space allowance adaptive
+  // to zoom level instead of a fixed slot count.
   const xScale = useMemo(
-    () => d3.scaleLinear().domain([0, Math.max(1, data.length) + FUTURE_SPACE_CANDLES]).range([0, dims.boundedWidth]),
+    () => d3.scaleLinear().domain([0, Math.max(1, data.length)]).range([0, dims.boundedWidth]),
     [data.length, dims.boundedWidth]
   );
 
@@ -576,6 +639,24 @@ export function CandlestickChart({
   // ever reveal ~20 candles at max zoom on a large dataset).
   const maxXZoom = Math.max(20, data.length);
 
+  // Lets panning reveal empty space past the data's own edges (index 0 and data.length), capped
+  // at MAX_EMPTY_FRACTION of the *current* viewport width on either side — derived by requiring
+  // zoomedXScale(0) (the screen x where index 0 sits) to stay within [0, W] such that at most
+  // MAX_EMPTY_FRACTION*W of empty space is visible to its left, and symmetrically for
+  // zoomedXScale(data.length) and empty space to its right. Since zoomedXScale(v) = k*xScale(v)+tx
+  // and xScale(0)=0, xScale(data.length)=W (by construction), both conditions reduce to plain
+  // bounds on tx alone — a fixed d3-zoom translateExtent can't express this (it clamps in
+  // constant world units, so the same padding would be a tiny sliver zoomed out and enormous
+  // zoomed in), hence the custom constrain instead of relying on useD3Zoom's default.
+  function constrainXPan(transform: d3.ZoomTransform, extent: [[number, number], [number, number]]): d3.ZoomTransform {
+    const w = extent[1][0] - extent[0][0];
+    if (w <= 0) return transform;
+    const maxTx = w * MAX_EMPTY_FRACTION;
+    const minTx = -(transform.k - 1 + MAX_EMPTY_FRACTION) * w;
+    const tx = Math.min(maxTx, Math.max(minTx, transform.x));
+    return new d3.ZoomTransform(transform.k, tx, transform.y);
+  }
+
   const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: plotBoundedHeight,
@@ -583,6 +664,7 @@ export function CandlestickChart({
     scaleExtent: [1, maxXZoom],
     onZoom: setTransform,
     filter: () => hoveredDrawingIdRef.current === null,
+    constrain: constrainXPan,
   });
 
   // Applied once, the first time the plot has a real measured width (and the zoom behavior
@@ -774,6 +856,28 @@ export function CandlestickChart({
       cancelDrawingTool();
       return;
     }
+    // Same price/volume detection as "horizontal" above, but anchored at the clicked date
+    // instead of the dataset's own start (see the "ray" rendering/hit-testing below, which draws
+    // from that anchor to the plot's right edge only).
+    if (activeTool === "ray") {
+      const rect = zoomRef.current!.getBoundingClientRect();
+      const mouseY = e.clientY - rect.top;
+      const drawing: TrendLineDrawing =
+        showVolume && mouseY > priceHeight
+          ? {
+              id: `drawing-${drawingIdRef.current++}`,
+              x1: point.x,
+              y1: volumeScale.invert(mouseY - priceHeight),
+              x2: point.x,
+              y2: volumeScale.invert(mouseY - priceHeight),
+              lineType: "ray",
+              valueAxis: "volume",
+            }
+          : { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: "ray" };
+      commitDrawings([...drawings, drawing]);
+      cancelDrawingTool();
+      return;
+    }
 
     if (!pendingPoint) {
       setPendingPoint(point);
@@ -867,6 +971,13 @@ export function CandlestickChart({
       const mouseX = e.clientX - rect.left;
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue } : d)));
+    } else if (dr.lineType === "ray") {
+      // A ray's handle has both degrees of freedom, unlike horizontal/vertical's single axis.
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
+      const value = dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY);
+      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue, y1: value, y2: value } : d)));
     }
   }
 
@@ -932,7 +1043,7 @@ export function CandlestickChart({
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
     return indicatorValues.map(({ indicator, values }) => {
-      const points: { i: number; value: number }[] = [];
+      const points: { i: number; value: number | IndicatorBand }[] = [];
       for (let i = start; i < end; i++) {
         const v = values[i];
         if (v !== null) points.push({ i, value: v });
@@ -961,6 +1072,14 @@ export function CandlestickChart({
         const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
         const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate } : d)));
+      } else if (drag.orig.lineType === "ray") {
+        // A ray has both degrees of freedom (unlike horizontal/vertical), so dragging its body
+        // moves its one anchor point in both date and price/volume at once.
+        const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
+        const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
+        const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
+        const newValue = scale.invert(scale(drag.orig.y1) + dyPixels);
+        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate, y1: newValue, y2: newValue } : d)));
       } else {
         const origX1 = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
         const origX2 = zoomedXScale(indexForDate(drag.orig.x2) + 0.5);
@@ -992,6 +1111,10 @@ export function CandlestickChart({
         if (dr.lineType === "horizontal") {
           const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
           d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
+        } else if (dr.lineType === "ray") {
+          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+          d = distanceToSegment(mouseX, mouseY, x, y, dims.boundedWidth, y);
         } else if (dr.lineType === "vertical") {
           const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
           d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
@@ -1133,18 +1256,63 @@ export function CandlestickChart({
 
     visibleIndicators.forEach(({ indicator, points }, index) => {
       if (indicator.hidden || points.length < 2) return;
+      const color = indicator.color ?? defaultIndicatorColor(index);
       ctx.save();
-      ctx.strokeStyle = indicator.color ?? defaultIndicatorColor(index);
-      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = color;
       ctx.setLineDash([]);
-      ctx.beginPath();
-      points.forEach((p, k) => {
-        const x = zoomedXScale(p.i + 0.5);
-        const y = zoomedPriceScale(p.value);
-        if (k === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
+
+      if (typeof points[0].value === "number") {
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        points.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value as number);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      } else {
+        // Band indicator (Bollinger): translucent fill between the bands, thin upper/lower
+        // lines, and a solid middle line — the conventional "channel" rendering.
+        const bandPoints = points as { i: number; value: IndicatorBand }[];
+        ctx.globalAlpha = 0.08;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        bandPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value.upper);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        for (let k = bandPoints.length - 1; k >= 0; k--) {
+          ctx.lineTo(zoomedXScale(bandPoints[k].i + 0.5), zoomedPriceScale(bandPoints[k].value.lower));
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.lineWidth = 1;
+        (["upper", "lower"] as const).forEach((key) => {
+          ctx.beginPath();
+          bandPoints.forEach((p, k) => {
+            const x = zoomedXScale(p.i + 0.5);
+            const y = zoomedPriceScale(p.value[key]);
+            if (k === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+        });
+
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        bandPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value.middle);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      }
       ctx.restore();
     });
 
@@ -1163,13 +1331,17 @@ export function CandlestickChart({
     // Regular trend lines plus "horizontal" price lines (volume ones are drawn in the volume
     // section below, "vertical" ones are drawn full-height further down, outside any clip).
     for (const dr of drawings) {
-      if (dr.lineType === "vertical" || (dr.lineType === "horizontal" && dr.valueAxis === "volume")) continue;
+      if (dr.lineType === "vertical" || ((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
       const lineColor = dr.color ?? colorAccent;
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(dr.dashed ? [6, 4] : []);
+      const startsFromEdge = dr.lineType === "horizontal";
       let x1: number, y1: number, x2: number, y2: number;
-      if (dr.lineType === "horizontal") {
-        x1 = 0;
+      if (dr.lineType === "horizontal" || dr.lineType === "ray") {
+        // "ray" starts at its own anchor date instead of the plot's left edge — everything else
+        // about it (ends at the right edge, single price/volume value) matches "horizontal".
+        x1 = startsFromEdge ? 0 : zoomedXScale(indexForDate(dr.x1) + 0.5);
         x2 = dims.boundedWidth;
         y1 = y2 = zoomedPriceScale(dr.y1);
       } else {
@@ -1183,11 +1355,12 @@ export function CandlestickChart({
       ctx.lineTo(x2, y2);
       ctx.stroke();
       if (dr.text) {
+        const spansToRightEdge = dr.lineType === "horizontal" || dr.lineType === "ray";
         ctx.fillStyle = lineColor;
         ctx.font = `600 11px ${fontFamily}`;
-        ctx.textAlign = dr.lineType === "horizontal" ? "right" : "center";
+        ctx.textAlign = spansToRightEdge ? "right" : "center";
         ctx.textBaseline = "bottom";
-        ctx.fillText(dr.text, dr.lineType === "horizontal" ? dims.boundedWidth - 4 : (x1 + x2) / 2, Math.min(y1, y2) - 6);
+        ctx.fillText(dr.text, spansToRightEdge ? dims.boundedWidth - 4 : (x1 + x2) / 2, Math.min(y1, y2) - 6);
       }
     }
 
@@ -1244,14 +1417,15 @@ export function CandlestickChart({
         ctx.stroke();
       }
       for (const dr of drawings) {
-        if (!(dr.lineType === "horizontal" && dr.valueAxis === "volume")) continue;
+        if (!((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
         const lineColor = dr.color ?? colorAccent;
         ctx.strokeStyle = lineColor;
         ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-        ctx.setLineDash([]);
+        ctx.setLineDash(dr.dashed ? [6, 4] : []);
         const y = volumeScale(dr.y1);
+        const x = dr.lineType === "ray" ? zoomedXScale(indexForDate(dr.x1) + 0.5) : 0;
         ctx.beginPath();
-        ctx.moveTo(0, y);
+        ctx.moveTo(x, y);
         ctx.lineTo(dims.boundedWidth, y);
         ctx.stroke();
         if (dr.text) {
@@ -1273,6 +1447,7 @@ export function CandlestickChart({
       ctx.save();
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(dr.dashed ? [6, 4] : []);
       const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
       ctx.beginPath();
       ctx.moveTo(x, 0);
@@ -1685,6 +1860,24 @@ export function CandlestickChart({
                     />
                   );
                 }
+                // A ray's one handle sits right at its actual anchor point (unlike
+                // horizontal/vertical's fixed-fraction handle) since that anchor is itself
+                // meaningful and draggable in both axes.
+                if (dr.lineType === "ray") {
+                  const cy = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+                  return (
+                    <circle
+                      key={dr.id}
+                      className="lq-chart__drawing-handle"
+                      cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
+                      cy={cy}
+                      r={5}
+                      onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                      onPointerMove={handleAxisHandlePointerMove}
+                      onPointerUp={handleAxisHandlePointerUp}
+                    />
+                  );
+                }
                 const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
                 const y1 = zoomedPriceScale(dr.y1);
                 const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
@@ -1808,6 +2001,7 @@ export function CandlestickChart({
               />
             </div>
           </div>
+          <Checkbox checked={draft.dashed ?? false} onChange={(dashed) => setDraft({ ...draft, dashed })} label="Pointillés" />
           {/* A horizontal/vertical line only has one degree of freedom (see the single drag
               handle above) — editing its two endpoints independently here would let them drift
               apart and break that invariant, so it gets one field instead of the usual two. */}
@@ -1830,6 +2024,30 @@ export function CandlestickChart({
                   const next = fromDateInputValue(e.target.value, draft.x1);
                   setDraft({ ...draft, x1: next, x2: next });
                 }}
+              />
+            </div>
+          )}
+          {/* A ray keeps both its degrees of freedom (unlike horizontal/vertical), so it gets
+              both fields — still just one of each, since x2/y2 always mirror x1/y1. */}
+          {draft.lineType === "ray" && (
+            <div className="lq-chart__edit-drawing-row">
+              <div className="lq-field">
+                <label className="lq-field__label">Date de départ</label>
+                <input
+                  type="date"
+                  className="lq-chart__date-input"
+                  value={toDateInputValue(draft.x1)}
+                  onChange={(e) => {
+                    const next = fromDateInputValue(e.target.value, draft.x1);
+                    setDraft({ ...draft, x1: next, x2: next });
+                  }}
+                />
+              </div>
+              <NumberField
+                label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
+                step={0.01}
+                value={draft.y1}
+                onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v, y2: v === "" ? draft.y2 : v })}
               />
             </div>
           )}
@@ -1893,14 +2111,26 @@ export function CandlestickChart({
             </div>
           }
         >
-          <NumberField
-            label="Période"
-            min={1}
-            max={500}
-            step={1}
-            value={indicatorDraft.period}
-            onChange={(v) => setIndicatorDraft({ ...indicatorDraft, period: v === "" ? indicatorDraft.period : v })}
-          />
+          {indicatorCatalogEntry(indicatorDraft.kind).hasPeriod && (
+            <NumberField
+              label="Période"
+              min={1}
+              max={500}
+              step={1}
+              value={indicatorDraft.period}
+              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, period: v === "" ? indicatorDraft.period : v })}
+            />
+          )}
+          {indicatorCatalogEntry(indicatorDraft.kind).hasStdDev && (
+            <NumberField
+              label="Écart-type (bandes)"
+              min={0.5}
+              max={5}
+              step={0.1}
+              value={indicatorDraft.stdDev ?? 2}
+              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, stdDev: v === "" ? indicatorDraft.stdDev : v })}
+            />
+          )}
           <div className="lq-field">
             <label className="lq-field__label">Couleur</label>
             <input

@@ -13,6 +13,11 @@ export interface UseD3ZoomOptions {
    *  chart underneath it. Read fresh on every event (not memoized — always pass the live value,
    *  a ref-backed callback works well here). */
   filter?: (event: Event) => boolean;
+  /** Overrides d3-zoom's own default translateExtent-based clamping of the resulting transform
+   *  — e.g. allowing panning past the data's own edges by an amount that scales with the current
+   *  zoom level, which a fixed translateExtent can't express (it clamps in constant world units,
+   *  not as a fraction of the current viewport). Read fresh on every event, same as `filter`. */
+  constrain?: (transform: d3.ZoomTransform, extent: [[number, number], [number, number]], translateExtent: [[number, number], [number, number]]) => d3.ZoomTransform;
 }
 
 export interface UseD3ZoomResult<T extends Element> {
@@ -35,6 +40,7 @@ export function useD3Zoom<T extends Element>({
   enabled = true,
   onZoom,
   filter,
+  constrain,
 }: UseD3ZoomOptions): UseD3ZoomResult<T> {
   const ref = useRef<T>(null);
   const behaviorRef = useRef<d3.ZoomBehavior<T, unknown> | null>(null);
@@ -42,6 +48,8 @@ export function useD3Zoom<T extends Element>({
   onZoomRef.current = onZoom;
   const filterRef = useRef(filter);
   filterRef.current = filter;
+  const constrainRef = useRef(constrain);
+  constrainRef.current = constrain;
   const [scaleMin, scaleMax] = scaleExtent;
 
   useEffect(() => {
@@ -66,6 +74,14 @@ export function useD3Zoom<T extends Element>({
         return defaultOk && (filterRef.current ? filterRef.current(event) : true);
       })
       .on("zoom", (event: d3.D3ZoomEvent<T, unknown>) => onZoomRef.current(event.transform));
+
+    // Captures d3-zoom's own default translateExtent-based constrain function before
+    // (optionally) overriding it below, so a caller-supplied `constrain` can still be swapped in
+    // and out (e.g. re-enabled/disabled) via the ref without losing the fallback.
+    const defaultConstrain = behavior.constrain();
+    behavior.constrain((transform, extent, translateExtent) =>
+      constrainRef.current ? constrainRef.current(transform, extent, translateExtent) : defaultConstrain(transform, extent, translateExtent)
+    );
 
     behaviorRef.current = behavior;
     const selection = d3.select(el);

@@ -57,5 +57,6 @@ export {
   TrendLineIcon,
   HorizontalLineIcon,
   VerticalLineIcon,
+  HorizontalRayIcon,
   ActivityIcon,
 } from "./icons";
