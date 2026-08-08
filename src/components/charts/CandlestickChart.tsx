@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
@@ -257,6 +257,9 @@ const AXIS_VALUE_Y_OVERLAP = 20;
  *  from the right edge, a vertical line's handle 1/4 of the height down from the top. */
 const AXIS_HANDLE_FRACTION_X = 0.75;
 const AXIS_HANDLE_FRACTION_Y = 0.25;
+/** Upper bound on how many date labels the bottom axis shows at once, regardless of how many
+ *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
+const MAX_DATE_TICKS = 12;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
 
 function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number): number {
@@ -429,36 +432,51 @@ export function CandlestickChart({
   const volumeHeight = showVolume ? Math.round(plotBoundedHeight * 0.22) : 0;
   const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight);
 
-  // Padded by half the average inter-candle gap on each side, so the first/last candle get a
-  // full slot like every other one — without this, their center sits exactly on the domain's
-  // edge, so half their body/wick (and volume bar) falls past x=0 or x=boundedWidth and is
-  // simply not drawn (the canvas doesn't paint outside its own box), leaving a gap between the
-  // outermost candle and the axis that grows every time the candles themselves get wider.
-  const xScale = useMemo(() => {
-    const extent = d3.extent(data, (d) => d.date) as [Date, Date];
-    if (!extent[0] || !extent[1]) {
-      return d3.scaleTime().domain([new Date(), new Date()]).range([0, dims.boundedWidth]);
-    }
-    const avgGapMs = data.length > 1 ? (extent[1].getTime() - extent[0].getTime()) / (data.length - 1) : 24 * 60 * 60 * 1000;
-    const halfGap = avgGapMs / 2;
-    return d3
-      .scaleTime()
-      .domain([new Date(extent[0].getTime() - halfGap), new Date(extent[1].getTime() + halfGap)])
-      .range([0, dims.boundedWidth]);
-  }, [data, dims.boundedWidth]);
+  // Positions candles by INDEX, not by literal calendar time — each candle i occupies the slot
+  // [i, i+1], centered at i+0.5. A real d3.scaleTime() (mapping actual elapsed time to pixels)
+  // was tried first, but real trading data has uneven gaps (weekends, holidays): time-proportional
+  // spacing left visible empty gaps between Friday and Monday, clustering weekday candles
+  // together instead of the flush, evenly-spaced rendering every trading platform actually uses.
+  // Same index-scale approach as BarChart/DeltaChart's categorical axis. The [0, n] domain (vs.
+  // [0, n-1]) reserves half a slot on each edge for free, so the first/last candle isn't clipped
+  // — no separate padding step needed, unlike the old time-scale version.
+  const xScale = useMemo(() => d3.scaleLinear().domain([0, Math.max(1, data.length)]).range([0, dims.boundedWidth]), [data.length, dims.boundedWidth]);
 
   const zoomedXScale = transform.rescaleX(xScale);
 
-  // Precise (unpadded) index range of candles actually inside the zoomed time domain — used
-  // to size candles (see `visible` below, which pads a couple extra candles on each side so
+  // Bridges the index-space scale above and the Date-based coordinates drawings/indicators are
+  // actually stored in (a real Date is meaningful to consumers of the public API in a way a raw
+  // index isn't — defaultDrawings, onDrawingsChange, etc. all deal in dates). indexForDate is
+  // used at render time (a stored date -> where it sits among today's candles); dateForIndex at
+  // interaction time (a pixel position, inverted to a fractional index -> the nearest candle's
+  // actual date, to store).
+  const indexForDate = useCallback(
+    (date: Date): number => {
+      if (data.length === 0) return 0;
+      const idx = d3.bisector<Candle, Date>((d) => d.date).left(data, date);
+      return Math.min(data.length - 1, Math.max(0, idx));
+    },
+    [data]
+  );
+
+  const dateForIndex = useCallback(
+    (rawIndex: number): Date => {
+      if (data.length === 0) return new Date();
+      const clamped = Math.min(data.length - 1, Math.max(0, Math.round(rawIndex - 0.5)));
+      return data[clamped].date;
+    },
+    [data]
+  );
+
+  // Precise (unpadded) index range of candles actually inside the zoomed domain — used to size
+  // candles (see `visible` below, which pads a couple extra candles on each side so
   // partially-visible edge candles still render instead of popping in/out) and to drive
   // `YAutoScaling` (see below).
   const visibleRange = useMemo(() => {
     if (data.length === 0) return { start: 0, end: 0 };
-    const [d0, d1] = zoomedXScale.domain();
-    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
-    return { start: bisect(data, d0 as Date), end: bisect(data, d1 as Date) };
-  }, [data, zoomedXScale]);
+    const [i0, i1] = zoomedXScale.domain();
+    return { start: Math.max(0, Math.floor(i0)), end: Math.min(data.length, Math.ceil(i1)) };
+  }, [data.length, zoomedXScale]);
 
   // Always the full dataset's own domain — deliberately NOT reactive to pan/zoom, so it stays a
   // stable base for `zoomedPriceScale` below. `YAutoScaling` doesn't change this scale itself;
@@ -533,16 +551,12 @@ export function CandlestickChart({
     if (!initialVisibleCandles || initialVisibleCandles <= 0 || initialVisibleCandles >= data.length) return;
 
     const start = Math.max(0, data.length - initialVisibleCandles);
-    const extent = d3.extent(data, (d) => d.date) as [Date, Date];
-    const avgGapMs = data.length > 1 ? (extent[1].getTime() - extent[0].getTime()) / (data.length - 1) : 24 * 60 * 60 * 1000;
-    const leftDate = new Date(data[start].date.getTime() - avgGapMs / 2);
-    const rightDate = xScale.domain()[1] as Date;
-    const x0 = xScale(leftDate);
-    const x1 = xScale(rightDate);
+    const x0 = xScale(start);
+    const x1 = xScale(data.length);
     if (x1 - x0 <= 0) return;
     const k = Math.min(maxXZoom, Math.max(1, dims.boundedWidth / (x1 - x0)));
     setXTransformViaZoom(new d3.ZoomTransform(k, -k * x0, 0));
-  }, [dims.boundedWidth, data, initialVisibleCandles, xScale, maxXZoom, setXTransformViaZoom]);
+  }, [dims.boundedWidth, data.length, initialVisibleCandles, xScale, maxXZoom, setXTransformViaZoom]);
 
   const xAxisDrag = useAxisDragRescale({
     axis: "x",
@@ -608,17 +622,26 @@ export function CandlestickChart({
   function addPriceLine() {
     if (hoverY === null) return;
     const price = zoomedPriceScale.invert(hoverY);
-    const [d0, d1] = xScale.domain() as [Date, Date];
-    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: price, x2: d1, y2: price, lineType: "horizontal" }]);
+    commitDrawings([
+      ...drawings,
+      { id: `drawing-${drawingIdRef.current++}`, x1: data[0].date, y1: price, x2: data[data.length - 1].date, y2: price, lineType: "horizontal" },
+    ]);
   }
 
   function addVolumeLine() {
     if (hoverVolumeY === null) return;
     const volume = volumeScale.invert(hoverVolumeY);
-    const [d0, d1] = xScale.domain() as [Date, Date];
     commitDrawings([
       ...drawings,
-      { id: `drawing-${drawingIdRef.current++}`, x1: d0, y1: volume, x2: d1, y2: volume, lineType: "horizontal", valueAxis: "volume" },
+      {
+        id: `drawing-${drawingIdRef.current++}`,
+        x1: data[0].date,
+        y1: volume,
+        x2: data[data.length - 1].date,
+        y2: volume,
+        lineType: "horizontal",
+        valueAxis: "volume",
+      },
     ]);
   }
 
@@ -665,7 +688,7 @@ export function CandlestickChart({
   function toDataPoint(e: { clientX: number; clientY: number }): DataPoint {
     const rect = zoomRef.current!.getBoundingClientRect();
     return {
-      x: zoomedXScale.invert(e.clientX - rect.left) as Date,
+      x: dateForIndex(zoomedXScale.invert(e.clientX - rect.left)),
       y: zoomedPriceScale.invert(e.clientY - rect.top),
     };
   }
@@ -679,7 +702,8 @@ export function CandlestickChart({
     if (activeTool === "horizontal") {
       const rect = zoomRef.current!.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
-      const [d0, d1] = xScale.domain() as [Date, Date];
+      const d0 = data[0].date;
+      const d1 = data[data.length - 1].date;
       const drawing: TrendLineDrawing =
         showVolume && mouseY > priceHeight
           ? {
@@ -796,7 +820,7 @@ export function CandlestickChart({
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: value, y2: value } : d)));
     } else if (dr.lineType === "vertical") {
       const mouseX = e.clientX - rect.left;
-      const dateValue = zoomedXScale.invert(mouseX) as Date;
+      const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue } : d)));
     }
   }
@@ -806,12 +830,34 @@ export function CandlestickChart({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
+  // Each entry carries its absolute index in `data` (not just its position within this slice)
+  // — that's what positions it on the index-based `zoomedXScale` (as `i + 0.5`, the slot center).
   const visible = useMemo(() => {
     if (data.length === 0) return [];
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
-    return data.slice(start, end);
+    return data.slice(start, end).map((d, k) => ({ d, i: start + k }));
   }, [data, visibleRange]);
+
+  // The bottom axis's own scale is index-based now, so its automatic tick generator would label
+  // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
+  // use for their categorical axis: supply explicit tickValues (slot centers, i + 0.5) throttled
+  // to a readable count regardless of zoom, and a tickFormat that looks the date up by index.
+  const dateTickValues = useMemo(() => {
+    const start = Math.max(0, visibleRange.start);
+    const end = Math.min(data.length, visibleRange.end);
+    const count = end - start;
+    if (count <= 0) return [];
+    const step = Math.max(1, Math.ceil(count / MAX_DATE_TICKS));
+    const values: number[] = [];
+    for (let i = start; i < end; i += step) values.push(i + 0.5);
+    return values;
+  }, [visibleRange, data.length]);
+
+  function dateTickFormat(v: number): string {
+    const idx = Math.min(data.length - 1, Math.max(0, Math.round(v - 0.5)));
+    return dFmt(data[idx].date);
+  }
 
   // Each candle fills up to 80% of the space actually available to it at the current zoom —
   // with a single candle visible, that's 80% of the whole plot width. Deliberately no minimum
@@ -835,14 +881,14 @@ export function CandlestickChart({
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
     return indicatorValues.map(({ indicator, values }) => {
-      const points: { date: Date; value: number }[] = [];
+      const points: { i: number; value: number }[] = [];
       for (let i = start; i < end; i++) {
         const v = values[i];
-        if (v !== null) points.push({ date: data[i].date, value: v });
+        if (v !== null) points.push({ i, value: v });
       }
       return { indicator, points };
     });
-  }, [indicatorValues, data, visibleRange]);
+  }, [indicatorValues, data.length, visibleRange]);
 
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
@@ -861,12 +907,15 @@ export function CandlestickChart({
         const newValue = scale.invert(scale(drag.orig.y1) + dyPixels);
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: newValue, y2: newValue } : d)));
       } else if (drag.orig.lineType === "vertical") {
-        const newDate = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
+        const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
+        const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate } : d)));
       } else {
-        const newX1 = zoomedXScale.invert(zoomedXScale(drag.orig.x1) + dxPixels) as Date;
+        const origX1 = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
+        const origX2 = zoomedXScale(indexForDate(drag.orig.x2) + 0.5);
+        const newX1 = dateForIndex(zoomedXScale.invert(origX1 + dxPixels));
         const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
-        const newX2 = zoomedXScale.invert(zoomedXScale(drag.orig.x2) + dxPixels) as Date;
+        const newX2 = dateForIndex(zoomedXScale.invert(origX2 + dxPixels));
         const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2 } : d)));
       }
@@ -875,15 +924,13 @@ export function CandlestickChart({
 
     if (isPanningYRef.current) return;
 
-    const target = zoomedXScale.invert(mouseX);
-    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
-    const index = Math.min(data.length - 1, Math.max(0, bisect(data, target as Date)));
+    const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
     setHoverIndex(index);
     setHoverY(mouseY <= priceHeight ? mouseY : null);
     setHoverVolumeY(showVolume && mouseY > priceHeight ? mouseY - priceHeight : null);
 
     if (activeTool && pendingPoint) {
-      setPreviewPoint({ x: zoomedXScale.invert(mouseX) as Date, y: zoomedPriceScale.invert(mouseY) });
+      setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
     } else if (!activeTool && drawings.length > 0) {
       let closestId: string | null = null;
       let closestDist = DRAWING_HIT_DISTANCE;
@@ -895,10 +942,17 @@ export function CandlestickChart({
           const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
           d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
         } else if (dr.lineType === "vertical") {
-          const x = zoomedXScale(dr.x1);
+          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
           d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
         } else {
-          d = distanceToSegment(mouseX, mouseY, zoomedXScale(dr.x1), zoomedPriceScale(dr.y1), zoomedXScale(dr.x2), zoomedPriceScale(dr.y2));
+          d = distanceToSegment(
+            mouseX,
+            mouseY,
+            zoomedXScale(indexForDate(dr.x1) + 0.5),
+            zoomedPriceScale(dr.y1),
+            zoomedXScale(indexForDate(dr.x2) + 0.5),
+            zoomedPriceScale(dr.y2)
+          );
         }
         if (d < closestDist) {
           closestDist = d;
@@ -1004,8 +1058,8 @@ export function CandlestickChart({
     }
     ctx.restore();
 
-    for (const d of visible) {
-      const cx = zoomedXScale(d.date);
+    for (const { d, i } of visible) {
+      const cx = zoomedXScale(i + 0.5);
       const up = d.close >= d.open;
       const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
       const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
@@ -1033,10 +1087,10 @@ export function CandlestickChart({
       ctx.lineWidth = 1.5;
       ctx.setLineDash([]);
       ctx.beginPath();
-      points.forEach((p, i) => {
-        const x = zoomedXScale(p.date);
+      points.forEach((p, k) => {
+        const x = zoomedXScale(p.i + 0.5);
         const y = zoomedPriceScale(p.value);
-        if (i === 0) ctx.moveTo(x, y);
+        if (k === 0) ctx.moveTo(x, y);
         else ctx.lineTo(x, y);
       });
       ctx.stroke();
@@ -1068,9 +1122,9 @@ export function CandlestickChart({
         x2 = dims.boundedWidth;
         y1 = y2 = zoomedPriceScale(dr.y1);
       } else {
-        x1 = zoomedXScale(dr.x1);
+        x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
         y1 = zoomedPriceScale(dr.y1);
-        x2 = zoomedXScale(dr.x2);
+        x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
         y2 = zoomedPriceScale(dr.y2);
       }
       ctx.beginPath();
@@ -1093,8 +1147,8 @@ export function CandlestickChart({
       ctx.lineWidth = 1.5;
       ctx.setLineDash([4, 4]);
       ctx.beginPath();
-      ctx.moveTo(zoomedXScale(pendingPoint.x), zoomedPriceScale(pendingPoint.y));
-      ctx.lineTo(zoomedXScale(previewPoint.x), zoomedPriceScale(previewPoint.y));
+      ctx.moveTo(zoomedXScale(indexForDate(pendingPoint.x) + 0.5), zoomedPriceScale(pendingPoint.y));
+      ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
       ctx.stroke();
       ctx.restore();
     }
@@ -1119,8 +1173,8 @@ export function CandlestickChart({
       ctx.rect(0, priceHeight, dims.boundedWidth, volumeHeight);
       ctx.clip();
       ctx.translate(0, priceHeight);
-      for (const d of visible) {
-        const cx = zoomedXScale(d.date);
+      for (const { d, i } of visible) {
+        const cx = zoomedXScale(i + 0.5);
         const up = d.close >= d.open;
         const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
         ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
@@ -1167,7 +1221,7 @@ export function CandlestickChart({
       ctx.save();
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-      const x = zoomedXScale(dr.x1);
+      const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, plotBoundedHeight);
@@ -1189,7 +1243,7 @@ export function CandlestickChart({
       ctx.strokeStyle = colorMuted;
       ctx.lineWidth = 1;
       ctx.setLineDash([3, 3]);
-      const hx = zoomedXScale(hovered.date);
+      const hx = zoomedXScale(hoverIndex! + 0.5);
       ctx.beginPath();
       ctx.moveTo(hx, 0);
       ctx.lineTo(hx, plotBoundedHeight);
@@ -1208,12 +1262,14 @@ export function CandlestickChart({
     hovered,
     hoverY,
     hoverVolumeY,
+    hoverIndex,
     drawings,
     hoveredDrawingId,
     activeTool,
     pendingPoint,
     previewPoint,
     visibleIndicators,
+    indexForDate,
     dims.boundedWidth,
     plotBoundedHeight,
     themeTick,
@@ -1457,7 +1513,13 @@ export function CandlestickChart({
               </>
             )}
 
-            <ChartAxis scale={zoomedXScale} orientation="bottom" transform={`translate(0, ${plotBoundedHeight})`} tickFormat={(v) => dFmt(v as Date)} />
+            <ChartAxis
+              scale={zoomedXScale}
+              orientation="bottom"
+              transform={`translate(0, ${plotBoundedHeight})`}
+              tickValues={dateTickValues}
+              tickFormat={dateTickFormat}
+            />
             {/* The date axis's own domain line only spans [0, boundedWidth] — its own scale's
                 range, i.e. the canvas/plot area — so it stopped short of the chart's actual
                 right edge, leaving the price-axis label column above it without a matching
@@ -1537,7 +1599,7 @@ export function CandlestickChart({
                     <circle
                       key={dr.id}
                       className="lq-chart__drawing-handle"
-                      cx={zoomedXScale(dr.x1)}
+                      cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
                       cy={plotBoundedHeight * AXIS_HANDLE_FRACTION_Y}
                       r={5}
                       onPointerDown={handleAxisHandlePointerDown(dr.id)}
@@ -1546,9 +1608,9 @@ export function CandlestickChart({
                     />
                   );
                 }
-                const x1 = zoomedXScale(dr.x1);
+                const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
                 const y1 = zoomedPriceScale(dr.y1);
-                const x2 = zoomedXScale(dr.x2);
+                const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
                 const y2 = zoomedPriceScale(dr.y2);
                 return (
                   <g key={dr.id}>
@@ -1607,7 +1669,7 @@ export function CandlestickChart({
           <>
             <div
               className="lq-chart__axis-value lq-chart__axis-value--x"
-              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight }}
+              style={{ left: dims.margin.left + zoomedXScale(hoverIndex! + 0.5), top: dims.margin.top + plotBoundedHeight }}
             >
               <span className="lq-chart__axis-value-text">{dFmt(hovered.date)}</span>
             </div>
@@ -1618,7 +1680,7 @@ export function CandlestickChart({
             <button
               type="button"
               className="lq-chart__crosshair-add lq-chart__crosshair-add--x"
-              style={{ left: dims.margin.left + zoomedXScale(hovered.date), top: dims.margin.top + plotBoundedHeight - CROSSHAIR_ADD_INSET }}
+              style={{ left: dims.margin.left + zoomedXScale(hoverIndex! + 0.5), top: dims.margin.top + plotBoundedHeight - CROSSHAIR_ADD_INSET }}
               onClick={addDateLine}
               aria-label="Ajouter une ligne de date verticale"
             >
