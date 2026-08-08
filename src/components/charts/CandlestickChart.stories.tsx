@@ -107,16 +107,18 @@ export const AllFeatures: Story = {
   render: () => {
     const [timeframe, setTimeframe] = useState("1d");
     const [showVolume, setShowVolume] = useState(true);
+    const [yAutoScaling, setYAutoScaling] = useState(false);
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
           Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
           l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
-          sélecteur d'intervalle (`timeframes`), zoom/pan (`zoomable`), et volume masquable (`showVolume`, coché
-          ci-dessous).
+          sélecteur d'intervalle (`timeframes`), zoom/pan (`zoomable`), volume masquable (`showVolume`) et rescale
+          automatique de l'axe Y (`YAutoScaling`), tous les deux cochables ci-dessous.
         </p>
-        <div style={{ marginBottom: 12 }}>
+        <div style={{ marginBottom: 12, display: "flex", gap: 16 }}>
           <Checkbox checked={showVolume} onChange={setShowVolume} label="Afficher le volume" />
+          <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
         </div>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
@@ -125,6 +127,7 @@ export const AllFeatures: Story = {
           fullscreenToggle
           zoomable
           showVolume={showVolume}
+          YAutoScaling={yAutoScaling}
           timeframes={TIMEFRAMES}
           timeframe={timeframe}
           onTimeframeChange={setTimeframe}
@@ -141,9 +144,34 @@ export const LargeDataset: Story = {
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         2 500 bougies (~10 ans de séance). Les bougies, le volume, le crosshair et les lignes de dessin sont rendus
         sur un seul <code>canvas</code> plutôt qu'un nœud SVG par bougie — zoom/pan/dessin restent fluides à cette
-        échelle. Molette ou glisser pour naviguer dans l'historique.
+        échelle. Molette ou glisser pour naviguer dans l'historique. S'ouvre sur les 500 dernières bougies par défaut
+        (`initialVisibleCandles`, appliqué une seule fois au montage) plutôt que tout l'historique dézoomé — clic sur
+        "Réinitialiser le zoom" pour voir les 2 500.
       </p>
       <CandlestickChart data={MEDIUM_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" />
     </div>
   ),
+};
+
+export const WithYAutoScaling: Story = {
+  name: "Rescale automatique de l'axe Y",
+  render: () => {
+    const [yAutoScaling, setYAutoScaling] = useState(true);
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          `YAutoScaling` : l'axe des prix se recadre en continu sur le min/max des bougies actuellement visibles
+          (recalculé à chaque pan/zoom horizontal), au lieu d'une échelle figée sur tout l'historique — utile en
+          particulier avec `initialVisibleCandles` (2 500 bougies ici, ouvert sur les 500 dernières). Dès que tu
+          zoomes/glisses **sur l'axe des prix lui-même** (molette ou glisser dessus, ou glisser verticalement dans le
+          graphe), ce recadrage automatique s'arrête pour ne pas écraser ton réglage — "Réinitialiser le zoom" le
+          réactive.
+        </p>
+        <div style={{ marginBottom: 12 }}>
+          <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
+        </div>
+        <CandlestickChart data={MEDIUM_DATASET} YAutoScaling={yAutoScaling} timeframes={TIMEFRAMES} timeframe="1d" />
+      </div>
+    );
+  },
 };

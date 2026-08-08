@@ -212,6 +212,17 @@ export interface CandlestickChartProps {
   defaultIndicators?: Indicator[];
   /** Fires whenever an indicator is added, edited, or removed. */
   onIndicatorsChange?: (indicators: Indicator[]) => void;
+  /** How many of the most recent candles are visible when the chart first mounts (applied once,
+   *  as an initial zoom/pan — the user can still zoom/pan freely afterward). `undefined`/0/a
+   *  value ≥ `data.length` shows the whole dataset, same as before this prop existed. Default 500. */
+  initialVisibleCandles?: number;
+  /** When true, the price axis continuously auto-fits to the min/max of whatever candles are
+   *  currently visible on the X axis (recalculated on every pan/zoom), instead of a single
+   *  static domain sized to the whole dataset — until the user manually zooms/pans the Y axis
+   *  themselves (wheel or drag on the axis, or dragging the plot vertically), at which point
+   *  auto-fit stops so their adjustment isn't immediately overwritten. Clicking "Réinitialiser
+   *  le zoom" re-engages it. Default false. */
+  YAutoScaling?: boolean;
   /** Timeframe/interval options shown as a dropdown in the header — flat, or grouped (e.g. one
    *  group per "Minutes"/"Heures"/"Jours"), matching a typical trading-platform interval menu.
    *  This only renders the picker and reports the choice via `onTimeframeChange`; resampling
@@ -288,6 +299,8 @@ export function CandlestickChart({
   showIndicators = false,
   defaultIndicators,
   onIndicatorsChange,
+  initialVisibleCandles = 500,
+  YAutoScaling = false,
   timeframes,
   timeframe,
   onTimeframeChange,
@@ -297,6 +310,10 @@ export function CandlestickChart({
   const clipId = useId();
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
+  // Set the moment the user manually zooms/pans the Y axis themselves (wheel/drag on the axis,
+  // or the Y component of the 2D plot-drag) — while true, `YAutoScaling` stops overwriting their
+  // adjustment. Cleared by resetZoom/resetYAxis, which re-engages auto-fit.
+  const [yManuallyAdjusted, setYManuallyAdjusted] = useState(false);
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
@@ -432,6 +449,21 @@ export function CandlestickChart({
 
   const zoomedXScale = transform.rescaleX(xScale);
 
+  // Precise (unpadded) index range of candles actually inside the zoomed time domain — used
+  // to size candles (see `visible` below, which pads a couple extra candles on each side so
+  // partially-visible edge candles still render instead of popping in/out) and to drive
+  // `YAutoScaling` (see below).
+  const visibleRange = useMemo(() => {
+    if (data.length === 0) return { start: 0, end: 0 };
+    const [d0, d1] = zoomedXScale.domain();
+    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
+    return { start: bisect(data, d0 as Date), end: bisect(data, d1 as Date) };
+  }, [data, zoomedXScale]);
+
+  // Always the full dataset's own domain — deliberately NOT reactive to pan/zoom, so it stays a
+  // stable base for `zoomedPriceScale` below. `YAutoScaling` doesn't change this scale itself;
+  // instead a separate effect derives an equivalent `yTransform` that makes the *zoomed* scale
+  // fit the currently visible candles, leaving this one untouched (see below).
   const priceScale = useMemo(() => {
     const highs = data.map((d) => d.high);
     const lows = data.map((d) => d.low);
@@ -442,6 +474,32 @@ export function CandlestickChart({
   }, [data, priceHeight]);
 
   const zoomedPriceScale = yTransform.rescaleY(priceScale);
+
+  // When YAutoScaling is on and the user hasn't manually adjusted the Y axis themselves (see
+  // yManuallyAdjusted, set by yAxisDrag/yAxisWheelRef/the 2D-pan-Y handler below, and cleared by
+  // resetZoom/resetYAxis), continuously fit the Y axis to whatever candles are currently visible
+  // on X — recomputing a `yTransform` that makes `priceScale.rescaleY(...)` land exactly on that
+  // range, rather than changing `priceScale` itself. Depends on the visible *indices*
+  // (`visibleRange.start`/`.end`, plain numbers) rather than `zoomedXScale` itself, which is a
+  // fresh object every render (even ones triggered by unrelated state like hover) — indices only
+  // actually change on a real pan/zoom, so this skips needless recomputation the rest of the time.
+  useEffect(() => {
+    if (!YAutoScaling || yManuallyAdjusted || data.length === 0) return;
+    const slice = data.slice(Math.max(0, visibleRange.start), Math.min(data.length, visibleRange.end));
+    const source = slice.length > 0 ? slice : data;
+    const highs = source.map((d) => d.high);
+    const lows = source.map((d) => d.low);
+    const min = d3.min(lows) ?? 0;
+    const max = d3.max(highs) ?? 1;
+    const pad = (max - min) * 0.08 || 1;
+    const targetMin = min - pad;
+    const targetMax = max + pad;
+    const denom = priceScale(targetMin) - priceScale(targetMax);
+    if (denom <= 0) return;
+    const k = priceHeight / denom;
+    const y = -k * priceScale(targetMax);
+    setYTransform(new d3.ZoomTransform(k, 0, y));
+  }, [YAutoScaling, yManuallyAdjusted, data, visibleRange.start, visibleRange.end, priceScale, priceHeight]);
 
   // 10% headroom on top of the tallest bar, so it doesn't reach all the way up to the
   // price/volume divider — leaves a small visual gap between the bars and the line.
@@ -464,6 +522,28 @@ export function CandlestickChart({
     filter: () => hoveredDrawingIdRef.current === null,
   });
 
+  // Applied once, the first time the plot has a real measured width (and the zoom behavior
+  // above is attached) — not on every resize, which would otherwise keep yanking the user back
+  // to the last-N-candles view whenever the window changes size.
+  const initialViewAppliedRef = useRef(false);
+  useEffect(() => {
+    if (initialViewAppliedRef.current) return;
+    if (dims.boundedWidth <= 0 || data.length === 0) return;
+    initialViewAppliedRef.current = true;
+    if (!initialVisibleCandles || initialVisibleCandles <= 0 || initialVisibleCandles >= data.length) return;
+
+    const start = Math.max(0, data.length - initialVisibleCandles);
+    const extent = d3.extent(data, (d) => d.date) as [Date, Date];
+    const avgGapMs = data.length > 1 ? (extent[1].getTime() - extent[0].getTime()) / (data.length - 1) : 24 * 60 * 60 * 1000;
+    const leftDate = new Date(data[start].date.getTime() - avgGapMs / 2);
+    const rightDate = xScale.domain()[1] as Date;
+    const x0 = xScale(leftDate);
+    const x1 = xScale(rightDate);
+    if (x1 - x0 <= 0) return;
+    const k = Math.min(maxXZoom, Math.max(1, dims.boundedWidth / (x1 - x0)));
+    setXTransformViaZoom(new d3.ZoomTransform(k, -k * x0, 0));
+  }, [dims.boundedWidth, data, initialVisibleCandles, xScale, maxXZoom, setXTransformViaZoom]);
+
   const xAxisDrag = useAxisDragRescale({
     axis: "x",
     size: dims.boundedWidth,
@@ -471,11 +551,20 @@ export function CandlestickChart({
     onChange: setXTransformViaZoom,
     scaleExtent: [1, maxXZoom],
   });
+  // Wraps setYTransform for the axis's own drag/wheel controls specifically — these are always
+  // a deliberate manual Y adjustment, so they also flag `yManuallyAdjusted` to stop
+  // `YAutoScaling` from overwriting them (see the effect above). The 2D-pan-Y handler further
+  // down sets the flag itself instead, since it isn't a plain onChange callback.
+  function handleManualYChange(t: d3.ZoomTransform) {
+    setYManuallyAdjusted(true);
+    setYTransform(t);
+  }
+
   const yAxisDrag = useAxisDragRescale({
     axis: "y",
     size: priceHeight,
     transform: yTransform,
-    onChange: setYTransform,
+    onChange: handleManualYChange,
   });
 
   const xAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
@@ -489,20 +578,26 @@ export function CandlestickChart({
   const yAxisWheelRef = useAxisWheelZoom<SVGRectElement>({
     axis: "y",
     transform: yTransform,
-    onChange: setYTransform,
+    onChange: handleManualYChange,
     enabled: zoomable,
     size: priceHeight,
   });
 
-  const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
+  // While YAutoScaling drives yTransform on its own, that alone shouldn't count as "zoomed" —
+  // otherwise the reset button would stay permanently visible even without the user ever
+  // touching the Y axis. It only counts once they've manually overridden it.
+  const yIsZoomed = YAutoScaling ? yManuallyAdjusted : yTransform.k !== 1 || yTransform.y !== 0;
+  const isZoomed = transform.k !== 1 || transform.x !== 0 || yIsZoomed;
 
   function resetZoom() {
     resetX();
     setYTransform(d3.zoomIdentity);
+    setYManuallyAdjusted(false);
   }
 
   function resetYAxis() {
     setYTransform(d3.zoomIdentity);
+    setYManuallyAdjusted(false);
   }
 
   // All three span the dataset's own (unzoomed) extent rather than the currently visible one,
@@ -711,16 +806,6 @@ export function CandlestickChart({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  // Precise (unpadded) index range of candles actually inside the zoomed time domain — used
-  // to size candles, separately from `visible` below (which pads a couple extra candles on
-  // each side so partially-visible edge candles still render instead of popping in/out).
-  const visibleRange = useMemo(() => {
-    if (data.length === 0) return { start: 0, end: 0 };
-    const [d0, d1] = zoomedXScale.domain();
-    const bisect = d3.bisector<Candle, Date>((d) => d.date).left;
-    return { start: bisect(data, d0 as Date), end: bisect(data, d1 as Date) };
-  }, [data, zoomedXScale]);
-
   const visible = useMemo(() => {
     if (data.length === 0) return [];
     const start = Math.max(0, visibleRange.start - 2);
@@ -848,6 +933,9 @@ export function CandlestickChart({
     isPanningYRef.current = true;
     const onMove = (ev: PointerEvent) => {
       const dy = ev.clientY - startClientY;
+      // Only flagged here (once actual movement happens), not at pointerdown — a plain click
+      // with no drag shouldn't disable YAutoScaling.
+      setYManuallyAdjusted(true);
       setYTransform(d3.zoomIdentity.scale(startYTransform.k).translate(0, startYTransform.y / startYTransform.k + dy / startYTransform.k));
     };
     const onUp = () => {
