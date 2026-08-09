@@ -437,6 +437,44 @@ export const FibonacciIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Same retracement rungs as FibonacciIcon, plus an arrow projecting further out — the
+ *  extension tool's levels project *past* its own points instead of sitting between them. */
+export const FibonacciExtensionIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 6h6" />
+    <path d="M2 12h10" />
+    <path d="M2 18h6" />
+    <path d="M15 12h6" />
+    <path d="M18 9l3 3-3 3" />
+  </IconBase>
+);
+
+/** A 5-swing zigzag with dots at both ends — the shared silhouette for the Elliott Wave
+ *  category button, distinct from the labeled-vertex icons of its two specific tools below. */
+export const ElliottWaveIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 18 7 8 11 13 16 4 22 10" />
+    <circle cx="2" cy="18" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="22" cy="10" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+export const ElliottImpulseIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 19 6 9 9 14 13 5 17 12 22 4" />
+    <circle cx="2" cy="19" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="22" cy="4" r="1.2" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+export const ElliottCorrectionIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 6 9 16 14 10 20 19" />
+    <circle cx="3" cy="6" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="19" r="1.2" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
 export const ActivityIcon = (props: IconProps) => (
   <IconBase {...props}>
     <path d="M22 12h-4l-3 8-6-16-3 8H2" />

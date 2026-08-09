@@ -22,6 +22,9 @@ import {
   ExtendedLineIcon,
   ChannelIcon,
   FibonacciIcon,
+  FibonacciExtensionIcon,
+  ElliottImpulseIcon,
+  ElliottCorrectionIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   PlusIcon,
@@ -73,14 +76,20 @@ export interface TrendLineDrawing {
    *  buttons. "fibonacci" is a free two-point line like a regular trend line (same two draggable
    *  endpoints, no extra points needed) whose price range between y1 (0%) and y2 (100%) is
    *  sliced into the standard retracement ratios (see FIBONACCI_LEVELS) — each drawn as its own
-   *  horizontal segment spanning x1/x2's date range, labeled with its ratio and price. */
-  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci";
+   *  horizontal segment spanning x1/x2's date range, labeled with its ratio and price.
+   *  "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" need more than two points — x1/y1
+   *  and x2/y2 are still the first two (placed the same way), the rest live in `extraPoints`, in
+   *  click order. */
+  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci" | "fibonacciExtension" | "elliottImpulse" | "elliottCorrection";
   /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
    *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
   /** "channel" only: the second line's constant price offset from the first (x1/y1–x2/y2),
    *  set by the tool's third click. */
   channelOffset?: number;
+  /** Points beyond x1/y1 (the 1st) and x2/y2 (the 2nd), in click order — "fibonacciExtension"
+   *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4. Unused otherwise. */
+  extraPoints?: { x: Date; y: number }[];
 }
 
 /** Standard Fibonacci retracement ratios, 0 (y1) to 1 (y2) — the same default set most trading
@@ -88,6 +97,33 @@ export interface TrendLineDrawing {
  *  that, and hand-rolling a "which levels" UI for one tool would be a lot of surface area for a
  *  set virtually everyone leaves at the defaults anyway. */
 const FIBONACCI_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
+
+/** Standard Fibonacci extension ratios — projected from the 3rd point (C) by this fraction of
+ *  the 1st-to-2nd (A-to-B) leg's own price span, the conventional "trend-based Fib extension"
+ *  formula most trading platforms use. */
+const FIBONACCI_EXTENSION_LEVELS = [0, 0.382, 0.618, 1, 1.382, 1.618, 2, 2.618];
+
+/** How many points *beyond* x1/y1 and x2/y2 each multi-point tool collects before committing,
+ *  and what each of those extra points (plus the first two) is labeled in the edit modal. Tools
+ *  not listed here (trendline/extended/fibonacci: 2 points total; channel: 3, but its 3rd click
+ *  sets `channelOffset` instead of a raw point, handled separately) don't use this at all. */
+const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: number; labels: string[] }>> = {
+  fibonacciExtension: { extraPoints: 1, labels: ["Point A", "Point B", "Point C"] },
+  elliottCorrection: { extraPoints: 2, labels: ["Point 0", "Point A", "Point B", "Point C"] },
+  elliottImpulse: { extraPoints: 4, labels: ["Point 0", "Point 1", "Point 2", "Point 3", "Point 4", "Point 5"] },
+};
+
+// Short vertex labels drawn directly on the chart next to each point — distinct from
+// MULTI_POINT_TOOLS' longer "Point X" labels, which are for the edit modal's field list instead.
+const ELLIOTT_IMPULSE_VERTEX_LABELS = ["0", "1", "2", "3", "4", "5"];
+const ELLIOTT_CORRECTION_VERTEX_LABELS = ["0", "A", "B", "C"];
+
+/** All of a drawing's points in click order (x1/y1, x2/y2, then extraPoints) — the shape every
+ *  multi-point tool's rendering/hit-testing/dragging works off of instead of the named fields
+ *  directly. */
+function allPointsOf(dr: TrendLineDrawing): DataPoint[] {
+  return [{ x: dr.x1, y: dr.y1 }, { x: dr.x2, y: dr.y2 }, ...(dr.extraPoints ?? [])];
+}
 
 interface DataPoint {
   x: Date;
@@ -238,17 +274,65 @@ function computeIndicatorValues(data: Candle[], indicator: Indicator): (number |
   }
 }
 
-type DrawingToolType = "trendline" | "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci";
+type DrawingToolType =
+  | "trendline"
+  | "horizontal"
+  | "vertical"
+  | "ray"
+  | "extended"
+  | "channel"
+  | "fibonacci"
+  | "fibonacciExtension"
+  | "elliottImpulse"
+  | "elliottCorrection";
 
-const DRAWING_TOOLS: { type: DrawingToolType; label: string; icon: typeof TrendLineIcon }[] = [
-  { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
-  { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
-  { type: "channel", label: "Canal", icon: ChannelIcon },
-  { type: "fibonacci", label: "Retracement de Fibonacci", icon: FibonacciIcon },
-  { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
-  { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
-  { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
+interface DrawingToolDef {
+  type: DrawingToolType;
+  label: string;
+  icon: typeof TrendLineIcon;
+}
+
+interface DrawingToolCategory {
+  /** Stable key — also what tracks each category's own "last picked tool" and open/closed
+   *  dropdown state, so it has to stay unique and never change once shipped. */
+  id: string;
+  tools: DrawingToolDef[];
+}
+
+// Each category gets its own button + chevron + dropdown in the rail (see the JSX below) —
+// the button represents whichever of its own tools was picked last (defaulting to the first),
+// same as the single button used to for the whole flat list before categories existed.
+const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
+  {
+    id: "lines",
+    tools: [
+      { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
+      { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
+      { type: "channel", label: "Canal", icon: ChannelIcon },
+      { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
+      { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
+      { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
+    ],
+  },
+  {
+    id: "fibonacci",
+    tools: [
+      { type: "fibonacci", label: "Retracement de Fibonacci", icon: FibonacciIcon },
+      { type: "fibonacciExtension", label: "Extension de Fibonacci", icon: FibonacciExtensionIcon },
+    ],
+  },
+  {
+    id: "elliott",
+    tools: [
+      { type: "elliottImpulse", label: "Vague d'Elliott (impulsive)", icon: ElliottImpulseIcon },
+      { type: "elliottCorrection", label: "Vague d'Elliott (correctrice)", icon: ElliottCorrectionIcon },
+    ],
+  },
 ];
+
+function categoryOfTool(type: DrawingToolType): DrawingToolCategory {
+  return DRAWING_TOOL_CATEGORIES.find((c) => c.tools.some((t) => t.type === type)) ?? DRAWING_TOOL_CATEGORIES[0];
+}
 
 export interface TimeframeOption {
   label: string;
@@ -454,16 +538,27 @@ export function CandlestickChart({
 
   const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
   const [activeTool, setActiveTool] = useState<DrawingToolType | null>(null);
-  // Which tool the rail's single button currently represents — stays selected across draws,
-  // independent of whether drawing is actually active right now. Changed via the flyout menu.
-  const [selectedToolType, setSelectedToolType] = useState<DrawingToolType>("trendline");
-  const [toolMenuOpen, setToolMenuOpen] = useState(false);
+  // Which tool each category's own rail button currently represents — stays selected across
+  // draws, independent of whether drawing is actually active right now, and independent of the
+  // other categories' own selection. Changed via that category's own flyout menu, which (unlike
+  // the button itself) also activates the tool immediately — see handleSelectToolType.
+  const [selectedToolByCategory, setSelectedToolByCategory] = useState<Record<string, DrawingToolType>>(() =>
+    Object.fromEntries(DRAWING_TOOL_CATEGORIES.map((c) => [c.id, c.tools[0].type]))
+  );
+  // Which category's dropdown is open, if any — at most one at a time.
+  const [openToolMenu, setOpenToolMenu] = useState<string | null>(null);
   const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
   const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
-  // "channel" only: its second point (fixing line 1), set between the tool's 2nd and 3rd clicks
-  // — pendingPoint/previewPoint alone are enough for every other tool's 2-click flow, channel
-  // needs a 3rd.
+  // "channel"'s second point (fixing line 1), set between the tool's 2nd and 3rd clicks — plain
+  // pendingPoint/previewPoint alone are enough for every 2-point tool's flow, channel needs a
+  // 3rd click. Every *other* multi-point tool (fibonacciExtension/elliottCorrection/
+  // elliottImpulse) also passes through this same 2nd-point stage before collecting the rest
+  // into pendingExtraPoints below — they don't diverge from channel until after it.
   const [pendingSecondPoint, setPendingSecondPoint] = useState<DataPoint | null>(null);
+  // 3rd point onward for tools needing more than two (see MULTI_POINT_TOOLS) — irrelevant to
+  // channel, which computes channelOffset from its 3rd click directly instead of collecting it
+  // here.
+  const [pendingExtraPoints, setPendingExtraPoints] = useState<DataPoint[]>([]);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
@@ -474,13 +569,24 @@ export function CandlestickChart({
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
   const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
   const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
-  const dragEndpointRef = useRef<{ id: string; which: 1 | 2 } | null>(null);
+  // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
+  const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
   const dragAxisRef = useRef<{ id: string } | null>(null);
   const drawingIdRef = useRef(0);
   const indicatorIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
-  const toolMenuAnchorRef = useRef<HTMLButtonElement>(null);
+  // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than
+  // a dynamic map — Popover needs a real RefObject per anchor, and refs can't be created in a
+  // loop).
+  const linesMenuAnchorRef = useRef<HTMLButtonElement>(null);
+  const fibonacciMenuAnchorRef = useRef<HTMLButtonElement>(null);
+  const elliottMenuAnchorRef = useRef<HTMLButtonElement>(null);
+  function menuAnchorRefFor(categoryId: string) {
+    if (categoryId === "fibonacci") return fibonacciMenuAnchorRef;
+    if (categoryId === "elliott") return elliottMenuAnchorRef;
+    return linesMenuAnchorRef;
+  }
   const [themeTick, setThemeTick] = useState(0);
   // Local view state for the volume pane's own header (name/collapse/remove), layered on top of
   // the `showVolume` prop rather than replacing it: `showVolume` is the caller's own on/off
@@ -843,6 +949,7 @@ export function CandlestickChart({
     setPendingPoint(null);
     setPreviewPoint(null);
     setPendingSecondPoint(null);
+    setPendingExtraPoints([]);
   }
 
   function handleToolClick(tool: DrawingToolType) {
@@ -853,16 +960,22 @@ export function CandlestickChart({
       setPendingPoint(null);
       setPreviewPoint(null);
       setPendingSecondPoint(null);
+      setPendingExtraPoints([]);
     }
   }
 
-  // Picking a tool from the flyout menu only changes what the rail's single button represents —
-  // it doesn't start drawing. The user still has to click that button afterward, same as any
-  // other tool selection.
+  // Picking a tool from a category's flyout menu both changes what that category's own rail
+  // button represents *and* activates it immediately, ready to draw — unlike clicking the
+  // button itself to toggle the already-represented tool on/off, there's no extra confirmation
+  // click needed here since picking a specific tool from the menu is already a deliberate choice.
   function handleSelectToolType(type: DrawingToolType) {
-    setSelectedToolType(type);
-    setToolMenuOpen(false);
-    cancelDrawingTool();
+    setSelectedToolByCategory((prev) => ({ ...prev, [categoryOfTool(type).id]: type }));
+    setOpenToolMenu(null);
+    setActiveTool(type);
+    setPendingPoint(null);
+    setPreviewPoint(null);
+    setPendingSecondPoint(null);
+    setPendingExtraPoints([]);
   }
 
   useEffect(() => {
@@ -979,6 +1092,46 @@ export function CandlestickChart({
       return;
     }
 
+    // "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" all collect more than two points
+    // — the first two go through the same pendingPoint/pendingSecondPoint stages "channel" uses
+    // above, the rest accumulate into pendingExtraPoints until MULTI_POINT_TOOLS' count for this
+    // tool is reached, then commit with everything gathered.
+    const multiPoint = MULTI_POINT_TOOLS[activeTool];
+    if (multiPoint) {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      if (!pendingSecondPoint) {
+        setPendingSecondPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      const nextExtra = [...pendingExtraPoints, point];
+      if (nextExtra.length < multiPoint.extraPoints) {
+        setPendingExtraPoints(nextExtra);
+        setPreviewPoint(point);
+        return;
+      }
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          x1: pendingPoint.x,
+          y1: pendingPoint.y,
+          x2: pendingSecondPoint.x,
+          y2: pendingSecondPoint.y,
+          // MULTI_POINT_TOOLS only has entries for these three, guaranteed by `multiPoint` above
+          // — narrower than what TS can infer just from the (wider-keyed) lookup being truthy.
+          lineType: activeTool as "fibonacciExtension" | "elliottCorrection" | "elliottImpulse",
+          extraPoints: nextExtra,
+        },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+
     // "trendline", "extended" and "fibonacci" all share the same 2-click flow — they only differ
     // in how they're drawn (see the canvas draw effect), not in how they're placed.
     if (!pendingPoint) {
@@ -1029,11 +1182,14 @@ export function CandlestickChart({
     closeEditModal();
   }
 
-  function handleEndpointPointerDown(drawingId: string, which: 1 | 2) {
+  // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — every multi-point tool
+  // (fibonacciExtension/elliottCorrection/elliottImpulse) shares this one generic handler instead
+  // of each needing its own, same as a regular trend line's two endpoints always have.
+  function handleEndpointPointerDown(drawingId: string, pointIndex: number) {
     return (e: React.PointerEvent<SVGCircleElement>) => {
       e.stopPropagation();
       e.currentTarget.setPointerCapture(e.pointerId);
-      dragEndpointRef.current = { id: drawingId, which };
+      dragEndpointRef.current = { id: drawingId, pointIndex };
     };
   }
 
@@ -1044,7 +1200,11 @@ export function CandlestickChart({
     commitDrawings(
       drawings.map((d) => {
         if (d.id !== drag.id) return d;
-        return drag.which === 1 ? { ...d, x1: point.x, y1: point.y } : { ...d, x2: point.x, y2: point.y };
+        if (drag.pointIndex === 0) return { ...d, x1: point.x, y1: point.y };
+        if (drag.pointIndex === 1) return { ...d, x2: point.x, y2: point.y };
+        const extraPoints = [...(d.extraPoints ?? [])];
+        extraPoints[drag.pointIndex - 2] = point;
+        return { ...d, extraPoints };
       })
     );
   }
@@ -1204,7 +1364,22 @@ export function CandlestickChart({
         const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
         const newX2 = dateForIndex(zoomedXScale.invert(origX2 + dxPixels));
         const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
-        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2 } : d)));
+        // Any extraPoints (fibonacciExtension/elliottCorrection/elliottImpulse) move by the same
+        // pixel delta as x1/x2, keeping the whole multi-point shape intact.
+        const newExtraPoints = drag.orig.extraPoints?.map((p) => {
+          const origX = zoomedXScale(indexForDate(p.x) + 0.5);
+          return {
+            x: dateForIndex(zoomedXScale.invert(origX + dxPixels)),
+            y: zoomedPriceScale.invert(zoomedPriceScale(p.y) + dyPixels),
+          };
+        });
+        commitDrawings(
+          drawings.map((d) =>
+            d.id === drag.id
+              ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2, ...(newExtraPoints ? { extraPoints: newExtraPoints } : {}) }
+              : d
+          )
+        );
       }
       return;
     }
@@ -1267,6 +1442,36 @@ export function CandlestickChart({
               return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
             })
           );
+        } else if (dr.lineType === "elliottImpulse" || dr.lineType === "elliottCorrection") {
+          const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
+          let minSegmentDist = Infinity;
+          for (let i = 1; i < screenPoints.length; i++) {
+            minSegmentDist = Math.min(
+              minSegmentDist,
+              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
+            );
+          }
+          d = minSegmentDist;
+        } else if (dr.lineType === "fibonacciExtension") {
+          const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const ay = zoomedPriceScale(dr.y1);
+          const bx = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const by = zoomedPriceScale(dr.y2);
+          const distances = [distanceToSegment(mouseX, mouseY, ax, ay, bx, by)];
+          const pointC = dr.extraPoints?.[0];
+          if (pointC) {
+            const cx = zoomedXScale(indexForDate(pointC.x) + 0.5);
+            const cy = zoomedPriceScale(pointC.y);
+            distances.push(distanceToSegment(mouseX, mouseY, bx, by, cx, cy));
+            const legDelta = dr.y2 - dr.y1;
+            const levelX1 = Math.min(bx, cx);
+            const levelX2 = Math.max(bx, cx);
+            for (const ratio of FIBONACCI_EXTENSION_LEVELS) {
+              const y = zoomedPriceScale(pointC.y + legDelta * ratio);
+              distances.push(distanceToSegment(mouseX, mouseY, levelX1, y, levelX2, y));
+            }
+          }
+          d = Math.min(...distances);
         } else {
           d = distanceToSegment(
             mouseX,
@@ -1554,6 +1759,61 @@ export function CandlestickChart({
         ctx.restore();
       }
 
+      // "elliottImpulse"/"elliottCorrection": x1/x2 (already drawn above as the diagonal) is
+      // just the first of several segments — draws the rest of the polyline through
+      // extraPoints, then labels every vertex (0-1-2-3-4-5 or 0-A-B-C).
+      if ((dr.lineType === "elliottImpulse" || dr.lineType === "elliottCorrection") && dr.extraPoints?.length) {
+        const restScreen = dr.extraPoints.map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        for (const p of restScreen) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+
+        const vertexLabels = dr.lineType === "elliottImpulse" ? ELLIOTT_IMPULSE_VERTEX_LABELS : ELLIOTT_CORRECTION_VERTEX_LABELS;
+        const allScreen = [{ x: x1, y: y1 }, { x: x2, y: y2 }, ...restScreen];
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = `700 10px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = lineColor;
+        allScreen.forEach((p, i) => ctx.fillText(vertexLabels[i] ?? "", p.x, p.y - 6));
+        ctx.restore();
+      }
+
+      // "fibonacciExtension": x1/x2 (the A-B leg, already drawn above) is followed by a B-C
+      // segment to its 3rd point, then extension levels projected from C by each ratio's share
+      // of the A-B leg's own price span — the conventional "trend-based" extension formula.
+      if (dr.lineType === "fibonacciExtension" && dr.extraPoints?.length) {
+        const pointC = dr.extraPoints[0];
+        const cx = zoomedXScale(indexForDate(pointC.x) + 0.5);
+        const cy = zoomedPriceScale(pointC.y);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+
+        ctx.save();
+        ctx.setLineDash(dr.dashed ? [6, 4] : []);
+        ctx.font = `600 10px ${fontFamily}`;
+        ctx.textAlign = "right";
+        ctx.textBaseline = "bottom";
+        const legDelta = dr.y2 - dr.y1;
+        const levelX1 = Math.min(x2, cx);
+        const levelX2 = Math.max(x2, cx);
+        for (const ratio of FIBONACCI_EXTENSION_LEVELS) {
+          const price = pointC.y + legDelta * ratio;
+          const y = zoomedPriceScale(price);
+          ctx.beginPath();
+          ctx.moveTo(levelX1, y);
+          ctx.lineTo(levelX2, y);
+          ctx.stroke();
+          ctx.fillStyle = lineColor;
+          ctx.fillText(`${(ratio * 100).toFixed(1)}% · ${price.toFixed(2)}`, levelX2 - 4, y - 3);
+        }
+        ctx.restore();
+      }
+
       if (dr.text) {
         const spansToRightEdge = dr.lineType === "horizontal" || dr.lineType === "ray";
         ctx.fillStyle = lineColor;
@@ -1593,6 +1853,20 @@ export function CandlestickChart({
         ctx.beginPath();
         ctx.moveTo(x1, y1 + offsetPx);
         ctx.lineTo(x2, y2 + offsetPx);
+        ctx.stroke();
+      } else if (MULTI_POINT_TOOLS[activeTool]) {
+        // fibonacciExtension/elliottCorrection/elliottImpulse: preview the polyline through
+        // whatever points have been placed so far, plus one more segment out to the live cursor
+        // for whichever point comes next.
+        const placed = [pendingPoint, pendingSecondPoint, ...pendingExtraPoints].filter((p): p is DataPoint => p !== null);
+        ctx.beginPath();
+        placed.forEach((p, i) => {
+          const x = zoomedXScale(indexForDate(p.x) + 0.5);
+          const y = zoomedPriceScale(p.y);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
         ctx.stroke();
       } else {
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
@@ -1743,6 +2017,7 @@ export function CandlestickChart({
     pendingPoint,
     previewPoint,
     pendingSecondPoint,
+    pendingExtraPoints,
     visibleIndicators,
     indexForDate,
     dims.boundedWidth,
@@ -1765,8 +2040,6 @@ export function CandlestickChart({
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
   const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
-  const selectedTool = DRAWING_TOOLS.find((t) => t.type === selectedToolType) ?? DRAWING_TOOLS[0];
-  const SelectedToolIcon = selectedTool.icon;
 
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
@@ -1871,53 +2144,68 @@ export function CandlestickChart({
         {drawingTools && (
           <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
             <div className="lq-chart__tools-rail-items">
-              {/* The chevron is invisible until this group (button or chevron) is hovered —
-                  see .lq-chart__tool-chevron in charts-shared.css. Picking a tool from its menu
-                  only changes what this button represents; the user still has to click it
-                  afterward to actually start drawing (see handleSelectToolType). */}
-              <div className="lq-chart__tool-group">
-                <button
-                  type="button"
-                  className={["lq-chart__icon-button", activeTool !== null && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                  onClick={() => handleToolClick(selectedToolType)}
-                  aria-label={selectedTool.label}
-                  aria-pressed={activeTool !== null}
-                >
-                  <SelectedToolIcon size={14} />
-                </button>
-                <button
-                  ref={toolMenuAnchorRef}
-                  type="button"
-                  className={["lq-chart__tool-chevron", toolMenuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
-                  onClick={() => setToolMenuOpen((o) => !o)}
-                  aria-label="Autres outils de dessin"
-                >
-                  <ChevronDownIcon size={8} />
-                </button>
-                <Popover open={toolMenuOpen} onClose={() => setToolMenuOpen(false)} anchorRef={toolMenuAnchorRef} placement="bottom">
-                  <div className="lq-chart__tool-menu">
-                    {DRAWING_TOOLS.map((opt) => {
-                      const OptionIcon = opt.icon;
-                      return (
-                        <button
-                          key={opt.type}
-                          type="button"
-                          className={[
-                            "lq-chart__tool-menu-option",
-                            opt.type === selectedToolType && "lq-chart__tool-menu-option--selected",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          onClick={() => handleSelectToolType(opt.type)}
-                        >
-                          <OptionIcon size={14} />
-                          {opt.label}
-                        </button>
-                      );
-                    })}
+              {/* One group per category (Lignes/Fibonacci/Vagues d'Elliott) — each button
+                  represents whichever of its own tools was picked last (defaulting to the
+                  first). The chevron is invisible until its own group (button or chevron) is
+                  hovered — see .lq-chart__tool-chevron in charts-shared.css. Picking a tool from
+                  a category's menu both changes what its button represents *and* activates it
+                  immediately (see handleSelectToolType) — clicking the button itself afterward
+                  just toggles that same tool on/off, same as any other tool selection. */}
+              {DRAWING_TOOL_CATEGORIES.map((category) => {
+                const selectedType = selectedToolByCategory[category.id] ?? category.tools[0].type;
+                const selectedInCategory = category.tools.find((t) => t.type === selectedType) ?? category.tools[0];
+                const CategoryIcon = selectedInCategory.icon;
+                const menuOpen = openToolMenu === category.id;
+                return (
+                  <div className="lq-chart__tool-group" key={category.id}>
+                    <button
+                      type="button"
+                      className={["lq-chart__icon-button", activeTool === selectedInCategory.type && "lq-chart__icon-button--active"]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => handleToolClick(selectedInCategory.type)}
+                      aria-label={selectedInCategory.label}
+                      aria-pressed={activeTool === selectedInCategory.type}
+                    >
+                      <CategoryIcon size={14} />
+                    </button>
+                    <button
+                      ref={menuAnchorRefFor(category.id)}
+                      type="button"
+                      className={["lq-chart__tool-chevron", menuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
+                      onClick={() => setOpenToolMenu((o) => (o === category.id ? null : category.id))}
+                      aria-label={`Autres outils — ${category.id}`}
+                    >
+                      <ChevronDownIcon size={8} />
+                    </button>
+                    <Popover
+                      open={menuOpen}
+                      onClose={() => setOpenToolMenu(null)}
+                      anchorRef={menuAnchorRefFor(category.id)}
+                      placement="bottom"
+                    >
+                      <div className="lq-chart__tool-menu">
+                        {category.tools.map((opt) => {
+                          const OptionIcon = opt.icon;
+                          return (
+                            <button
+                              key={opt.type}
+                              type="button"
+                              className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
+                                .filter(Boolean)
+                                .join(" ")}
+                              onClick={() => handleSelectToolType(opt.type)}
+                            >
+                              <OptionIcon size={14} />
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Popover>
                   </div>
-                </Popover>
-              </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -2180,34 +2468,29 @@ export function CandlestickChart({
                     />
                   );
                 }
-                // "extended"/"channel" and the regular trend line all share the same two
-                // independently-draggable endpoint handles (they're the two points that define
-                // the line's slope regardless of how far it's actually drawn) — "channel" gets a
-                // 3rd, single-axis handle on its own line 2 for channelOffset specifically.
+                // Every point (x1/y1, x2/y2, and any extraPoints) gets its own independently
+                // draggable handle via the same generic pointIndex-based handler — covers a
+                // regular trend line/extended/fibonacci's two points and
+                // fibonacciExtension/elliottCorrection/elliottImpulse's extra ones alike, with no
+                // per-tool-specific handle code needed beyond channel's own 3rd (below), which
+                // adjusts channelOffset instead of a raw point.
+                const points = allPointsOf(dr);
                 const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-                const y1 = zoomedPriceScale(dr.y1);
                 const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-                const y2 = zoomedPriceScale(dr.y2);
                 return (
                   <g key={dr.id}>
-                    <circle
-                      className="lq-chart__drawing-handle"
-                      cx={x1}
-                      cy={y1}
-                      r={5}
-                      onPointerDown={handleEndpointPointerDown(dr.id, 1)}
-                      onPointerMove={handleEndpointPointerMove}
-                      onPointerUp={handleEndpointPointerUp}
-                    />
-                    <circle
-                      className="lq-chart__drawing-handle"
-                      cx={x2}
-                      cy={y2}
-                      r={5}
-                      onPointerDown={handleEndpointPointerDown(dr.id, 2)}
-                      onPointerMove={handleEndpointPointerMove}
-                      onPointerUp={handleEndpointPointerUp}
-                    />
+                    {points.map((p, i) => (
+                      <circle
+                        key={i}
+                        className="lq-chart__drawing-handle"
+                        cx={zoomedXScale(indexForDate(p.x) + 0.5)}
+                        cy={zoomedPriceScale(p.y)}
+                        r={5}
+                        onPointerDown={handleEndpointPointerDown(dr.id, i)}
+                        onPointerMove={handleEndpointPointerMove}
+                        onPointerUp={handleEndpointPointerUp}
+                      />
+                    ))}
                     {dr.lineType === "channel" && (
                       <circle
                         className="lq-chart__drawing-handle"
@@ -2409,6 +2692,39 @@ export function CandlestickChart({
               onChange={(v) => setDraft({ ...draft, channelOffset: v === "" ? draft.channelOffset : v })}
             />
           )}
+          {/* "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" — a date+price row per
+              point (x1/y1, x2/y2, then extraPoints), generic over however many that tool needs
+              instead of a fixed "Début"/"Fin" pair. */}
+          {draft.lineType &&
+            MULTI_POINT_TOOLS[draft.lineType]?.labels.map((label, i) => {
+              const point = i === 0 ? { x: draft.x1, y: draft.y1 } : i === 1 ? { x: draft.x2, y: draft.y2 } : draft.extraPoints?.[i - 2];
+              if (!point) return null;
+              const setPointField = (next: Partial<DataPoint>) => {
+                if (i === 0) {
+                  setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
+                } else if (i === 1) {
+                  setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
+                } else {
+                  const extra = [...(draft.extraPoints ?? [])];
+                  extra[i - 2] = { ...extra[i - 2], ...next };
+                  setDraft({ ...draft, extraPoints: extra });
+                }
+              };
+              return (
+                <div className="lq-chart__edit-drawing-row" key={i}>
+                  <div className="lq-field">
+                    <label className="lq-field__label">{label}</label>
+                    <input
+                      type="date"
+                      className="lq-chart__date-input"
+                      value={toDateInputValue(point.x)}
+                      onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
+                    />
+                  </div>
+                  <NumberField label={`Prix (${label})`} step={0.01} value={point.y} onChange={(v) => v !== "" && setPointField({ y: v })} />
+                </div>
+              );
+            })}
         </Modal>
       )}
 

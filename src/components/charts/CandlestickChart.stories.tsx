@@ -75,25 +75,28 @@ export const WithDrawingTools: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Bouton "ligne de tendance" dans la colonne d'outils à gauche du graphe (une vraie zone réservée, pas des
-        boutons superposés — elle reste visible en plein écran) — son chevron ouvre un menu avec les autres outils :{" "}
-        <strong>ligne étendue</strong> (les 2 mêmes points qu'une ligne de tendance, mais le tracé continue jusqu'aux
-        bords du graphe au lieu de s'arrêter dessus), <strong>canal</strong> (2 lignes parallèles — 2 clics pour la
-        première ligne comme une ligne de tendance, un 3ème pour l'écart de la seconde),{" "}
-        <strong>retracement de Fibonacci</strong> (mêmes 2 points qu'une ligne de tendance — 0%/100% — découpés en
-        niveaux 23.6/38.2/50/61.8/78.6%, chacun étiqueté ratio + prix), ligne horizontale,{" "}
-        <strong>ligne horizontale à partir d'une date</strong> ("ray" — démarre à la date cliquée au lieu de couvrir
-        tout l'historique, avec une seule poignée déplaçable en date <em>et</em> en prix/volume) et ligne verticale.
-        1er/2ème clic = les deux points d'une ligne de tendance/étendue/Fibonacci (la ligne suit le curseur entre les
-        deux) ; pour un canal, un 3ème clic fixe l'écart de la seconde ligne (elle aussi suit le curseur avant ce
-        clic) ; les outils à un seul point n'en demandent qu'un. Échap ou re-clic sur l'outil annule. Survoler une
-        ligne dessinée
-        fait apparaître ses poignées — glisser une poignée pour la redéfinir, ou glisser directement sur la ligne
-        pour la déplacer entièrement (un canal se déplace tout entier, écart compris).{" "}
-        <strong>Double-clic sur une ligne</strong> pour l'éditer (texte, épaisseur, couleur,{" "}
-        <strong>pointillés</strong>, coordonnées) dans une modale — <strong>double-clic ailleurs sur le graphe</strong>{" "}
-        réinitialise le zoom à la place. Les lignes sont ancrées en coordonnées date/prix : elles suivent le zoom et
-        le déplacement du graphe.
+        Trois catégories d'outils empilées dans la colonne à gauche du graphe (une vraie zone réservée, pas des
+        boutons superposés — elle reste visible en plein écran), chacune avec son propre bouton + chevron + menu :{" "}
+        <strong>Lignes</strong> (tendance, <strong>étendue</strong> — mêmes 2 points qu'une ligne de tendance mais le
+        tracé continue jusqu'aux bords du graphe —, <strong>canal</strong> — 2 lignes parallèles, 2 clics pour la
+        première comme une ligne de tendance puis un 3ème pour l'écart de la seconde —, horizontale,{" "}
+        <strong>horizontale à partir d'une date</strong> — "ray", démarre à la date cliquée au lieu de couvrir tout
+        l'historique — et verticale), <strong>Fibonacci</strong> (<strong>retracement</strong> — mêmes 2 points
+        qu'une ligne de tendance, 0%/100%, découpés en niveaux 23.6/38.2/50/61.8/78.6% — et{" "}
+        <strong>extension</strong> — 3 points A/B/C, niveaux 38.2/61.8/138.2/161.8/261.8% projetés depuis C selon
+        l'ampleur du mouvement A→B) et <strong>Vagues d'Elliott</strong> (<strong>impulsive</strong> — 6 points
+        labellisés 0-1-2-3-4-5 — et <strong>correctrice</strong> — 4 points labellisés 0-A-B-C — en ligne brisée
+        connectée). <strong>Choisir un outil dans un menu l'active directement</strong>, prêt à dessiner dès ce
+        clic — cliquer ensuite le bouton d'une catégorie (re)bascule ce même outil actif/inactif. 1er/2ème clic =
+        les deux premiers points de n'importe quel outil à plusieurs points (la ligne suit le curseur entre les
+        deux) ; canal/extension/vagues d'Elliott continuent au-delà avec un ou plusieurs clics de plus, chacun
+        prévisualisé en direct ; les outils à un seul point n'en demandent qu'un. Échap ou re-clic sur l'outil
+        annule. Survoler une ligne dessinée fait apparaître ses poignées (une par point placé, plus celle de canal
+        pour son écart) — glisser une poignée pour redéfinir ce point, ou glisser directement sur la ligne pour
+        déplacer tous ses points ensemble. <strong>Double-clic sur une ligne</strong> pour l'éditer (texte,
+        épaisseur, couleur, <strong>pointillés</strong>, coordonnées) dans une modale —{" "}
+        <strong>double-clic ailleurs sur le graphe</strong> réinitialise le zoom à la place. Les lignes sont ancrées
+        en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools height={STORY_HEIGHT} />
     </div>

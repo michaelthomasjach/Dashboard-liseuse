@@ -61,5 +61,9 @@ export {
   ExtendedLineIcon,
   ChannelIcon,
   FibonacciIcon,
+  FibonacciExtensionIcon,
+  ElliottWaveIcon,
+  ElliottImpulseIcon,
+  ElliottCorrectionIcon,
   ActivityIcon,
 } from "./icons";
