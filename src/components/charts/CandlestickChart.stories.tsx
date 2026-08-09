@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart, type TimeframeEntry, type Indicator } from "./CandlestickChart";
+import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent } from "./CandlestickChart";
 import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
@@ -101,7 +101,11 @@ export const WithDrawingTools: Story = {
         ligne, alignement vertical/horizontal, couleur de fond) et <strong>Style</strong> (épaisseur, couleur,
         style de trait continu/tirets/pointillés/tiret-point, extension aucune/droite/gauche/des deux côtés) —{" "}
         <strong>double-clic ailleurs sur le graphe</strong> réinitialise le zoom à la place. Les lignes sont ancrées
-        en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
+        en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.{" "}
+        <strong>Horizontale</strong>/<strong>horizontale à partir d'une date</strong> affichent en permanence leur
+        propre prix sur l'axe Y (même badge que celui du survol) ; en plus, une{" "}
+        <strong>horizontale à partir d'une date</strong> affiche sa date de départ sur l'axe X, mais seulement tant
+        que sa ligne est survolée (contrairement au badge de prix, toujours visible).
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools height={STORY_HEIGHT} />
     </div>
@@ -214,6 +218,35 @@ export const WithSubPaneIndicators: Story = {
         en-tête de panneau (volume compris) redimensionne ce panneau.
       </p>
       <CandlestickChart data={MEDIUM_DATASET} showIndicators defaultIndicators={SUB_PANE_INDICATORS} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
+    </div>
+  ),
+};
+
+const SYMBOL_DATASET = generateCandles(260, 180, 99);
+const SYMBOL_EVENTS: ChartEvent[] = [
+  { date: SYMBOL_DATASET[40].date, kind: "earnings", label: "Résultats T1 : BPA 1.24€ (attendu 1.10€)" },
+  { date: SYMBOL_DATASET[95].date, kind: "earnings", label: "Résultats T2 : BPA 1.31€ (attendu 1.28€)" },
+  { date: SYMBOL_DATASET[60].date, kind: "dividend", label: "Dividende détaché : 0.42€/action" },
+  { date: SYMBOL_DATASET[150].date, kind: "dividend", label: "Dividende détaché : 0.45€/action" },
+  { date: SYMBOL_DATASET[200].date, kind: "update", label: "Mise à jour produit : lancement de la gamme X200" },
+];
+
+export const WithSymbolAndEvents: Story = {
+  name: "Symbole, OHLC et évènements",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        En haut à gauche du tracé des prix (`symbol`) : le nom de l'instrument suivi du mode d'affichage courant —{" "}
+        <strong>double-clic dessus</strong> ouvre la modale "Paramètres du graphique" (couleurs des bougies
+        haussières/baissières, rescale automatique de l'axe des prix — `YAutoScaling`/`onYAutoScalingChange` —, et
+        la visibilité de chaque type d'évènement présent dans `events`) — puis, juste à côté, l'<strong>OHLC</strong>{" "}
+        et la variation en % de la bougie survolée (la plus récente par défaut, tant que rien n'est survolé),
+        calculée par rapport à la clôture de la bougie précédente. En bas du tracé des prix, une petite bulle par
+        évènement (`events: ChartEvent[]` — `kind` libre définie par l'app, ex. "earnings"/"dividend"/"update", pas
+        une énumération fixée par le composant) avec un connecteur pointillé vers l'axe ; survoler une bulle affiche
+        sa date et son libellé en infobulle.
+      </p>
+      <CandlestickChart data={SYMBOL_DATASET} symbol="ACME" events={SYMBOL_EVENTS} showIndicators height={STORY_HEIGHT} />
     </div>
   ),
 };

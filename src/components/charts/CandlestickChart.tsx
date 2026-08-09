@@ -55,6 +55,21 @@ export interface Candle {
   volume?: number;
 }
 
+/** A marker shown at the bottom of the price plot (earnings, dividends, product updates…) — see
+ *  `CandlestickChartProps.events`. `kind` is a free-form app-defined string (not a fixed enum, so
+ *  a caller can introduce new event categories without a library change) grouping related events
+ *  for the per-kind show/hide toggle in the chart-settings modal; its first letter (uppercased)
+ *  is what actually renders on the badge unless `symbol` overrides it. */
+export interface ChartEvent {
+  date: Date;
+  kind: string;
+  /** Shown in the badge's tooltip, alongside the date. */
+  label: string;
+  /** 1-2 characters drawn inside the badge instead of `kind`'s own first letter. */
+  symbol?: string;
+  color?: string;
+}
+
 export interface TrendLineDrawing {
   id: string;
   x1: Date;
@@ -345,6 +360,14 @@ const INDICATOR_COLORS = ["#e0a95c", "#6c87c9", "#7fb37f", "#c96c8f", "#9a7fd1"]
 
 function defaultIndicatorColor(index: number): string {
   return INDICATOR_COLORS[((index % INDICATOR_COLORS.length) + INDICATOR_COLORS.length) % INDICATOR_COLORS.length];
+}
+
+// Distinct from INDICATOR_COLORS so an event badge never accidentally matches an indicator
+// line's own color at a glance.
+const EVENT_COLORS = ["#d18b3d", "#4f8fd1", "#3ea377", "#c15d7a", "#8a6fd6", "#c9a13a"];
+
+function defaultEventColor(index: number): string {
+  return EVENT_COLORS[((index % EVENT_COLORS.length) + EVENT_COLORS.length) % EVENT_COLORS.length];
 }
 
 // Each returns one value per candle (null during the warm-up period before enough history has
@@ -810,8 +833,12 @@ export interface CandlestickChartProps {
    *  static domain sized to the whole dataset — until the user manually zooms/pans the Y axis
    *  themselves (wheel or drag on the axis, or dragging the plot vertically), at which point
    *  auto-fit stops so their adjustment isn't immediately overwritten. Clicking "Réinitialiser
-   *  le zoom" re-engages it. Default false. */
+   *  le zoom" re-engages it. Default false. Also toggleable live from the chart-settings modal
+   *  (double-click the symbol/chart-type label, top-left of the price plot) — that toggle owns
+   *  an internal copy seeded from this prop, same uncontrolled pattern as `drawings`/
+   *  `indicators`, reported back via `onYAutoScalingChange`. */
   YAutoScaling?: boolean;
+  onYAutoScalingChange?: (value: boolean) => void;
   /** Timeframe/interval options shown as a dropdown in the header — flat, or grouped (e.g. one
    *  group per "Minutes"/"Heures"/"Jours"), matching a typical trading-platform interval menu.
    *  This only renders the picker and reports the choice via `onTimeframeChange`; resampling
@@ -831,6 +858,17 @@ export interface CandlestickChartProps {
    *  many candles' worth of average true range past the last one) — recomputed from the whole
    *  dataset, not just what's visible. Default 14. */
   renkoAtrPeriod?: number;
+  /** Instrument name shown top-left of the price plot, followed by the current chart-type label
+   *  (e.g. "AAPL · Bougies") — double-clicking that label opens the chart-settings modal (up/down
+   *  bar colors, auto-rescale, event visibility). Omit to show just the chart-type label on its
+   *  own (the settings modal is still reachable by double-clicking it). */
+  symbol?: string;
+  /** Markers shown as small badges along the bottom of the price plot (earnings, dividends,
+   *  product updates…) — each `kind` groups related events and can be shown/hidden independently
+   *  from the chart-settings modal (double-click the symbol/chart-type label). Purely
+   *  presentational: positions are derived from `date` via the same index-based X scale
+   *  everything else uses, so they pan/zoom with the candles. */
+  events?: ChartEvent[];
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -857,6 +895,11 @@ const AXIS_VALUE_Y_OVERLAP = 20;
  *  from the right edge, a vertical line's handle 1/4 of the height down from the top. */
 const AXIS_HANDLE_FRACTION_X = 0.75;
 const AXIS_HANDLE_FRACTION_Y = 0.25;
+/** Event badges (see `ChartEvent`) sit in a fixed row this many px above the price/volume
+ *  divider — always tied to the divider, never to whatever's currently the tallest/shortest
+ *  visible candle, so the row doesn't jump around while panning/zooming. */
+const EVENT_MARKER_OFFSET = 14;
+const EVENT_MARKER_RADIUS = 8;
 /** Upper bound on how many date labels the bottom axis shows at once, regardless of how many
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 const MAX_DATE_TICKS = 12;
@@ -1051,12 +1094,15 @@ export function CandlestickChart({
   onIndicatorsChange,
   initialVisibleCandles = 500,
   YAutoScaling = false,
+  onYAutoScalingChange,
   timeframes,
   timeframe,
   onTimeframeChange,
   defaultChartDisplayMode,
   onChartDisplayModeChange,
   renkoAtrPeriod = 14,
+  symbol,
+  events,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -1102,6 +1148,16 @@ export function CandlestickChart({
   const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>(defaultChartDisplayMode ?? "candle");
   const [displayModeOpen, setDisplayModeOpen] = useState(false);
   const displayModeAnchorRef = useRef<HTMLButtonElement>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Per-chart color overrides for up/down bars — `undefined` (the default) means "use the
+  // theme's own --lq-color-up/--lq-color-down", same as before this modal existed.
+  const [upColorOverride, setUpColorOverride] = useState<string | undefined>(undefined);
+  const [downColorOverride, setDownColorOverride] = useState<string | undefined>(undefined);
+  // Seeded from the `YAutoScaling` prop, then owned locally once the settings-modal checkbox can
+  // change it — same uncontrolled pattern as `drawings`/`indicators`, not a live mirror of the
+  // prop after mount.
+  const [yAutoScalingState, setYAutoScalingState] = useState(YAutoScaling);
+  const [hiddenEventKinds, setHiddenEventKinds] = useState<Set<string>>(new Set());
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
@@ -1375,7 +1431,7 @@ export function CandlestickChart({
   // fresh object every render (even ones triggered by unrelated state like hover) — indices only
   // actually change on a real pan/zoom, so this skips needless recomputation the rest of the time.
   useEffect(() => {
-    if (!YAutoScaling || yManuallyAdjusted || data.length === 0) return;
+    if (!yAutoScalingState || yManuallyAdjusted || data.length === 0) return;
     const slice = data.slice(Math.max(0, visibleRange.start), Math.min(data.length, visibleRange.end));
     const source = slice.length > 0 ? slice : data;
     const highs = source.map((d) => d.high);
@@ -1390,7 +1446,7 @@ export function CandlestickChart({
     const k = priceHeight / denom;
     const y = -k * priceScale(targetMax);
     setYTransform(new d3.ZoomTransform(k, 0, y));
-  }, [YAutoScaling, yManuallyAdjusted, data, visibleRange.start, visibleRange.end, priceScale, priceHeight]);
+  }, [yAutoScalingState, yManuallyAdjusted, data, visibleRange.start, visibleRange.end, priceScale, priceHeight]);
 
   // 10% headroom on top of the tallest bar, so it doesn't reach all the way up to the
   // price/volume divider — leaves a small visual gap between the bars and the line.
@@ -1492,7 +1548,7 @@ export function CandlestickChart({
   // While YAutoScaling drives yTransform on its own, that alone shouldn't count as "zoomed" —
   // otherwise the reset button would stay permanently visible even without the user ever
   // touching the Y axis. It only counts once they've manually overridden it.
-  const yIsZoomed = YAutoScaling ? yManuallyAdjusted : yTransform.k !== 1 || yTransform.y !== 0;
+  const yIsZoomed = yAutoScalingState ? yManuallyAdjusted : yTransform.k !== 1 || yTransform.y !== 0;
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yIsZoomed;
 
   function resetZoom() {
@@ -1938,6 +1994,23 @@ export function CandlestickChart({
     return computeTPOProfile(data.slice(start, end), 24);
   }, [data, visibleRange, chartDisplayMode]);
 
+  // First-seen order (not alphabetical) so the settings modal's checkbox list matches whatever
+  // order the caller's own `events` array introduces each kind in.
+  const eventKinds = useMemo(() => {
+    const kinds: string[] = [];
+    for (const e of events ?? []) if (!kinds.includes(e.kind)) kinds.push(e.kind);
+    return kinds;
+  }, [events]);
+
+  const visibleEvents = useMemo(() => {
+    if (!events || events.length === 0) return [];
+    const start = Math.max(0, visibleRange.start - 2);
+    const end = Math.min(data.length, visibleRange.end + 2);
+    return events
+      .map((event, idx) => ({ event, idx, i: indexForDate(event.date) }))
+      .filter(({ event, i }) => !hiddenEventKinds.has(event.kind) && i >= start && i <= end);
+  }, [events, hiddenEventKinds, visibleRange, data.length, indexForDate]);
+
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
   // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
   // use for their categorical axis: supply explicit tickValues (slot centers, i + 0.5) throttled
@@ -2258,8 +2331,8 @@ export function CandlestickChart({
     ctx.clearRect(0, 0, dims.boundedWidth, plotBoundedHeight);
 
     const style = getComputedStyle(wrapper);
-    const colorUp = style.getPropertyValue("--lq-color-up").trim();
-    const colorDown = style.getPropertyValue("--lq-color-down").trim();
+    const colorUp = upColorOverride ?? style.getPropertyValue("--lq-color-up").trim();
+    const colorDown = downColorOverride ?? style.getPropertyValue("--lq-color-down").trim();
     const colorBg = style.getPropertyValue("--lq-color-bg").trim();
     const colorText = style.getPropertyValue("--lq-color-text").trim();
     const colorMuted = style.getPropertyValue("--lq-color-text-muted").trim();
@@ -2981,6 +3054,8 @@ export function CandlestickChart({
     tpoProfile,
     data,
     visibleRange,
+    upColorOverride,
+    downColorOverride,
     volumeVisible,
     volumeCollapsed,
     volumeScale,
@@ -3024,6 +3099,18 @@ export function CandlestickChart({
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
   const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
+  const currentModeEntry = CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0];
+
+  // Live OHLC readout, top-left of the price plot — the hovered candle while hovering, the most
+  // recent one otherwise (so the readout is never blank). % is against the *previous* candle's
+  // close (not this candle's own open), matching how a trading platform's own top-bar readout
+  // reads "change since last close" rather than "change within this bar".
+  const ohlcIndex = hoverIndex !== null ? hoverIndex : data.length - 1;
+  const ohlcCandle = data[ohlcIndex];
+  const ohlcPrevClose = ohlcIndex > 0 ? data[ohlcIndex - 1].close : ohlcCandle.open;
+  const ohlcDelta = ohlcCandle.close - ohlcPrevClose;
+  const ohlcDeltaPct = ohlcPrevClose !== 0 ? (ohlcDelta / ohlcPrevClose) * 100 : 0;
+  const ohlcSign = ohlcDelta >= 0 ? "+" : "";
 
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
@@ -3089,10 +3176,7 @@ export function CandlestickChart({
             aria-label="Mode d'affichage"
             title="Mode d'affichage"
           >
-            {(() => {
-              const CurrentModeIcon = (CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0]).icon;
-              return <CurrentModeIcon size={14} />;
-            })()}
+            <currentModeEntry.icon size={14} />
           </button>
           <Popover open={displayModeOpen} onClose={() => setDisplayModeOpen(false)} anchorRef={displayModeAnchorRef} placement="bottom">
             <div className="lq-chart__display-mode-menu">
@@ -3234,8 +3318,27 @@ export function CandlestickChart({
             </div>
           </div>
         )}
-        {showIndicators && indicators.length > 0 && (
-          <div className="lq-chart__indicator-legend" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
+        {/* Symbol/chart-type label + live OHLC readout, then the indicator legend right below it
+            — one shared top-left column instead of two independently-positioned corners, so
+            neither has to guess the other's height to avoid overlapping it. */}
+        <div className="lq-chart__plot-topleft" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
+          <div
+            className="lq-chart__symbol-info"
+            onDoubleClick={() => setSettingsOpen(true)}
+            title="Double-clic : paramètres du graphique"
+          >
+            <span className="lq-chart__symbol-info-name">
+              {symbol ? `${symbol} · ` : ""}
+              {currentModeEntry.label}
+            </span>
+            <span className={["lq-chart__symbol-info-ohlc", ohlcDelta >= 0 ? "lq-chart__symbol-info-ohlc--up" : "lq-chart__symbol-info-ohlc--down"].join(" ")}>
+              O {pFmt(ohlcCandle.open)} H {pFmt(ohlcCandle.high)} L {pFmt(ohlcCandle.low)} C {pFmt(ohlcCandle.close)} {ohlcSign}
+              {pFmt(ohlcDelta)} ({ohlcSign}
+              {ohlcDeltaPct.toFixed(2)}%)
+            </span>
+          </div>
+          {showIndicators && indicators.length > 0 && (
+          <div className="lq-chart__indicator-legend">
             {indicators.map((indicator, i) => (
               <div
                 key={indicator.id}
@@ -3282,7 +3385,8 @@ export function CandlestickChart({
               </div>
             ))}
           </div>
-        )}
+          )}
+        </div>
         {/* Header strip for the volume pane — a fixed-height row pinned to the top of the pane
             (whether expanded or collapsed, hence sharing SUB_PANE_COLLAPSED_HEIGHT: when
             collapsed the pane *is* this row, when expanded it's just the top slice of it). Name
@@ -3635,6 +3739,32 @@ export function CandlestickChart({
                 );
               })}
             </g>
+
+            {/* Rendered last, same reasoning as the drawing handles above — needs to sit on top
+                of the pan/zoom overlay to receive the pointer events its own <title> tooltip
+                depends on. Anchored to the price/volume divider (not the tallest/shortest
+                visible candle) so the row stays put while panning/zooming. */}
+            {visibleEvents.length > 0 && (
+              <g className="lq-chart__events">
+                {visibleEvents.map(({ event, idx, i }) => {
+                  const cx = zoomedXScale(i + 0.5);
+                  const cy = priceHeight - EVENT_MARKER_OFFSET;
+                  const kindIndex = eventKinds.indexOf(event.kind);
+                  const color = event.color ?? defaultEventColor(kindIndex < 0 ? 0 : kindIndex);
+                  const glyph = (event.symbol ?? event.kind.charAt(0)).slice(0, 2).toUpperCase();
+                  return (
+                    <g key={idx} className="lq-chart__event-marker" transform={`translate(${cx}, ${cy})`}>
+                      <title>{`${dFmt(event.date)} — ${event.label}`}</title>
+                      <line x1={0} x2={0} y1={EVENT_MARKER_RADIUS} y2={priceHeight - cy} stroke={color} strokeDasharray="2,2" />
+                      <circle r={EVENT_MARKER_RADIUS} fill={color} />
+                      <text textAnchor="middle" dominantBaseline="central">
+                        {glyph}
+                      </text>
+                    </g>
+                  );
+                })}
+              </g>
+            )}
           </g>
         </svg>
 
@@ -3687,6 +3817,40 @@ export function CandlestickChart({
             </button>
           </>
         )}
+
+        {/* A horizontal/ray line's own price, permanently on the price axis (not just on
+            hover, unlike the badges above) — same visual as the hover badge, minus its "+"
+            button since there's nothing left to add. Anchored to the volume axis instead when
+            the line's `valueAxis` says so, same as the hover volume badge does. */}
+        {drawings
+          .filter((dr) => (dr.lineType === "horizontal" || dr.lineType === "ray") && (dr.valueAxis !== "volume" || volumeVisible))
+          .map((dr) => (
+            <div
+              key={dr.id}
+              className="lq-chart__axis-value lq-chart__axis-value--y"
+              style={{
+                top: dims.margin.top + (dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1)),
+                left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+              }}
+            >
+              <span className="lq-chart__axis-value-text">{dr.valueAxis === "volume" ? vFmt(dr.y1) : pFmt(dr.y1)}</span>
+            </div>
+          ))}
+
+        {/* A "ray"'s own start date, only while its line is hovered (unlike the price badge
+            above, which stays up permanently) — same X-axis badge style as the hover date
+            badge, anchored to the line's own x1 instead of the live cursor position. */}
+        {drawings
+          .filter((dr) => dr.lineType === "ray" && dr.id === hoveredDrawingId)
+          .map((dr) => (
+            <div
+              key={dr.id}
+              className="lq-chart__axis-value lq-chart__axis-value--x"
+              style={{ left: dims.margin.left + zoomedXScale(indexForDate(dr.x1) + 0.5), top: dims.margin.top + plotBoundedHeight }}
+            >
+              <span className="lq-chart__axis-value-text">{dFmt(dr.x1)}</span>
+            </div>
+          ))}
       </div>
 
       {editingId && draft && (
@@ -4124,6 +4288,71 @@ export function CandlestickChart({
               onChange={(e) => setIndicatorDraft({ ...indicatorDraft, color: e.target.value })}
             />
           </div>
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal open onClose={() => setSettingsOpen(false)} title="Paramètres du graphique">
+          <div className="lq-chart__edit-drawing-row">
+            <div className="lq-field">
+              <label className="lq-field__label">Bougies haussières</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={upColorOverride ?? "#26a69a"}
+                onChange={(e) => setUpColorOverride(e.target.value)}
+              />
+            </div>
+            <div className="lq-field">
+              <label className="lq-field__label">Bougies baissières</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={downColorOverride ?? "#ef5350"}
+                onChange={(e) => setDownColorOverride(e.target.value)}
+              />
+            </div>
+          </div>
+          {(upColorOverride || downColorOverride) && (
+            <button
+              type="button"
+              className="lq-chart__inline-reset"
+              onClick={() => {
+                setUpColorOverride(undefined);
+                setDownColorOverride(undefined);
+              }}
+            >
+              Réinitialiser aux couleurs du thème
+            </button>
+          )}
+          <Checkbox
+            checked={yAutoScalingState}
+            onChange={(checked) => {
+              setYAutoScalingState(checked);
+              onYAutoScalingChange?.(checked);
+            }}
+            label="Rescale automatique de l'axe des prix au zoom"
+          />
+          {eventKinds.length > 0 && (
+            <div className="lq-chart__settings-events">
+              <span className="lq-field__label">Événements</span>
+              {eventKinds.map((kind) => (
+                <Checkbox
+                  key={kind}
+                  checked={!hiddenEventKinds.has(kind)}
+                  onChange={() =>
+                    setHiddenEventKinds((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(kind)) next.delete(kind);
+                      else next.add(kind);
+                      return next;
+                    })
+                  }
+                  label={kind}
+                />
+              ))}
+            </div>
+          )}
         </Modal>
       )}
     </div>

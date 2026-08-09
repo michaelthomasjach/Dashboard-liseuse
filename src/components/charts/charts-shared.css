@@ -314,6 +314,24 @@
   cursor: grabbing;
 }
 
+.lq-chart__event-marker {
+  cursor: default;
+}
+
+.lq-chart__event-marker circle {
+  stroke: var(--lq-color-bg);
+  stroke-width: 1.5;
+}
+
+.lq-chart__event-marker text {
+  font-family: inherit;
+  font-size: 8px;
+  font-weight: 700;
+  fill: #fff;
+  pointer-events: none;
+  user-select: none;
+}
+
 /* Value badge pinned to an axis at the hovered position — replaces a floating OHLC tooltip
    with the same "read the value off the axis" convention trading platforms use. No padding of
    its own: each child (the text, and the "+" button where present) carries its own padding
@@ -534,7 +552,8 @@
   gap: var(--lq-space-3);
 }
 
-.lq-chart__text-bg-clear {
+.lq-chart__text-bg-clear,
+.lq-chart__inline-reset {
   align-self: flex-start;
   padding: 0;
   margin-top: calc(var(--lq-space-2) * -1);
@@ -546,8 +565,16 @@
   text-decoration: underline;
 }
 
-.lq-chart__text-bg-clear:hover {
+.lq-chart__text-bg-clear:hover,
+.lq-chart__inline-reset:hover {
   color: var(--lq-color-text);
+}
+
+.lq-chart__settings-events {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+  margin-top: var(--lq-space-2);
 }
 
 .lq-chart__edit-drawing-row > * {
@@ -613,12 +640,52 @@
   opacity: 0.9;
 }
 
-/* List of active technical indicators, top-left of the plot. The container stays
+/* Symbol/chart-type label + OHLC readout, then the indicator legend — one shared top-left
+   column so neither has to know the other's height to avoid overlapping it. Stays
    pointer-events:none so its own padding never blocks the zoom/pan overlay underneath — each
-   item opts back in individually, since only they actually need to be clickable. */
-.lq-chart__indicator-legend {
+   interactive child (the symbol label, each legend item) opts back in individually. */
+.lq-chart__plot-topleft {
   position: absolute;
   z-index: 6;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.lq-chart__symbol-info {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 2px 6px;
+  pointer-events: auto;
+  cursor: default;
+}
+
+.lq-chart__symbol-info-name {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+}
+
+.lq-chart__symbol-info-ohlc {
+  font-size: 0.7rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.lq-chart__symbol-info-ohlc--up {
+  color: var(--lq-color-up);
+}
+
+.lq-chart__symbol-info-ohlc--down {
+  color: var(--lq-color-down);
+}
+
+/* List of active technical indicators, right below the symbol/OHLC row above. */
+.lq-chart__indicator-legend {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
