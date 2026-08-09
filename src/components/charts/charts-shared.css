@@ -492,9 +492,29 @@
 
 /* Edit-drawing modal: pairs of fields side by side, plus a couple of native inputs styled to
    match the rest of the form controls (no dedicated color/date components exist yet). */
+.lq-chart__edit-drawing-tabs {
+  margin-bottom: var(--lq-space-3);
+}
+
 .lq-chart__edit-drawing-row {
   display: flex;
   gap: var(--lq-space-3);
+}
+
+.lq-chart__text-bg-clear {
+  align-self: flex-start;
+  padding: 0;
+  margin-top: calc(var(--lq-space-2) * -1);
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.lq-chart__text-bg-clear:hover {
+  color: var(--lq-color-text);
 }
 
 .lq-chart__edit-drawing-row > * {

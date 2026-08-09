@@ -79,7 +79,10 @@ export const WithDrawingTools: Story = {
         boutons superposés — elle reste visible en plein écran), chacune avec son propre bouton + chevron + menu :{" "}
         <strong>Lignes</strong> (tendance, <strong>étendue</strong> — mêmes 2 points qu'une ligne de tendance mais le
         tracé continue jusqu'aux bords du graphe —, <strong>canal</strong> — 2 lignes parallèles, 2 clics pour la
-        première comme une ligne de tendance puis un 3ème pour l'écart de la seconde —, horizontale,{" "}
+        première comme une ligne de tendance puis un 3ème pour l'écart de la seconde —,{" "}
+        <strong>canal disjoint</strong> — même flux à 3 clics que le canal, mais la 2ème ligne est le{" "}
+        <strong>miroir</strong> de la 1ère par rapport au point 2 (pente opposée) plutôt qu'une copie parallèle,
+        chaque point restant ensuite déplaçable indépendamment —, horizontale,{" "}
         <strong>horizontale à partir d'une date</strong> — "ray", démarre à la date cliquée au lieu de couvrir tout
         l'historique — et verticale), <strong>Fibonacci</strong> (<strong>retracement</strong> — mêmes 2 points
         qu'une ligne de tendance, 0%/100%, découpés en niveaux 23.6/38.2/50/61.8/78.6% — et{" "}
@@ -93,8 +96,10 @@ export const WithDrawingTools: Story = {
         prévisualisé en direct ; les outils à un seul point n'en demandent qu'un. Échap ou re-clic sur l'outil
         annule. Survoler une ligne dessinée fait apparaître ses poignées (une par point placé, plus celle de canal
         pour son écart) — glisser une poignée pour redéfinir ce point, ou glisser directement sur la ligne pour
-        déplacer tous ses points ensemble. <strong>Double-clic sur une ligne</strong> pour l'éditer (texte,
-        épaisseur, couleur, <strong>pointillés</strong>, coordonnées) dans une modale —{" "}
+        déplacer tous ses points ensemble. <strong>Double-clic sur une ligne</strong> pour l'éditer dans une modale à trois
+        onglets — <strong>Coordonnées</strong>, <strong>Texte</strong> (taille, gras/italique, alignement avec la
+        ligne, alignement vertical/horizontal, couleur de fond) et <strong>Style</strong> (épaisseur, couleur,
+        style de trait continu/tirets/pointillés/tiret-point, extension aucune/droite/gauche/des deux côtés) —{" "}
         <strong>double-clic ailleurs sur le graphe</strong> réinitialise le zoom à la place. Les lignes sont ancrées
         en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.
       </p>

@@ -11,7 +11,9 @@ import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
 import { Checkbox } from "../forms/Checkbox";
+import { Select } from "../forms/Select";
 import { Modal } from "../primitives/Modal";
+import { Tabs } from "../primitives/Tabs";
 import {
   MaximizeIcon,
   MinimizeIcon,
@@ -21,6 +23,7 @@ import {
   HorizontalRayIcon,
   ExtendedLineIcon,
   ChannelIcon,
+  DisjointChannelIcon,
   FibonacciIcon,
   FibonacciExtensionIcon,
   ElliottImpulseIcon,
@@ -52,14 +55,44 @@ export interface TrendLineDrawing {
   y1: number;
   x2: Date;
   y2: number;
-  /** Optional label rendered above the line's midpoint. */
+  /** Optional label rendered near the line — see textHorizontalAlign/textVerticalAlign for where
+   *  exactly, and textSize/textBold/textItalic/textAlignWithLine/textBackgroundColor for how. */
   text?: string;
-  /** CSS color. Defaults to the theme's accent color. */
+  /** CSS color. Defaults to the theme's accent color. Also the text's own color. */
   color?: string;
   /** Line thickness in px. Default 1.5. */
   strokeWidth?: number;
-  /** Dashed instead of solid. Default false. */
+  /** @deprecated Superseded by `lineStyle` — kept only so a `dashed: true` drawing saved before
+   *  `lineStyle` existed keeps rendering dashed. Only read as a fallback when `lineStyle` itself
+   *  is unset; setting `lineStyle` at all (including to `"solid"`) always wins over this. */
   dashed?: boolean;
+  /** Solid or one of a few dash patterns. Default "solid" — except when unset *and* `dashed` is
+   *  true, which reads as "dashed" (see `dashed` above). */
+  lineStyle?: "solid" | "dashed" | "dotted" | "dashdot";
+  /** How far past its own two defining points (x1/y1–x2/y2) the line is drawn — "none" stops
+   *  exactly on them (a regular trend line's default), "left"/"right" extend past just that one
+   *  edge, "both" past both (what the "extended" tool sets at creation). Kept independent of
+   *  `lineType` so any two-point line can be extended after the fact from the edit modal's Style
+   *  tab, not only ones drawn with the dedicated tool — rendering falls back to `lineType ===
+   *  "extended" ? "both" : "none"` when this itself is unset, for the same saved-before-this-
+   *  field-existed reason as `dashed`/`lineStyle` above. Only meaningful for a free two-point
+   *  line (no lineType, or "extended"); ignored by every other lineType. */
+  extend?: "none" | "left" | "right" | "both";
+  /** Font size, in px, for `text`. Default 11. */
+  textSize?: number;
+  /** Default true (matches the weight text has always rendered at). */
+  textBold?: boolean;
+  textItalic?: boolean;
+  /** Rotates the text to match the line's own on-screen slope instead of staying upright.
+   *  Default false. */
+  textAlignWithLine?: boolean;
+  /** Position along the line's own length. Default "center". */
+  textHorizontalAlign?: "left" | "center" | "right";
+  /** Position relative to the line itself — "top"/"bottom" sit just clear of it, "center" sits
+   *  right on it. Default "top". */
+  textVerticalAlign?: "top" | "center" | "bottom";
+  /** Painted behind the text as a small padded rect. Unset (default): no background. */
+  textBackgroundColor?: string;
   /** Constrains the line to one axis instead of a free-form two-point line: "horizontal" keeps
    *  y1 === y2 and can only be dragged vertically (its price/volume changes, never its date
    *  span, which always covers the full width); "vertical" keeps x1 === x2 and can only be
@@ -78,10 +111,27 @@ export interface TrendLineDrawing {
    *  endpoints, no extra points needed) whose price range between y1 (0%) and y2 (100%) is
    *  sliced into the standard retracement ratios (see FIBONACCI_LEVELS) — each drawn as its own
    *  horizontal segment spanning x1/x2's date range, labeled with its ratio and price.
-   *  "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" need more than two points — x1/y1
-   *  and x2/y2 are still the first two (placed the same way), the rest live in `extraPoints`, in
-   *  click order. */
-  lineType?: "horizontal" | "vertical" | "ray" | "extended" | "channel" | "fibonacci" | "fibonacciExtension" | "elliottImpulse" | "elliottCorrection";
+   *  "fibonacciExtension"/"elliottCorrection"/"elliottImpulse"/"disjointChannel" need more than
+   *  two points — x1/y1 and x2/y2 are still the first two (placed the same way), the rest live
+   *  in `extraPoints`, in click order. "disjointChannel" is a "channel" whose second line isn't
+   *  forced parallel: the 3rd click still sets a price offset exactly like "channel", but instead
+   *  of applying it as a constant shift, the offset's *far* point (extraPoints[0], lined up with
+   *  x2/y2) is computed the same way channel's line 2 would be, while the *near* point
+   *  (extraPoints[1], lined up with x1/y1) is mirrored — reflected across that far point's own
+   *  price level — so line 2 slopes the opposite way from line 1 instead of running parallel to
+   *  it. Both extraPoints are then just regular, independently draggable points like any other
+   *  multi-point tool's, letting the mirrored angle be reshaped by hand afterward. */
+  lineType?:
+    | "horizontal"
+    | "vertical"
+    | "ray"
+    | "extended"
+    | "channel"
+    | "disjointChannel"
+    | "fibonacci"
+    | "fibonacciExtension"
+    | "elliottImpulse"
+    | "elliottCorrection";
   /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
    *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
@@ -89,7 +139,8 @@ export interface TrendLineDrawing {
    *  set by the tool's third click. */
   channelOffset?: number;
   /** Points beyond x1/y1 (the 1st) and x2/y2 (the 2nd), in click order — "fibonacciExtension"
-   *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4. Unused otherwise. */
+   *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
+   *  (line 2's own two points — see `lineType` above for how they're derived). Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
 }
 
@@ -105,13 +156,20 @@ const FIBONACCI_LEVELS = [0, 0.236, 0.382, 0.5, 0.618, 0.786, 1];
 const FIBONACCI_EXTENSION_LEVELS = [0, 0.382, 0.618, 1, 1.382, 1.618, 2, 2.618];
 
 /** How many points *beyond* x1/y1 and x2/y2 each multi-point tool collects before committing,
- *  and what each of those extra points (plus the first two) is labeled in the edit modal. Tools
- *  not listed here (trendline/extended/fibonacci: 2 points total; channel: 3, but its 3rd click
- *  sets `channelOffset` instead of a raw point, handled separately) don't use this at all. */
+ *  and what each of those extra points (plus the first two) is labeled in the edit modal.
+ *  Governs two different things depending on the tool: for fibonacciExtension/elliottCorrection/
+ *  elliottImpulse, `handleOverlayClick` uses `extraPoints` to drive the actual generic
+ *  click-collection loop (each click becomes one more raw point, verbatim). "disjointChannel" is
+ *  here *only* for its edit-modal labels — its own placement flow is entirely custom (see
+ *  handleOverlayClick's dedicated branch, checked before the generic one below it ever runs) since
+ *  its 4th point is computed, not clicked. Tools not listed here (trendline/extended/fibonacci: 2
+ *  points total; channel: 3, but its 3rd click sets `channelOffset` instead of a raw point,
+ *  handled separately) don't use this at all. */
 const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: number; labels: string[] }>> = {
   fibonacciExtension: { extraPoints: 1, labels: ["Point A", "Point B", "Point C"] },
   elliottCorrection: { extraPoints: 2, labels: ["Point 0", "Point A", "Point B", "Point C"] },
   elliottImpulse: { extraPoints: 4, labels: ["Point 0", "Point 1", "Point 2", "Point 3", "Point 4", "Point 5"] },
+  disjointChannel: { extraPoints: 2, labels: ["Point 1", "Point 2", "Point 3", "Point 4"] },
 };
 
 // Short vertex labels drawn directly on the chart next to each point — distinct from
@@ -430,6 +488,7 @@ type DrawingToolType =
   | "ray"
   | "extended"
   | "channel"
+  | "disjointChannel"
   | "fibonacci"
   | "fibonacciExtension"
   | "elliottImpulse"
@@ -458,6 +517,7 @@ const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
       { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
       { type: "channel", label: "Canal", icon: ChannelIcon },
+      { type: "disjointChannel", label: "Canal disjoint", icon: DisjointChannelIcon },
       { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
       { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
       { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
@@ -630,18 +690,121 @@ function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: n
 // "extended" lines keep their own two defining points (x1/y1/x2/y2, still what's draggable) but
 // draw all the way to the price section's left/right edges instead of stopping at them —
 // screen-space linear extrapolation along the same slope. A perfectly vertical segment (in
-// screen space) has nothing to extend into on the X axis, so it's returned unchanged.
+// screen space) has nothing to extend into on the X axis, so it's returned unchanged. `direction`
+// picks which edge(s) actually move — "left"/"right" only push the one endpoint on that side out
+// to xMin/xMax respectively, leaving the other exactly where it was; "both" does what the
+// original two-direction-only version always did.
 function extendSegmentToEdges(
   x1: number,
   y1: number,
   x2: number,
   y2: number,
   xMin: number,
-  xMax: number
+  xMax: number,
+  direction: "left" | "right" | "both" = "both"
 ): { x1: number; y1: number; x2: number; y2: number } {
   if (x1 === x2) return { x1, y1, x2, y2 };
   const slope = (y2 - y1) / (x2 - x1);
-  return { x1: xMin, y1: y1 + slope * (xMin - x1), x2: xMax, y2: y1 + slope * (xMax - x1) };
+  const left = direction === "right" ? { x1, y1 } : { x1: xMin, y1: y1 + slope * (xMin - x1) };
+  const right = direction === "left" ? { x2, y2 } : { x2: xMax, y2: y1 + slope * (xMax - x1) };
+  return { ...left, ...right };
+}
+
+// A drawing's actual extend setting, folding in the "extended" tool's own implicit "both" for a
+// drawing saved before the `extend` field existed (see TrendLineDrawing.extend's own doc for why
+// it's independent of lineType instead of just always being "extended" vs. not).
+function effectiveExtendOf(dr: TrendLineDrawing): "none" | "left" | "right" | "both" {
+  return dr.extend ?? (dr.lineType === "extended" ? "both" : "none");
+}
+
+// Shared by "channel" and "disjointChannel": the 3rd click's own vertical distance from line 1
+// (p1→p2) at that click's date — a constant applied uniformly to line 2 rather than a true
+// perpendicular distance, the same simplification most trading platforms use for this tool.
+function channelOffsetFromClick(p1: DataPoint, p2: DataPoint, click: DataPoint, indexForDate: (d: Date) => number): number {
+  const x1i = indexForDate(p1.x);
+  const x2i = indexForDate(p2.x);
+  const onLineY = x2i === x1i ? p1.y : p1.y + (p2.y - p1.y) * ((indexForDate(click.x) - x1i) / (x2i - x1i));
+  return click.y - onLineY;
+}
+
+// `lineStyle` supersedes the older `dashed` boolean (kept for drawings saved before it existed —
+// see its own doc on TrendLineDrawing).
+function lineDashArray(dr: TrendLineDrawing): number[] {
+  switch (dr.lineStyle ?? (dr.dashed ? "dashed" : "solid")) {
+    case "dashed":
+      return [6, 4];
+    case "dotted":
+      return [1.5, 3];
+    case "dashdot":
+      return [6, 3, 1.5, 3];
+    case "solid":
+    default:
+      return [];
+  }
+}
+
+// Shared by every drawing type's `dr.text` label instead of each duplicating its own
+// font/alignment/positioning — anchored along the line's own length (textHorizontalAlign) and
+// offset to one side of it or centered on it (textVerticalAlign), optionally rotated to match the
+// line's own on-screen slope (textAlignWithLine) and/or painted over its own background rect.
+// (x1,y1)-(x2,y2) is whatever segment the caller considers "the line" for anchoring purposes —
+// for multi-point tools that's usually just the first two points, not literally everything drawn.
+function drawDrawingText(
+  ctx: CanvasRenderingContext2D,
+  dr: TrendLineDrawing,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  fallbackColor: string,
+  fontFamily: string
+) {
+  if (!dr.text) return;
+  const hAlign = dr.textHorizontalAlign ?? "center";
+  const vAlign = dr.textVerticalAlign ?? "top";
+  const t = hAlign === "left" ? 0 : hAlign === "right" ? 1 : 0.5;
+  const anchorX = x1 + (x2 - x1) * t;
+  const anchorY = y1 + (y2 - y1) * t;
+  const size = dr.textSize ?? 11;
+  const weight = dr.textBold === false ? 400 : 600;
+  const style = dr.textItalic ? "italic" : "normal";
+  const offset = 6;
+
+  ctx.save();
+  ctx.font = `${style} ${weight} ${size}px ${fontFamily}`;
+  ctx.textAlign = hAlign;
+  ctx.textBaseline = vAlign === "top" ? "bottom" : vAlign === "bottom" ? "top" : "middle";
+
+  let angle = 0;
+  if (dr.textAlignWithLine) {
+    angle = Math.atan2(y2 - y1, x2 - x1);
+    // Keeps the text upright (never upside-down) regardless of which of the two points is
+    // actually "first" on screen.
+    if (angle > Math.PI / 2) angle -= Math.PI;
+    else if (angle < -Math.PI / 2) angle += Math.PI;
+  }
+
+  ctx.translate(anchorX, anchorY);
+  if (angle !== 0) ctx.rotate(angle);
+  const drawY = vAlign === "top" ? -offset : vAlign === "bottom" ? offset : 0;
+
+  if (dr.textBackgroundColor) {
+    // actualBoundingBoxAscent/Descent are already relative to whatever textBaseline is
+    // currently set, so this works out regardless of vAlign.
+    const metrics = ctx.measureText(dr.text);
+    const ascent = metrics.actualBoundingBoxAscent ?? size * 0.8;
+    const descent = metrics.actualBoundingBoxDescent ?? size * 0.25;
+    const pad = 3;
+    let bgX = 0;
+    if (hAlign === "center") bgX = -metrics.width / 2;
+    else if (hAlign === "right") bgX = -metrics.width;
+    ctx.fillStyle = dr.textBackgroundColor;
+    ctx.fillRect(bgX - pad, drawY - ascent - pad, metrics.width + pad * 2, ascent + descent + pad * 2);
+  }
+
+  ctx.fillStyle = dr.color ?? fallbackColor;
+  ctx.fillText(dr.text, 0, drawY);
+  ctx.restore();
 }
 
 function toDateInputValue(d: Date): string {
@@ -720,6 +883,7 @@ export function CandlestickChart({
   const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
+  const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
   const [tfOpen, setTfOpen] = useState(false);
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
@@ -1288,12 +1452,6 @@ export function CandlestickChart({
         setPreviewPoint(point);
         return;
       }
-      const x1i = indexForDate(pendingPoint.x);
-      const x2i = indexForDate(pendingSecondPoint.x);
-      const onLineY =
-        x2i === x1i
-          ? pendingPoint.y
-          : pendingPoint.y + (pendingSecondPoint.y - pendingPoint.y) * ((indexForDate(point.x) - x1i) / (x2i - x1i));
       commitDrawings([
         ...drawings,
         {
@@ -1303,7 +1461,47 @@ export function CandlestickChart({
           x2: pendingSecondPoint.x,
           y2: pendingSecondPoint.y,
           lineType: "channel",
-          channelOffset: point.y - onLineY,
+          channelOffset: channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate),
+        },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+
+    // "disjointChannel": same first three clicks as "channel" (line 1's two points, then a 3rd
+    // that sets a price offset the same way) — but instead of applying that offset as a constant
+    // shift to a *parallel* line 2, it computes two independent points: extraPoints[0] (lined up
+    // with x2/y2, "point 3") sits at the offset exactly like channel's line 2 would, and
+    // extraPoints[1] (lined up with x1/y1, "point 4") is that same offset applied to point1's
+    // price *mirrored* across point2's price level — 2*y2 - y1 + offset instead of plain y1 +
+    // offset — so line 2 slopes the opposite way from line 1 instead of running parallel to it.
+    // Both points are then ordinary, independently draggable ones (handled generically by
+    // allPointsOf/the endpoint-drag system) for reshaping the angle by hand afterward.
+    if (activeTool === "disjointChannel") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      if (!pendingSecondPoint) {
+        setPendingSecondPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      const offset = channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate);
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          x1: pendingPoint.x,
+          y1: pendingPoint.y,
+          x2: pendingSecondPoint.x,
+          y2: pendingSecondPoint.y,
+          lineType: "disjointChannel",
+          extraPoints: [
+            { x: pendingSecondPoint.x, y: pendingSecondPoint.y + offset },
+            { x: pendingPoint.x, y: 2 * pendingSecondPoint.y - pendingPoint.y + offset },
+          ],
         },
       ]);
       cancelDrawingTool();
@@ -1381,11 +1579,18 @@ export function CandlestickChart({
     if (!dr) return;
     setEditingId(dr.id);
     setDraft(dr);
+    setEditModalTab("coords");
   }
 
   function closeEditModal() {
     setEditingId(null);
     setDraft(null);
+  }
+
+  /** Prices are rounded (not just displayed-rounded) to 4 decimals as soon as they're entered, so
+   *  stored drawing coordinates never accumulate more precision than the modal shows. */
+  function round4(v: number): number {
+    return Math.round(v * 10000) / 10000;
   }
 
   function saveEditModal() {
@@ -1654,16 +1859,6 @@ export function CandlestickChart({
         } else if (dr.lineType === "vertical") {
           const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
           d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
-        } else if (dr.lineType === "extended") {
-          const extended = extendSegmentToEdges(
-            zoomedXScale(indexForDate(dr.x1) + 0.5),
-            zoomedPriceScale(dr.y1),
-            zoomedXScale(indexForDate(dr.x2) + 0.5),
-            zoomedPriceScale(dr.y2),
-            0,
-            dims.boundedWidth
-          );
-          d = distanceToSegment(mouseX, mouseY, extended.x1, extended.y1, extended.x2, extended.y2);
         } else if (dr.lineType === "channel") {
           const cx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
           const cy1 = zoomedPriceScale(dr.y1);
@@ -1716,15 +1911,40 @@ export function CandlestickChart({
             }
           }
           d = Math.min(...distances);
+        } else if (dr.lineType === "disjointChannel") {
+          const jx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const jy1 = zoomedPriceScale(dr.y1);
+          const jx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const jy2 = zoomedPriceScale(dr.y2);
+          const distances = [distanceToSegment(mouseX, mouseY, jx1, jy1, jx2, jy2)];
+          const [p3, p4] = dr.extraPoints ?? [];
+          if (p3 && p4) {
+            distances.push(
+              distanceToSegment(
+                mouseX,
+                mouseY,
+                zoomedXScale(indexForDate(p3.x) + 0.5),
+                zoomedPriceScale(p3.y),
+                zoomedXScale(indexForDate(p4.x) + 0.5),
+                zoomedPriceScale(p4.y)
+              )
+            );
+          }
+          d = Math.min(...distances);
         } else {
-          d = distanceToSegment(
-            mouseX,
-            mouseY,
-            zoomedXScale(indexForDate(dr.x1) + 0.5),
-            zoomedPriceScale(dr.y1),
-            zoomedXScale(indexForDate(dr.x2) + 0.5),
-            zoomedPriceScale(dr.y2)
-          );
+          const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const y1 = zoomedPriceScale(dr.y1);
+          const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const y2 = zoomedPriceScale(dr.y2);
+          // A regular trend line ("extended" included — see effectiveExtendOf) can be extended
+          // past x1/x2 via the Style tab, not only when drawn with the dedicated tool.
+          const extend = effectiveExtendOf(dr);
+          if (extend === "none") {
+            d = distanceToSegment(mouseX, mouseY, x1, y1, x2, y2);
+          } else {
+            const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth, extend);
+            d = distanceToSegment(mouseX, mouseY, extended.x1, extended.y1, extended.x2, extended.y2);
+          }
         }
         if (d < closestDist) {
           closestDist = d;
@@ -1935,7 +2155,7 @@ export function CandlestickChart({
       const lineColor = dr.color ?? colorAccent;
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-      ctx.setLineDash(dr.dashed ? [6, 4] : []);
+      ctx.setLineDash(lineDashArray(dr));
       const startsFromEdge = dr.lineType === "horizontal";
       let x1: number, y1: number, x2: number, y2: number;
       if (dr.lineType === "horizontal" || dr.lineType === "ray") {
@@ -1951,15 +2171,18 @@ export function CandlestickChart({
         y2 = zoomedPriceScale(dr.y2);
       }
 
-      // "extended" draws past x1/x2 to the price section's edges — computed separately from
-      // x1/y1/x2/y2 themselves, which stay the two defining (and draggable, and text-anchoring)
-      // points regardless of how far the line itself actually reaches.
+      // A regular trend line ("extended" included — see effectiveExtendOf) can be extended past
+      // x1/x2 (fully, or just one side) via the Style tab, not only when drawn with the dedicated
+      // "extended" tool — computed separately from x1/y1/x2/y2 themselves, which stay the two
+      // defining (and draggable, and text-anchoring) points regardless of how far the line
+      // itself actually reaches.
+      const extend = effectiveExtendOf(dr);
       let drawX1 = x1,
         drawY1 = y1,
         drawX2 = x2,
         drawY2 = y2;
-      if (dr.lineType === "extended") {
-        const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth);
+      if (extend !== "none") {
+        const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth, extend);
         drawX1 = extended.x1;
         drawY1 = extended.y1;
         drawX2 = extended.x2;
@@ -1980,15 +2203,26 @@ export function CandlestickChart({
         ctx.stroke();
       }
 
+      // "disjointChannel"'s line 2 is just its own two stored, independently-draggable points
+      // (extraPoints[0]/[1]) — no offset/mirror math needed here, that only happens once, at
+      // placement time (see handleOverlayClick).
+      if (dr.lineType === "disjointChannel" && dr.extraPoints?.length === 2) {
+        const [p3, p4] = dr.extraPoints;
+        ctx.beginPath();
+        ctx.moveTo(zoomedXScale(indexForDate(p3.x) + 0.5), zoomedPriceScale(p3.y));
+        ctx.lineTo(zoomedXScale(indexForDate(p4.x) + 0.5), zoomedPriceScale(p4.y));
+        ctx.stroke();
+      }
+
       // "fibonacci" slices y1 (0%) to y2 (100%) into the standard retracement ratios, each its
       // own horizontal segment spanning x1/x2 — on top of the diagonal x1/y1–x2/y2 already drawn
-      // above, which is unaffected (drawX*/drawY* only differ from x1/y1/x2/y2 for "extended").
+      // above, which is unaffected (drawX*/drawY* only differ from x1/y1/x2/y2 when extended).
       // Labeled directly (not through the `formatPrice` prop's pFmt — that's declared after this
       // effect in source order, and pulling it in as a dependency would rerun the whole effect
       // on every render since it's a fresh function each time, unless the caller memoizes it).
       if (dr.lineType === "fibonacci") {
         ctx.save();
-        ctx.setLineDash(dr.dashed ? [6, 4] : []);
+        ctx.setLineDash(lineDashArray(dr));
         ctx.font = `600 10px ${fontFamily}`;
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
@@ -2040,7 +2274,7 @@ export function CandlestickChart({
         ctx.stroke();
 
         ctx.save();
-        ctx.setLineDash(dr.dashed ? [6, 4] : []);
+        ctx.setLineDash(lineDashArray(dr));
         ctx.font = `600 10px ${fontFamily}`;
         ctx.textAlign = "right";
         ctx.textBaseline = "bottom";
@@ -2060,13 +2294,21 @@ export function CandlestickChart({
         ctx.restore();
       }
 
-      if (dr.text) {
-        const spansToRightEdge = dr.lineType === "horizontal" || dr.lineType === "ray";
-        ctx.fillStyle = lineColor;
-        ctx.font = `600 11px ${fontFamily}`;
-        ctx.textAlign = spansToRightEdge ? "right" : "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(dr.text, spansToRightEdge ? dims.boundedWidth - 4 : (x1 + x2) / 2, Math.min(y1, y2) - 6);
+      // "horizontal"/"ray" ignore textHorizontalAlign/textAlignWithLine — they're always
+      // perfectly flat and span to the plot's own right edge, so anchoring "with the line" or at
+      // its "left"/"right" wouldn't mean anything different from what this already does.
+      if (dr.lineType === "horizontal" || dr.lineType === "ray") {
+        if (dr.text) {
+          ctx.save();
+          ctx.font = `${dr.textBold === false ? 400 : 600} ${dr.textSize ?? 11}px ${fontFamily}`;
+          ctx.textAlign = "right";
+          ctx.textBaseline = "bottom";
+          ctx.fillStyle = dr.color ?? lineColor;
+          ctx.fillText(dr.text, dims.boundedWidth - 4, Math.min(y1, y2) - 6);
+          ctx.restore();
+        }
+      } else {
+        drawDrawingText(ctx, dr, x1, y1, x2, y2, lineColor, fontFamily);
       }
     }
 
@@ -2099,6 +2341,26 @@ export function CandlestickChart({
         ctx.beginPath();
         ctx.moveTo(x1, y1 + offsetPx);
         ctx.lineTo(x2, y2 + offsetPx);
+        ctx.stroke();
+      } else if (activeTool === "disjointChannel" && pendingSecondPoint) {
+        // Same 3rd-click offset preview as "channel" above, but line 2 is the point-2-centered
+        // mirror of line 1 (opposite slope) rather than a parallel copy — matches the commit
+        // branch's channelOffsetFromClick + mirror math in handleOverlayClick.
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(pendingSecondPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(pendingSecondPoint.y);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
+
+        const offset = channelOffsetFromClick(pendingPoint, pendingSecondPoint, previewPoint, indexForDate);
+        const p3 = { x: pendingSecondPoint.x, y: pendingSecondPoint.y + offset };
+        const p4 = { x: pendingPoint.x, y: 2 * pendingSecondPoint.y - pendingPoint.y + offset };
+        ctx.beginPath();
+        ctx.moveTo(zoomedXScale(indexForDate(p3.x) + 0.5), zoomedPriceScale(p3.y));
+        ctx.lineTo(zoomedXScale(indexForDate(p4.x) + 0.5), zoomedPriceScale(p4.y));
         ctx.stroke();
       } else if (MULTI_POINT_TOOLS[activeTool]) {
         // fibonacciExtension/elliottCorrection/elliottImpulse: preview the polyline through
@@ -2186,7 +2448,7 @@ export function CandlestickChart({
           const lineColor = dr.color ?? colorAccent;
           ctx.strokeStyle = lineColor;
           ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-          ctx.setLineDash(dr.dashed ? [6, 4] : []);
+          ctx.setLineDash(lineDashArray(dr));
           const y = volumeScale(dr.y1);
           const x = dr.lineType === "ray" ? zoomedXScale(indexForDate(dr.x1) + 0.5) : 0;
           ctx.beginPath();
@@ -2194,11 +2456,13 @@ export function CandlestickChart({
           ctx.lineTo(dims.boundedWidth, y);
           ctx.stroke();
           if (dr.text) {
-            ctx.fillStyle = lineColor;
-            ctx.font = `600 11px ${fontFamily}`;
+            ctx.save();
+            ctx.font = `${dr.textBold === false ? 400 : 600} ${dr.textSize ?? 11}px ${fontFamily}`;
             ctx.textAlign = "right";
             ctx.textBaseline = "bottom";
+            ctx.fillStyle = dr.color ?? lineColor;
             ctx.fillText(dr.text, dims.boundedWidth - 4, y - 6);
+            ctx.restore();
           }
         }
         ctx.restore();
@@ -2334,20 +2598,19 @@ export function CandlestickChart({
       ctx.save();
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-      ctx.setLineDash(dr.dashed ? [6, 4] : []);
+      ctx.setLineDash(lineDashArray(dr));
       const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
       ctx.beginPath();
       ctx.moveTo(x, 0);
       ctx.lineTo(x, plotBoundedHeight);
       ctx.stroke();
-      if (dr.text) {
-        ctx.fillStyle = lineColor;
-        ctx.font = `600 11px ${fontFamily}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillText(dr.text, x, plotBoundedHeight - 4);
-      }
       ctx.restore();
+      // textHorizontalAlign positions along the line's own length here (top/center/bottom of it,
+      // default "right" below to match the old fixed-at-the-bottom behavior since "left"/"center"
+      // would otherwise default to the vertical line's own top, a less useful default), and
+      // textVerticalAlign offsets to one side of it instead of above/below — same generic anchor
+      // logic as every other line type, just rotated 90° along with the line itself.
+      drawDrawingText(ctx, dr, x, 0, x, plotBoundedHeight, lineColor, fontFamily);
     }
 
     // Vertical crosshair spans the full plot (price and volume together) — deliberately drawn
@@ -3055,155 +3318,283 @@ export function CandlestickChart({
             </div>
           }
         >
-          <TextField
-            label="Texte"
-            placeholder="Étiquette (optionnel)"
-            value={draft.text ?? ""}
-            onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+          <Tabs
+            items={[
+              { id: "coords", label: "Coordonnées" },
+              { id: "text", label: "Texte" },
+              { id: "style", label: "Style" },
+            ]}
+            value={editModalTab}
+            onChange={(id) => setEditModalTab(id as "coords" | "text" | "style")}
+            className="lq-chart__edit-drawing-tabs"
           />
-          <div className="lq-chart__edit-drawing-row">
-            <NumberField
-              label="Épaisseur"
-              min={1}
-              max={8}
-              step={0.5}
-              value={draft.strokeWidth ?? 1.5}
-              onChange={(v) => setDraft({ ...draft, strokeWidth: v === "" ? 1.5 : v })}
-            />
-            <div className="lq-field">
-              <label className="lq-field__label">Couleur</label>
-              <input
-                type="color"
-                className="lq-chart__color-input"
-                value={draft.color ?? DEFAULT_DRAWING_COLOR}
-                onChange={(e) => setDraft({ ...draft, color: e.target.value })}
-              />
-            </div>
-          </div>
-          <Checkbox checked={draft.dashed ?? false} onChange={(dashed) => setDraft({ ...draft, dashed })} label="Pointillés" />
-          {/* A horizontal/vertical line only has one degree of freedom (see the single drag
-              handle above) — editing its two endpoints independently here would let them drift
-              apart and break that invariant, so it gets one field instead of the usual two. */}
-          {draft.lineType === "horizontal" && (
-            <NumberField
-              label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
-              step={0.01}
-              value={draft.y1}
-              onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v, y2: v === "" ? draft.y2 : v })}
-            />
-          )}
-          {draft.lineType === "vertical" && (
-            <div className="lq-field">
-              <label className="lq-field__label">Date</label>
-              <input
-                type="date"
-                className="lq-chart__date-input"
-                value={toDateInputValue(draft.x1)}
-                onChange={(e) => {
-                  const next = fromDateInputValue(e.target.value, draft.x1);
-                  setDraft({ ...draft, x1: next, x2: next });
-                }}
-              />
-            </div>
-          )}
-          {/* A ray keeps both its degrees of freedom (unlike horizontal/vertical), so it gets
-              both fields — still just one of each, since x2/y2 always mirror x1/y1. */}
-          {draft.lineType === "ray" && (
-            <div className="lq-chart__edit-drawing-row">
-              <div className="lq-field">
-                <label className="lq-field__label">Date de départ</label>
-                <input
-                  type="date"
-                  className="lq-chart__date-input"
-                  value={toDateInputValue(draft.x1)}
-                  onChange={(e) => {
-                    const next = fromDateInputValue(e.target.value, draft.x1);
-                    setDraft({ ...draft, x1: next, x2: next });
-                  }}
-                />
-              </div>
-              <NumberField
-                label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
-                step={0.01}
-                value={draft.y1}
-                onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v, y2: v === "" ? draft.y2 : v })}
-              />
-            </div>
-          )}
-          {/* Regular trend line, "extended" (same two points, just drawn further — see the
-              canvas draw effect), "channel" (line 1's own two points; its second, parallel line
-              is set by the "Décalage" field below instead of its own coordinates) and
-              "fibonacci" (its retracement levels are all derived from these same two points, 0%
-              at "Prix début" and 100% at "Prix fin") all share the same two-point editor. */}
-          {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel" || draft.lineType === "fibonacci") && (
+
+          {editModalTab === "coords" && (
             <>
-              <div className="lq-chart__edit-drawing-row">
+              {/* A horizontal/vertical line only has one degree of freedom (see the single drag
+                  handle above) — editing its two endpoints independently here would let them
+                  drift apart and break that invariant, so it gets one field instead of the usual
+                  two. */}
+              {draft.lineType === "horizontal" && (
+                <NumberField
+                  label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
+                  step={0.01}
+                  value={draft.y1}
+                  onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v), y2: v === "" ? draft.y2 : round4(v) })}
+                />
+              )}
+              {draft.lineType === "vertical" && (
                 <div className="lq-field">
-                  <label className="lq-field__label">Début</label>
+                  <label className="lq-field__label">Date</label>
                   <input
                     type="date"
                     className="lq-chart__date-input"
                     value={toDateInputValue(draft.x1)}
-                    onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
+                    onChange={(e) => {
+                      const next = fromDateInputValue(e.target.value, draft.x1);
+                      setDraft({ ...draft, x1: next, x2: next });
+                    }}
                   />
                 </div>
-                <NumberField label="Prix début" step={0.01} value={draft.y1} onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : v })} />
-              </div>
-              <div className="lq-chart__edit-drawing-row">
-                <div className="lq-field">
-                  <label className="lq-field__label">Fin</label>
-                  <input
-                    type="date"
-                    className="lq-chart__date-input"
-                    value={toDateInputValue(draft.x2)}
-                    onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
-                  />
-                </div>
-                <NumberField label="Prix fin" step={0.01} value={draft.y2} onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : v })} />
-              </div>
-            </>
-          )}
-          {draft.lineType === "channel" && (
-            <NumberField
-              label="Décalage (ligne 2)"
-              step={0.01}
-              value={draft.channelOffset ?? 0}
-              onChange={(v) => setDraft({ ...draft, channelOffset: v === "" ? draft.channelOffset : v })}
-            />
-          )}
-          {/* "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" — a date+price row per
-              point (x1/y1, x2/y2, then extraPoints), generic over however many that tool needs
-              instead of a fixed "Début"/"Fin" pair. */}
-          {draft.lineType &&
-            MULTI_POINT_TOOLS[draft.lineType]?.labels.map((label, i) => {
-              const point = i === 0 ? { x: draft.x1, y: draft.y1 } : i === 1 ? { x: draft.x2, y: draft.y2 } : draft.extraPoints?.[i - 2];
-              if (!point) return null;
-              const setPointField = (next: Partial<DataPoint>) => {
-                if (i === 0) {
-                  setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
-                } else if (i === 1) {
-                  setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
-                } else {
-                  const extra = [...(draft.extraPoints ?? [])];
-                  extra[i - 2] = { ...extra[i - 2], ...next };
-                  setDraft({ ...draft, extraPoints: extra });
-                }
-              };
-              return (
-                <div className="lq-chart__edit-drawing-row" key={i}>
+              )}
+              {/* A ray keeps both its degrees of freedom (unlike horizontal/vertical), so it gets
+                  both fields — still just one of each, since x2/y2 always mirror x1/y1. */}
+              {draft.lineType === "ray" && (
+                <div className="lq-chart__edit-drawing-row">
                   <div className="lq-field">
-                    <label className="lq-field__label">{label}</label>
+                    <label className="lq-field__label">Date de départ</label>
                     <input
                       type="date"
                       className="lq-chart__date-input"
-                      value={toDateInputValue(point.x)}
-                      onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
+                      value={toDateInputValue(draft.x1)}
+                      onChange={(e) => {
+                        const next = fromDateInputValue(e.target.value, draft.x1);
+                        setDraft({ ...draft, x1: next, x2: next });
+                      }}
                     />
                   </div>
-                  <NumberField label={`Prix (${label})`} step={0.01} value={point.y} onChange={(v) => v !== "" && setPointField({ y: v })} />
+                  <NumberField
+                    label={draft.valueAxis === "volume" ? "Volume" : "Prix"}
+                    step={0.01}
+                    value={draft.y1}
+                    onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v), y2: v === "" ? draft.y2 : round4(v) })}
+                  />
                 </div>
-              );
-            })}
+              )}
+              {/* Regular trend line, "extended" (same two points, just drawn further — see the
+                  canvas draw effect), "channel" (line 1's own two points; its second, parallel
+                  line is set by the "Décalage" field below instead of its own coordinates) and
+                  "fibonacci" (its retracement levels are all derived from these same two points,
+                  0% at "Prix début" and 100% at "Prix fin") all share the same two-point
+                  editor. */}
+              {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel" || draft.lineType === "fibonacci") && (
+                <>
+                  <div className="lq-chart__edit-drawing-row">
+                    <div className="lq-field">
+                      <label className="lq-field__label">Début</label>
+                      <input
+                        type="date"
+                        className="lq-chart__date-input"
+                        value={toDateInputValue(draft.x1)}
+                        onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
+                      />
+                    </div>
+                    <NumberField
+                      label="Prix début"
+                      step={0.01}
+                      value={draft.y1}
+                      onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v) })}
+                    />
+                  </div>
+                  <div className="lq-chart__edit-drawing-row">
+                    <div className="lq-field">
+                      <label className="lq-field__label">Fin</label>
+                      <input
+                        type="date"
+                        className="lq-chart__date-input"
+                        value={toDateInputValue(draft.x2)}
+                        onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
+                      />
+                    </div>
+                    <NumberField
+                      label="Prix fin"
+                      step={0.01}
+                      value={draft.y2}
+                      onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : round4(v) })}
+                    />
+                  </div>
+                </>
+              )}
+              {draft.lineType === "channel" && (
+                <NumberField
+                  label="Décalage (ligne 2)"
+                  step={0.01}
+                  value={draft.channelOffset ?? 0}
+                  onChange={(v) => setDraft({ ...draft, channelOffset: v === "" ? draft.channelOffset : round4(v) })}
+                />
+              )}
+              {/* "disjointChannel"/"fibonacciExtension"/"elliottCorrection"/"elliottImpulse" — a
+                  date+price row per point (x1/y1, x2/y2, then extraPoints), generic over however
+                  many that tool needs instead of a fixed "Début"/"Fin" pair. */}
+              {draft.lineType &&
+                MULTI_POINT_TOOLS[draft.lineType]?.labels.map((label, i) => {
+                  const point = i === 0 ? { x: draft.x1, y: draft.y1 } : i === 1 ? { x: draft.x2, y: draft.y2 } : draft.extraPoints?.[i - 2];
+                  if (!point) return null;
+                  const setPointField = (next: Partial<DataPoint>) => {
+                    if (i === 0) {
+                      setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
+                    } else if (i === 1) {
+                      setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
+                    } else {
+                      const extra = [...(draft.extraPoints ?? [])];
+                      extra[i - 2] = { ...extra[i - 2], ...next };
+                      setDraft({ ...draft, extraPoints: extra });
+                    }
+                  };
+                  return (
+                    <div className="lq-chart__edit-drawing-row" key={i}>
+                      <div className="lq-field">
+                        <label className="lq-field__label">{label}</label>
+                        <input
+                          type="date"
+                          className="lq-chart__date-input"
+                          value={toDateInputValue(point.x)}
+                          onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
+                        />
+                      </div>
+                      <NumberField
+                        label={`Prix (${label})`}
+                        step={0.01}
+                        value={point.y}
+                        onChange={(v) => v !== "" && setPointField({ y: round4(v) })}
+                      />
+                    </div>
+                  );
+                })}
+            </>
+          )}
+
+          {editModalTab === "text" && (
+            <>
+              <TextField
+                label="Texte"
+                placeholder="Étiquette (optionnel)"
+                value={draft.text ?? ""}
+                onChange={(e) => setDraft({ ...draft, text: e.target.value })}
+              />
+              <Checkbox
+                checked={draft.textAlignWithLine ?? false}
+                onChange={(textAlignWithLine) => setDraft({ ...draft, textAlignWithLine })}
+                label="Aligner le texte avec la ligne"
+              />
+              <div className="lq-chart__edit-drawing-row">
+                <NumberField
+                  label="Taille du texte"
+                  min={8}
+                  max={48}
+                  step={1}
+                  value={draft.textSize ?? 11}
+                  onChange={(v) => setDraft({ ...draft, textSize: v === "" ? 11 : v })}
+                />
+                <div className="lq-field">
+                  <label className="lq-field__label">Couleur de fond</label>
+                  <input
+                    type="color"
+                    className="lq-chart__color-input"
+                    value={draft.textBackgroundColor ?? "#000000"}
+                    onChange={(e) => setDraft({ ...draft, textBackgroundColor: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div className="lq-chart__edit-drawing-row">
+                <Checkbox checked={draft.textBold ?? true} onChange={(textBold) => setDraft({ ...draft, textBold })} label="Gras" />
+                <Checkbox checked={draft.textItalic ?? false} onChange={(textItalic) => setDraft({ ...draft, textItalic })} label="Italique" />
+              </div>
+              {draft.textBackgroundColor && (
+                <button
+                  type="button"
+                  className="lq-chart__text-bg-clear"
+                  onClick={() => setDraft({ ...draft, textBackgroundColor: undefined })}
+                >
+                  Retirer la couleur de fond
+                </button>
+              )}
+              <div className="lq-chart__edit-drawing-row">
+                <Select
+                  label="Alignement vertical"
+                  value={draft.textVerticalAlign ?? "top"}
+                  onChange={(v) => setDraft({ ...draft, textVerticalAlign: v })}
+                  options={[
+                    { value: "top", label: "Haut" },
+                    { value: "center", label: "Centre" },
+                    { value: "bottom", label: "Bas" },
+                  ]}
+                />
+                <Select
+                  label="Alignement horizontal"
+                  value={draft.textHorizontalAlign ?? "center"}
+                  onChange={(v) => setDraft({ ...draft, textHorizontalAlign: v })}
+                  options={[
+                    { value: "left", label: "Gauche" },
+                    { value: "center", label: "Centre" },
+                    { value: "right", label: "Droite" },
+                  ]}
+                />
+              </div>
+            </>
+          )}
+
+          {editModalTab === "style" && (
+            <>
+              <div className="lq-chart__edit-drawing-row">
+                <NumberField
+                  label="Épaisseur"
+                  min={1}
+                  max={8}
+                  step={0.5}
+                  value={draft.strokeWidth ?? 1.5}
+                  onChange={(v) => setDraft({ ...draft, strokeWidth: v === "" ? 1.5 : v })}
+                />
+                <div className="lq-field">
+                  <label className="lq-field__label">Couleur</label>
+                  <input
+                    type="color"
+                    className="lq-chart__color-input"
+                    value={draft.color ?? DEFAULT_DRAWING_COLOR}
+                    onChange={(e) => setDraft({ ...draft, color: e.target.value })}
+                  />
+                </div>
+              </div>
+              <Select
+                label="Style de trait"
+                value={draft.lineStyle ?? (draft.dashed ? "dashed" : "solid")}
+                onChange={(v) => setDraft({ ...draft, lineStyle: v, dashed: undefined })}
+                options={[
+                  { value: "solid", label: "Continu" },
+                  { value: "dashed", label: "Tirets" },
+                  { value: "dotted", label: "Pointillés" },
+                  { value: "dashdot", label: "Tiret-point" },
+                ]}
+              />
+              {/* "extend" only applies to a plain 2-point line — the other line types (channel,
+                  fibonacci, elliott, disjoint channel, horizontal/ray/vertical) each draw
+                  themselves with their own fixed geometry and don't read this field (see the
+                  canvas draw effect's per-lineType branches vs. its generic fallback). */}
+              {(!draft.lineType || draft.lineType === "extended") && (
+                <Select
+                  label="Extension"
+                  value={effectiveExtendOf(draft)}
+                  onChange={(v) => setDraft({ ...draft, extend: v, lineType: draft.lineType === "extended" ? undefined : draft.lineType })}
+                  options={[
+                    { value: "none", label: "Ne pas étendre" },
+                    { value: "right", label: "Étendre à droite" },
+                    { value: "left", label: "Étendre à gauche" },
+                    { value: "both", label: "Étendre des deux côtés" },
+                  ]}
+                />
+              )}
+            </>
+          )}
         </Modal>
       )}
 

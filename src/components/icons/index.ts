@@ -60,6 +60,7 @@ export {
   HorizontalRayIcon,
   ExtendedLineIcon,
   ChannelIcon,
+  DisjointChannelIcon,
   FibonacciIcon,
   FibonacciExtensionIcon,
   ElliottWaveIcon,

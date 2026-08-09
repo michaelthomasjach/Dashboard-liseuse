@@ -425,6 +425,19 @@ export const ChannelIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Two non-parallel lines converging toward one side, unlike ChannelIcon's parallel pair — the
+ *  mirrored, independently-anglable second line "disjoint channel" draws instead. */
+export const DisjointChannelIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 5 21 11" />
+    <path d="M3 19 21 13" />
+    <circle cx="3" cy="5" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="21" cy="11" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="19" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="21" cy="13" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
 /** Horizontal rungs fanning out then back in — evokes stacked retracement levels rather than
  *  any one specific ratio (the levels themselves are fixed constants, not part of the icon). */
 export const FibonacciIcon = (props: IconProps) => (
