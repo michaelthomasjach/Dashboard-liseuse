@@ -493,3 +493,66 @@ export const ActivityIcon = (props: IconProps) => (
     <path d="M22 12h-4l-3 8-6-16-3 8H2" />
   </IconBase>
 );
+
+/** Two hollow candles with visible gaps between their bodies — the baseline "raw" candlestick
+ *  look, distinct from HeikinAshiModeIcon's touching/near-continuous bodies below. */
+export const CandleModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M7 3v4M7 15v6" />
+    <rect x="4.5" y="7" width="5" height="8" />
+    <path d="M17 3v3M17 16v5" />
+    <rect x="14.5" y="6" width="5" height="10" />
+  </IconBase>
+);
+
+export const LineCloseModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 16 8 10 12 13 21 5" />
+    <circle cx="21" cy="5" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Three candle bodies with (almost) no gap between them — Heikin Ashi's smoothing makes each
+ *  candle's open track the previous one's close, so real HA bodies read as a continuous zigzag
+ *  rather than the separated bodies of CandleModeIcon. */
+export const HeikinAshiModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M5 2v4M5 15v7M12 1v2M12 17v6M19 4v4M19 13v7" />
+    <rect x="2" y="6" width="6" height="9" />
+    <rect x="9" y="3" width="6" height="14" />
+    <rect x="16" y="8" width="6" height="5" />
+  </IconBase>
+);
+
+/** An ascending staircase of uniform, alternately filled/hollow bricks — one brick per fixed
+ *  price movement, the defining silhouette of a Renko chart. */
+export const RenkoModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="2" y="17" width="5" height="5" fill="currentColor" stroke="none" />
+    <rect x="8" y="12" width="5" height="5" />
+    <rect x="14" y="7" width="5" height="5" fill="currentColor" stroke="none" />
+    <rect x="19" y="2" width="5" height="5" />
+  </IconBase>
+);
+
+/** Uneven, alternately filled/hollow columns (unlike Renko's uniform staircase) — Line Break
+ *  only draws a new line on a fresh high/low or a break past the last few lines' extreme, so
+ *  its "bricks" vary far more in height and don't form a steady diagonal. */
+export const LineBreakModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="2" y="10" width="4" height="8" fill="currentColor" stroke="none" />
+    <rect x="7" y="4" width="4" height="6" fill="currentColor" stroke="none" />
+    <rect x="12" y="10" width="4" height="10" />
+    <rect x="17" y="2" width="4" height="8" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Horizontal rungs of varying length (a mini price-distribution histogram, same visual language
+ *  as FibonacciIcon's rungs) with a dot marking the busiest one — Time Price Opportunities'
+ *  point of control. */
+export const TpoModeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 4h8M2 8h14M2 12h20M2 16h11M2 20h6" />
+    <circle cx="22" cy="12" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);

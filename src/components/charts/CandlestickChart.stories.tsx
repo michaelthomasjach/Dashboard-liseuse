@@ -131,6 +131,42 @@ export const WithTimeframeHeader: Story = {
   },
 };
 
+export const WithDisplayModes: Story = {
+  name: "Modes d'affichage",
+  render: () => {
+    const [mode, setMode] = useState<
+      "candle" | "line" | "heikinAshi" | "renko" | "lineBreak" | "tpo"
+    >("heikinAshi");
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Bouton dans l'en-tête, juste à côté du sélecteur d'intervalle (icône du mode courant, ouvre un menu des six
+          modes) : <strong>Bougies</strong> (défaut), <strong>Ligne de clôture</strong>, <strong>Heikin Ashi</strong>{" "}
+          (bougies lissées — même OHLC transformé selon la formule standard, réindexé 1:1 sur les mêmes dates, donc
+          zoom/pan/indicateurs/dessins restent inchangés), <strong>Renko</strong> (briques de taille fixe — ATR sur{" "}
+          <code>renkoAtrPeriod</code> candles, défaut 14 — une nouvelle brique par mouvement de clôture franchissant
+          ce seuil), <strong>Line Break</strong> (3-line break : une nouvelle ligne sur un nouveau plus haut/bas, un
+          renversement seulement si la clôture dépasse l'extrême des 3 dernières lignes) et{" "}
+          <strong>Time Price Opportunities</strong> (bougies classiques + un histogramme de distribution des prix
+          ancré à droite du graphe, recalculé sur la plage visible, plus trois lignes VAH/POC/VAL — le point de
+          contrôle, et la zone de valeur à 70% autour de lui). Renko/Line Break restent positionnées sur l'échelle
+          d'index existante (chaque brique couvre exactement les bougies qu'il a fallu pour la former) plutôt qu'une
+          échelle dédiée, donc elles zooment/pannent en phase avec tout le reste au prix d'une largeur de brique
+          irrégulière.
+        </p>
+        <CandlestickChart
+          data={generateCandles(400, 180, 91)}
+          timeframes={TIMEFRAMES}
+          timeframe="1d"
+          defaultChartDisplayMode={mode}
+          onChartDisplayModeChange={setMode}
+          height={STORY_HEIGHT}
+        />
+      </div>
+    );
+  },
+};
+
 export const WithIndicators: Story = {
   name: "Indicateurs techniques",
   render: () => (

@@ -67,4 +67,10 @@ export {
   ElliottImpulseIcon,
   ElliottCorrectionIcon,
   ActivityIcon,
+  CandleModeIcon,
+  LineCloseModeIcon,
+  HeikinAshiModeIcon,
+  RenkoModeIcon,
+  LineBreakModeIcon,
+  TpoModeIcon,
 } from "./icons";

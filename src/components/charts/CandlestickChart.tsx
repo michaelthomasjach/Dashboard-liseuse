@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
-import { VWAP, BollingerBands, RSI, MACD } from "technicalindicators";
+import { VWAP, BollingerBands, RSI, MACD, ATR } from "technicalindicators";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
 import { useAxisDragRescale } from "./internal/useAxisDragRescale";
@@ -37,6 +37,12 @@ import {
   EyeIcon,
   EyeOffIcon,
   TrashIcon,
+  CandleModeIcon,
+  LineCloseModeIcon,
+  HeikinAshiModeIcon,
+  RenkoModeIcon,
+  LineBreakModeIcon,
+  TpoModeIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -481,6 +487,185 @@ function computeIndicatorValues(data: Candle[], indicator: Indicator): (number |
   }
 }
 
+export type ChartDisplayMode = "candle" | "line" | "heikinAshi" | "renko" | "lineBreak" | "tpo";
+
+/** Heikin Ashi keeps a 1:1 index/date correspondence with `data` (unlike Renko/Line Break
+ *  below) — each output candle just replaces the OHLC values the regular candle-drawing loop
+ *  reads at the same index, so it needs no changes to the index-based scale/zoom/crosshair
+ *  machinery that everything else in this file assumes `data` provides. */
+function computeHeikinAshiCandles(data: Candle[]): Candle[] {
+  const out: Candle[] = [];
+  let prevOpen = 0;
+  let prevClose = 0;
+  data.forEach((d, i) => {
+    const haClose = (d.open + d.high + d.low + d.close) / 4;
+    const haOpen = i === 0 ? (d.open + d.close) / 2 : (prevOpen + prevClose) / 2;
+    const haHigh = Math.max(d.high, haOpen, haClose);
+    const haLow = Math.min(d.low, haOpen, haClose);
+    out.push({ ...d, open: haOpen, high: haHigh, low: haLow, close: haClose });
+    prevOpen = haOpen;
+    prevClose = haClose;
+  });
+  return out;
+}
+
+/** A Renko/Line Break "brick": unlike a candle, it doesn't own a single index — it forms over a
+ *  run of source candles, from the one right after the previous brick closed (`startIndex`) to
+ *  the one whose close confirmed it (`endIndex`). Rendered as a rectangle spanning exactly that
+ *  index range on the existing index-based X scale, so bricks stay perfectly in sync with
+ *  zoom/pan/volume/indicators/drawings instead of needing a separate scale of their own — the
+ *  tradeoff is that brick width varies with how many source candles it took to form, rather than
+ *  the uniform width Renko/Line Break charts have on a dedicated (non-time) axis. */
+interface PriceBrick {
+  open: number;
+  close: number;
+  direction: 1 | -1;
+  startIndex: number;
+  endIndex: number;
+}
+
+/** Brick size = ATR(period) over the whole dataset — the standard, volatility-adaptive way to
+ *  size Renko bricks (vs. a fixed price or a % of price, neither of which adapts to how much the
+ *  instrument actually moves). Falls back to the plain average true range over however much data
+ *  exists when there's not enough of it for the ATR library to warm up (period + 1 candles),
+ *  rather than leaving Renko with zero bricks on a short dataset. */
+function computeRenkoBrickSize(data: Candle[], period: number): number {
+  if (data.length < 2) return 0;
+  const values = ATR.calculate({ period, high: data.map((d) => d.high), low: data.map((d) => d.low), close: data.map((d) => d.close) });
+  const last = values.length > 0 ? values[values.length - 1] : undefined;
+  if (last && last > 0) return last;
+  const trueRanges = data.map((d, i) => {
+    const prevClose = i > 0 ? data[i - 1].close : d.close;
+    return Math.max(d.high - d.low, Math.abs(d.high - prevClose), Math.abs(d.low - prevClose));
+  });
+  const avg = trueRanges.reduce((a, b) => a + b, 0) / trueRanges.length;
+  return avg > 0 ? avg : 1;
+}
+
+/** Traditional close-based Renko: a new brick forms every time the close moves `brickSize` past
+ *  the last brick's own close, one brick per `brickSize` of movement (a single big move can spawn
+ *  several bricks between two candles) — reverses direction on a single opposite brick, the same
+ *  simplification most retail platforms use instead of the stricter "2 bricks to reverse" rule. */
+function computeRenkoBricks(data: Candle[], brickSize: number): PriceBrick[] {
+  if (brickSize <= 0 || data.length === 0) return [];
+  const bricks: PriceBrick[] = [];
+  let basePrice = data[0].close;
+  let direction: 1 | -1 | 0 = 0;
+  let startIndex = 0;
+  for (let i = 1; i < data.length; i++) {
+    const price = data[i].close;
+    // A single candle can confirm more than one brick if it moves far enough — keep peeling
+    // bricks off the same candle until it's no longer past the next threshold.
+    while (direction >= 0 && price >= basePrice + brickSize) {
+      bricks.push({ open: basePrice, close: basePrice + brickSize, direction: 1, startIndex, endIndex: i });
+      basePrice += brickSize;
+      direction = 1;
+      startIndex = i;
+    }
+    while (direction <= 0 && price <= basePrice - brickSize) {
+      bricks.push({ open: basePrice, close: basePrice - brickSize, direction: -1, startIndex, endIndex: i });
+      basePrice -= brickSize;
+      direction = -1;
+      startIndex = i;
+    }
+  }
+  return bricks;
+}
+
+/** N-line break (classic "Three Line Break" at lineCount = 3): a new line extends the run
+ *  whenever the close makes a new high (uptrend) / low (downtrend) past the last line's own
+ *  close; it only reverses once the close breaks past the extreme of the last `lineCount` lines
+ *  in the opposite direction — closes that do neither (inside the last line's range) produce no
+ *  new line at all, unlike Renko where every candle is at least checked against a fixed step. */
+function computeLineBreakBricks(data: Candle[], lineCount: number): PriceBrick[] {
+  if (data.length < 2) return [];
+  const closes = data.map((d) => d.close);
+  const lines: PriceBrick[] = [];
+  let startIndex = 0;
+  for (let i = 1; i < closes.length; i++) {
+    const price = closes[i];
+    if (lines.length === 0) {
+      const direction: 1 | -1 = price >= closes[0] ? 1 : -1;
+      lines.push({ open: closes[0], close: price, direction, startIndex: 0, endIndex: i });
+      startIndex = i;
+      continue;
+    }
+    const last = lines[lines.length - 1];
+    const extendsRun = last.direction === 1 ? price > last.close : price < last.close;
+    if (extendsRun) {
+      lines.push({ open: last.close, close: price, direction: last.direction, startIndex, endIndex: i });
+      startIndex = i;
+      continue;
+    }
+    const window = lines.slice(-lineCount);
+    const extreme =
+      last.direction === 1
+        ? Math.min(...window.map((l) => Math.min(l.open, l.close)))
+        : Math.max(...window.map((l) => Math.max(l.open, l.close)));
+    const reverses = last.direction === 1 ? price < extreme : price > extreme;
+    if (reverses) {
+      lines.push({ open: last.close, close: price, direction: last.direction === 1 ? -1 : 1, startIndex, endIndex: i });
+      startIndex = i;
+    }
+  }
+  return lines;
+}
+
+interface TpoProfile {
+  bins: { priceLow: number; priceHigh: number; count: number }[];
+  poc: number;
+  vah: number;
+  val: number;
+}
+
+/** "Time Price Opportunities": approximates time-spent-at-price (real TPO needs intrabar/tick
+ *  data, not available here) by spreading one unit of weight across every price bin a candle's
+ *  [low, high] range overlaps — a reasonable stand-in given only OHLC. POC is the busiest bin;
+ *  the value area expands outward from it, always toward whichever neighboring bin holds more,
+ *  until it encloses ≥70% of the total weight — the standard Market Profile definition. */
+function computeTPOProfile(candles: Candle[], binCount: number): TpoProfile | null {
+  if (candles.length === 0) return null;
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (const d of candles) {
+    lo = Math.min(lo, d.low);
+    hi = Math.max(hi, d.high);
+  }
+  if (!(hi > lo)) return null;
+  const binSize = (hi - lo) / binCount;
+  const counts = new Array(binCount).fill(0);
+  for (const d of candles) {
+    const startBin = Math.min(binCount - 1, Math.max(0, Math.floor((d.low - lo) / binSize)));
+    const endBin = Math.min(binCount - 1, Math.max(0, Math.floor((d.high - lo) / binSize)));
+    for (let b = startBin; b <= endBin; b++) counts[b] += 1;
+  }
+  const total = counts.reduce((a: number, b: number) => a + b, 0);
+  if (total === 0) return null;
+  let pocIndex = 0;
+  for (let b = 1; b < binCount; b++) if (counts[b] > counts[pocIndex]) pocIndex = b;
+  let areaLow = pocIndex;
+  let areaHigh = pocIndex;
+  let areaSum = counts[pocIndex];
+  while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < binCount - 1)) {
+    const below = areaLow > 0 ? counts[areaLow - 1] : -1;
+    const above = areaHigh < binCount - 1 ? counts[areaHigh + 1] : -1;
+    if (above >= below) {
+      areaHigh++;
+      areaSum += counts[areaHigh];
+    } else {
+      areaLow--;
+      areaSum += counts[areaLow];
+    }
+  }
+  const bins = counts.map((count: number, b: number) => ({ priceLow: lo + b * binSize, priceHigh: lo + (b + 1) * binSize, count }));
+  return {
+    bins,
+    poc: lo + (pocIndex + 0.5) * binSize,
+    vah: lo + (areaHigh + 1) * binSize,
+    val: lo + areaLow * binSize,
+  };
+}
+
 type DrawingToolType =
   | "trendline"
   | "horizontal"
@@ -542,6 +727,21 @@ const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
 function categoryOfTool(type: DrawingToolType): DrawingToolCategory {
   return DRAWING_TOOL_CATEGORIES.find((c) => c.tools.some((t) => t.type === type)) ?? DRAWING_TOOL_CATEGORIES[0];
 }
+
+interface ChartDisplayModeDef {
+  mode: ChartDisplayMode;
+  label: string;
+  icon: typeof CandleModeIcon;
+}
+
+const CHART_DISPLAY_MODES: ChartDisplayModeDef[] = [
+  { mode: "candle", label: "Bougies", icon: CandleModeIcon },
+  { mode: "line", label: "Ligne de clôture", icon: LineCloseModeIcon },
+  { mode: "heikinAshi", label: "Heikin Ashi", icon: HeikinAshiModeIcon },
+  { mode: "renko", label: "Renko", icon: RenkoModeIcon },
+  { mode: "lineBreak", label: "Line Break", icon: LineBreakModeIcon },
+  { mode: "tpo", label: "Time Price Opportunities (VAH/POC/VAL)", icon: TpoModeIcon },
+];
 
 export interface TimeframeOption {
   label: string;
@@ -620,6 +820,17 @@ export interface CandlestickChartProps {
   /** Currently selected timeframe's `value`, to highlight it in the menu. */
   timeframe?: string;
   onTimeframeChange?: (value: string) => void;
+  /** How the price series itself is drawn — bougies japonaises (défaut), ligne de clôture,
+   *  Heikin Ashi, Renko, Line Break, ou Time Price Opportunities (bougies + histogramme de
+   *  distribution des prix avec VAH/POC/VAL). Shown as a header button (icône du mode courant)
+   *  juste à côté du sélecteur de timeframe, ouvrant un menu des six modes. Uncontrolled, like
+   *  `drawings`/`indicators` — see `defaultChartDisplayMode`/`onChartDisplayModeChange`. */
+  defaultChartDisplayMode?: ChartDisplayMode;
+  onChartDisplayModeChange?: (mode: ChartDisplayMode) => void;
+  /** ATR period used to size Renko bricks (a new brick forms every time the close moves this
+   *  many candles' worth of average true range past the last one) — recomputed from the whole
+   *  dataset, not just what's visible. Default 14. */
+  renkoAtrPeriod?: number;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -843,6 +1054,9 @@ export function CandlestickChart({
   timeframes,
   timeframe,
   onTimeframeChange,
+  defaultChartDisplayMode,
+  onChartDisplayModeChange,
+  renkoAtrPeriod = 14,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -885,6 +1099,9 @@ export function CandlestickChart({
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
   const [tfOpen, setTfOpen] = useState(false);
+  const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>(defaultChartDisplayMode ?? "candle");
+  const [displayModeOpen, setDisplayModeOpen] = useState(false);
+  const displayModeAnchorRef = useRef<HTMLButtonElement>(null);
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
@@ -1695,6 +1912,32 @@ export function CandlestickChart({
     return data.slice(start, end).map((d, k) => ({ d, i: start + k }));
   }, [data, visibleRange]);
 
+  // Gated on the active mode (not just `data`) so the other two never do their O(n) pass while
+  // unused — cheap to flip back and forth since switching modes just recomputes the one that's
+  // now active instead of paying for all three on every data change.
+  const heikinAshiCandles = useMemo(
+    () => (chartDisplayMode === "heikinAshi" ? computeHeikinAshiCandles(data) : null),
+    [data, chartDisplayMode]
+  );
+  const renkoBricks = useMemo(() => {
+    if (chartDisplayMode !== "renko") return [];
+    const brickSize = computeRenkoBrickSize(data, Math.max(1, Math.round(renkoAtrPeriod)));
+    return computeRenkoBricks(data, brickSize);
+  }, [data, chartDisplayMode, renkoAtrPeriod]);
+  const lineBreakBricks = useMemo(
+    () => (chartDisplayMode === "lineBreak" ? computeLineBreakBricks(data, 3) : []),
+    [data, chartDisplayMode]
+  );
+  // Recomputed on pan/zoom (not just `data`), same as `YAutoScaling` above — the profile
+  // describes whatever's currently on screen, not the whole dataset.
+  const tpoProfile = useMemo(() => {
+    if (chartDisplayMode !== "tpo") return null;
+    const start = Math.max(0, visibleRange.start);
+    const end = Math.min(data.length, visibleRange.end);
+    if (end <= start) return null;
+    return computeTPOProfile(data.slice(start, end), 24);
+  }, [data, visibleRange, chartDisplayMode]);
+
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
   // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
   // use for their categorical axis: supply explicit tickValues (slot centers, i + 0.5) throttled
@@ -2050,26 +2293,125 @@ export function CandlestickChart({
     }
     ctx.restore();
 
-    for (const { d, i } of visible) {
-      const cx = zoomedXScale(i + 0.5);
-      const up = d.close >= d.open;
-      const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
-      const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
-      const bodyHeight = Math.max(1, bodyBottom - bodyTop);
-      const hueColor = up ? colorUp : colorDown;
+    if (chartDisplayMode === "line") {
+      // A plain close-price line, same treatment as the light area fill under an indicator
+      // band (globalAlpha 0.08) rather than a fully opaque fill, so gridlines/drawings under it
+      // stay legible.
+      if (visible.length > 0) {
+        ctx.save();
+        ctx.strokeStyle = colorAccent;
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        visible.forEach(({ d, i }, k) => {
+          const x = zoomedXScale(i + 0.5);
+          const y = zoomedPriceScale(d.close);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        if (visible.length > 1) {
+          ctx.lineTo(zoomedXScale(visible[visible.length - 1].i + 0.5), priceHeight);
+          ctx.lineTo(zoomedXScale(visible[0].i + 0.5), priceHeight);
+          ctx.closePath();
+          ctx.globalAlpha = 0.08;
+          ctx.fillStyle = colorAccent;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+    } else if (chartDisplayMode === "renko" || chartDisplayMode === "lineBreak") {
+      // Bricks are positioned on the *existing* index-based X scale (see PriceBrick's own
+      // comment) rather than a dedicated brick-index axis, so they zoom/pan in lockstep with
+      // everything else instead of needing a parallel scale threaded through the whole file.
+      const bricks = chartDisplayMode === "renko" ? renkoBricks : lineBreakBricks;
+      const rangeStart = Math.max(0, visibleRange.start - 2);
+      const rangeEnd = Math.min(data.length, visibleRange.end + 2);
+      for (const brick of bricks) {
+        if (brick.endIndex < rangeStart || brick.startIndex > rangeEnd) continue;
+        const up = brick.direction > 0;
+        const hueColor = up ? colorUp : colorDown;
+        const x1 = zoomedXScale(brick.startIndex);
+        const x2 = zoomedXScale(brick.endIndex + 1);
+        const top = zoomedPriceScale(Math.max(brick.open, brick.close));
+        const bottom = zoomedPriceScale(Math.min(brick.open, brick.close));
+        const inset = Math.min(1.5, (x2 - x1) / 4);
+        const rectX = x1 + inset;
+        const rectWidth = Math.max(1, x2 - x1 - inset * 2);
+        const rectHeight = Math.max(1, bottom - top);
 
+        ctx.lineWidth = 1;
+        ctx.fillStyle = isEink ? (up ? colorBg : colorText) : hueColor;
+        ctx.strokeStyle = isEink ? colorText : hueColor;
+        ctx.fillRect(rectX, top, rectWidth, rectHeight);
+        ctx.strokeRect(rectX, top, rectWidth, rectHeight);
+      }
+    } else {
+      // "candle"/"tpo" (TPO overlays its histogram + VAH/POC/VAL on top of ordinary candles
+      // rather than replacing them — a profile with nothing to show it against wouldn't mean
+      // much) and "heikinAshi" (same candle body/wick drawing, just fed transformed OHLC values
+      // that stay 1:1 with `data`'s own indices).
+      const useHA = chartDisplayMode === "heikinAshi" && heikinAshiCandles;
+      for (const { d: rawD, i } of visible) {
+        const d = useHA ? heikinAshiCandles![i] : rawD;
+        const cx = zoomedXScale(i + 0.5);
+        const up = d.close >= d.open;
+        const bodyTop = zoomedPriceScale(Math.max(d.open, d.close));
+        const bodyBottom = zoomedPriceScale(Math.min(d.open, d.close));
+        const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+        const hueColor = up ? colorUp : colorDown;
+
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = isEink ? colorText : hueColor;
+        ctx.beginPath();
+        ctx.moveTo(cx, zoomedPriceScale(d.high));
+        ctx.lineTo(cx, zoomedPriceScale(d.low));
+        ctx.stroke();
+
+        // E-ink can't code up/down by hue, so it falls back to the standard hollow/filled OHLC convention.
+        ctx.fillStyle = isEink ? (up ? colorBg : colorText) : hueColor;
+        ctx.strokeStyle = isEink ? colorText : hueColor;
+        ctx.fillRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+        ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+      }
+    }
+
+    if (chartDisplayMode === "tpo" && tpoProfile) {
+      const { bins, poc, vah, val } = tpoProfile;
+      const maxCount = Math.max(1, ...bins.map((b) => b.count));
+      const histMaxWidth = dims.boundedWidth * 0.16;
+      ctx.save();
+      ctx.globalAlpha = 0.3;
+      ctx.fillStyle = colorAccent;
+      for (const bin of bins) {
+        if (bin.count <= 0) continue;
+        const barWidth = (bin.count / maxCount) * histMaxWidth;
+        const yTop = zoomedPriceScale(bin.priceHigh);
+        const yBottom = zoomedPriceScale(bin.priceLow);
+        ctx.fillRect(dims.boundedWidth - barWidth, yTop, barWidth, Math.max(1, yBottom - yTop));
+      }
+      ctx.restore();
+
+      ctx.save();
+      ctx.setLineDash([4, 3]);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = isEink ? colorText : hueColor;
-      ctx.beginPath();
-      ctx.moveTo(cx, zoomedPriceScale(d.high));
-      ctx.lineTo(cx, zoomedPriceScale(d.low));
-      ctx.stroke();
-
-      // E-ink can't code up/down by hue, so it falls back to the standard hollow/filled OHLC convention.
-      ctx.fillStyle = isEink ? (up ? colorBg : colorText) : hueColor;
-      ctx.strokeStyle = isEink ? colorText : hueColor;
-      ctx.fillRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
-      ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
+      ctx.font = `600 10px ${fontFamily}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      for (const level of [
+        { price: vah, label: "VAH" },
+        { price: poc, label: "POC" },
+        { price: val, label: "VAL" },
+      ]) {
+        const y = snapPixel(zoomedPriceScale(level.price));
+        ctx.strokeStyle = colorMuted;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(dims.boundedWidth, y);
+        ctx.stroke();
+        ctx.fillStyle = colorMuted;
+        ctx.fillText(level.label, 4, y - 2);
+      }
+      ctx.restore();
     }
 
     // Only price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger) draw here — "own"-pane ones
@@ -2632,6 +2974,13 @@ export function CandlestickChart({
     zoomedXScale,
     zoomedPriceScale,
     candleWidth,
+    chartDisplayMode,
+    heikinAshiCandles,
+    renkoBricks,
+    lineBreakBricks,
+    tpoProfile,
+    data,
+    visibleRange,
     volumeVisible,
     volumeCollapsed,
     volumeScale,
@@ -2728,6 +3077,44 @@ export function CandlestickChart({
               </Popover>
             </>
           )}
+          {/* No dedicated prop gates this (unlike `showIndicators`/`drawingTools`) — it rides on
+              `showHeader` same as zoomable/fullscreenToggle, so it's on by default and only
+              disappears in the edge case where a caller has already opted out of every other
+              header feature too. */}
+          <button
+            ref={displayModeAnchorRef}
+            type="button"
+            className="lq-chart__icon-button"
+            onClick={() => setDisplayModeOpen((o) => !o)}
+            aria-label="Mode d'affichage"
+            title="Mode d'affichage"
+          >
+            {(() => {
+              const CurrentModeIcon = (CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0]).icon;
+              return <CurrentModeIcon size={14} />;
+            })()}
+          </button>
+          <Popover open={displayModeOpen} onClose={() => setDisplayModeOpen(false)} anchorRef={displayModeAnchorRef} placement="bottom">
+            <div className="lq-chart__display-mode-menu">
+              {CHART_DISPLAY_MODES.map((entry) => (
+                <button
+                  key={entry.mode}
+                  type="button"
+                  className={["lq-chart__display-mode-option", entry.mode === chartDisplayMode && "lq-chart__display-mode-option--selected"]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => {
+                    setChartDisplayMode(entry.mode);
+                    onChartDisplayModeChange?.(entry.mode);
+                    setDisplayModeOpen(false);
+                  }}
+                >
+                  <entry.icon size={15} />
+                  {entry.label}
+                </button>
+              ))}
+            </div>
+          </Popover>
           {showIndicators && (
             <button
               type="button"

@@ -490,6 +490,39 @@
   font-weight: 700;
 }
 
+.lq-chart__display-mode-menu {
+  display: flex;
+  flex-direction: column;
+  padding: var(--lq-space-2);
+  min-width: 220px;
+}
+
+.lq-chart__display-mode-option {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart__display-mode-option:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__display-mode-option--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
+  font-weight: 700;
+}
+
 /* Edit-drawing modal: pairs of fields side by side, plus a couple of native inputs styled to
    match the rest of the form controls (no dedicated color/date components exist yet). */
 .lq-chart__edit-drawing-tabs {
