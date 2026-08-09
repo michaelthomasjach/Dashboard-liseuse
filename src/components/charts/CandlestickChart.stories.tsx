@@ -121,10 +121,14 @@ export const WithShapesAndMeasure: Story = {
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         Catégorie <strong>Formes</strong> : <strong>rectangle</strong> (2 clics, coins opposés — tracé plus léger
-        remplissage de sa propre couleur), <strong>flèche coudée</strong> (2 clics — segment horizontal puis
-        vertical, avec une pointe de flèche à l'arrivée), <strong>pinceau</strong> (glisser au lieu de cliquer —
-        le seul outil de la colonne qui se dessine ainsi, un point échantillonné tous les ~3px de mouvement ; se
-        déplace uniquement en bloc, pas de poignée par point), <strong>flèche haut</strong>/
+        remplissage de sa propre couleur), <strong>flèche coudée</strong> (ligne brisée à nombre de points libre —
+        chaque clic ajoute un sommet et l'outil <em>reste actif</em>, contrairement à tous les autres qui se
+        désélectionnent après leur dernier clic ; <strong>Échap</strong> finalise le tracé tel qu'il est — au
+        moins 2 points — avec une seule pointe de flèche à l'arrivée du dernier segment ; chaque sommet reste
+        ensuite une poignée indépendante, comme une vague d'Elliott), <strong>pinceau</strong> (glisser au lieu de
+        cliquer — le seul outil de la colonne qui se dessine ainsi, un point échantillonné tous les ~3px de
+        mouvement ; se déplace uniquement en bloc, pas de poignée par point, contrairement à la flèche coudée),{" "}
+        <strong>flèche haut</strong>/
         <strong>flèche bas</strong> (1 clic — petit triangle ancré juste à côté du point, pas dessus) et{" "}
         <strong>ligne fléchée</strong> (une ligne de tendance ordinaire avec une pointe de flèche à son 2ème point).
         Catégorie <strong>Mesure</strong> : 1er clic = départ, 2ème clic = arrivée — affiche une zone

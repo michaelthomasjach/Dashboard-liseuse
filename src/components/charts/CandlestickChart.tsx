@@ -158,14 +158,18 @@ export interface TrendLineDrawing {
    *  it. Both extraPoints are then just regular, independently draggable points like any other
    *  multi-point tool's, letting the mirrored angle be reshaped by hand afterward. "rectangle" is
    *  a free two-point shape (x1/y1 and x2/y2 as opposite corners) drawn as a stroked box with a
-   *  faint fill of its own `color`. "elbowArrow" is also a free two-point shape, but drawn as an
-   *  L-shaped connector (horizontal from x1/y1, then vertical into x2/y2) with an arrowhead at
-   *  x2/y2. "brush" is a freehand stroke: x1/y1 is where the drag started, x2/y2 where it ended,
-   *  every point sampled in between lives in `extraPoints`, in order — unlike every other
-   *  multi-point tool, its points aren't independently draggable one at a time (there can be
-   *  dozens of them), only the whole stroke together. "arrowUp"/"arrowDown" are single-point
-   *  markers (x2/y2 always mirrors x1/y1, same convention as "horizontal") drawn as a small
-   *  triangle pointing up/down, anchored just clear of the point itself. */
+   *  faint fill of its own `color`. "elbowArrow" is an open-ended polyline (x1/y1, x2/y2, then as
+   *  many `extraPoints` as were clicked — unlike every other multi-point tool, which needs a
+   *  fixed number of clicks known in advance, the tool stays active and keeps appending a point
+   *  per click until Escape commits whatever's been placed so far, same as an app's usual
+   *  "polyline"/pen tool) drawn as a straight segment between each consecutive point, with a
+   *  single arrowhead at the last one. "brush" is a freehand stroke: x1/y1 is where the drag
+   *  started, x2/y2 where it ended, every point sampled in between lives in `extraPoints`, in
+   *  order — unlike elbowArrow's clicked vertices, its points aren't independently draggable one
+   *  at a time (there can be dozens of them), only the whole stroke together. "arrowUp"/
+   *  "arrowDown" are single-point markers (x2/y2 always mirrors x1/y1, same convention as
+   *  "horizontal") drawn as a small triangle pointing up/down, anchored just clear of the point
+   *  itself. */
   lineType?:
     | "horizontal"
     | "vertical"
@@ -1721,11 +1725,33 @@ export function CandlestickChart({
   useEffect(() => {
     if (!activeTool) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") cancelDrawingTool();
+      if (e.key !== "Escape") return;
+      // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
+      // point count to reach on its own (see handleOverlayClick), so Escape is the only way it
+      // ever completes. Needs at least 2 points to be a line at all; fewer and there's nothing
+      // to commit, same as cancelling any other half-placed tool.
+      if (activeTool === "elbowArrow" && pendingPoint && pendingExtraPoints.length >= 1) {
+        const points = [pendingPoint, ...pendingExtraPoints];
+        const next: TrendLineDrawing[] = [
+          ...drawings,
+          {
+            id: `drawing-${drawingIdRef.current++}`,
+            x1: points[0].x,
+            y1: points[0].y,
+            x2: points[1].x,
+            y2: points[1].y,
+            lineType: "elbowArrow",
+            extraPoints: points.slice(2),
+          },
+        ];
+        setDrawings(next);
+        onDrawingsChange?.(next);
+      }
+      cancelDrawingTool();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool]);
+  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange]);
 
   // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
   // already tracks the one line the user is pointing at, same thing a click-to-select would give
@@ -1812,6 +1838,21 @@ export function CandlestickChart({
         { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: activeTool },
       ]);
       cancelDrawingTool();
+      return;
+    }
+    // "elbowArrow" is an open-ended polyline: every click appends another point (1st into
+    // pendingPoint, everything after into pendingExtraPoints) and the tool stays active — unlike
+    // every other multi-point tool, there's no fixed point count to reach, so nothing here ever
+    // commits or calls cancelDrawingTool(). Escape is what finalizes it (see the keydown effect
+    // below), using however many points have been placed by then.
+    if (activeTool === "elbowArrow") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      setPendingExtraPoints((prev) => [...prev, point]);
+      setPreviewPoint(point);
       return;
     }
     // Measure doesn't create a `drawings` entry — its result is ephemeral (measurePoints, cleared
@@ -1963,10 +2004,10 @@ export function CandlestickChart({
       return;
     }
 
-    // "trendline", "extended", "fibonacci", "rectangle" and "elbowArrow" all share the same
-    // 2-click flow — they only differ in how they're drawn (see the canvas draw effect) and, for
-    // "rectangle"/"elbowArrow", hit-tested, not in how they're placed. "arrowLine" is the same
-    // flow again but stays lineType-less like a plain trend line, just with arrowRight preset.
+    // "trendline", "extended", "fibonacci" and "rectangle" all share the same 2-click flow —
+    // they only differ in how they're drawn (see the canvas draw effect) and, for "rectangle",
+    // hit-tested, not in how they're placed. "arrowLine" is the same flow again but stays
+    // lineType-less like a plain trend line, just with arrowRight preset.
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -1978,9 +2019,7 @@ export function CandlestickChart({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
-      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "elbowArrow"
-        ? { lineType: activeTool }
-        : {}),
+      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" ? { lineType: activeTool } : {}),
       ...(activeTool === "arrowLine" ? { arrowRight: true } : {}),
     };
     commitDrawings([...drawings, drawing]);
@@ -2365,9 +2404,14 @@ export function CandlestickChart({
               return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
             })
           );
-        } else if (dr.lineType === "elliottImpulse" || dr.lineType === "elliottCorrection" || dr.lineType === "brush") {
-          // Same "polyline through every point" distance for a freehand stroke as for an Elliott
-          // wave's own vertices — brush just usually has far more of them.
+        } else if (
+          dr.lineType === "elliottImpulse" ||
+          dr.lineType === "elliottCorrection" ||
+          dr.lineType === "brush" ||
+          dr.lineType === "elbowArrow"
+        ) {
+          // Same "polyline through every point" distance for a freehand stroke or an open-ended
+          // elbow-arrow polyline as for an Elliott wave's own fixed vertices.
           const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
           let minSegmentDist = Infinity;
           for (let i = 1; i < screenPoints.length; i++) {
@@ -2387,15 +2431,6 @@ export function CandlestickChart({
             distanceToSegment(mouseX, mouseY, rx2, ry1, rx2, ry2),
             distanceToSegment(mouseX, mouseY, rx2, ry2, rx1, ry2),
             distanceToSegment(mouseX, mouseY, rx1, ry2, rx1, ry1)
-          );
-        } else if (dr.lineType === "elbowArrow") {
-          const ex1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const ey1 = zoomedPriceScale(dr.y1);
-          const ex2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const ey2 = zoomedPriceScale(dr.y2);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, ex1, ey1, ex2, ey1),
-            distanceToSegment(mouseX, mouseY, ex2, ey1, ex2, ey2)
           );
         } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
           d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
@@ -3008,27 +3043,28 @@ export function CandlestickChart({
       drawDrawingText(ctx, dr, rx1, ry1, rx2, ry2, lineColor, fontFamily);
     }
 
-    // "elbowArrow": horizontal from x1/y1 to (x2, y1), then vertical into x2/y2, with an
-    // arrowhead at the end.
+    // "elbowArrow": an open-ended polyline (x1/y1, x2/y2, then however many extraPoints were
+    // clicked before Escape finalized it — see handleOverlayClick/the keydown effect), drawn as
+    // a straight segment between each consecutive point, with a single arrowhead at the last one
+    // pointing in that final segment's own direction.
     for (const dr of drawings) {
       if (dr.lineType !== "elbowArrow") continue;
       const lineColor = dr.color ?? colorAccent;
-      const ex1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-      const ey1 = zoomedPriceScale(dr.y1);
-      const ex2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-      const ey2 = zoomedPriceScale(dr.y2);
+      const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
+      if (screenPoints.length < 2) continue;
       ctx.save();
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.lineJoin = "round";
       ctx.setLineDash(lineDashArray(dr));
       ctx.beginPath();
-      ctx.moveTo(ex1, ey1);
-      ctx.lineTo(ex2, ey1);
-      ctx.lineTo(ex2, ey2);
+      screenPoints.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
       ctx.stroke();
       ctx.restore();
-      drawArrowhead(ctx, ex2, ey1, ex2, ey2, lineColor);
-      drawDrawingText(ctx, dr, ex1, ey1, ex2, ey2, lineColor, fontFamily);
+      const last = screenPoints[screenPoints.length - 1];
+      const secondToLast = screenPoints[screenPoints.length - 2];
+      drawArrowhead(ctx, secondToLast.x, secondToLast.y, last.x, last.y, lineColor);
+      drawDrawingText(ctx, dr, screenPoints[0].x, screenPoints[0].y, last.x, last.y, lineColor, fontFamily);
     }
 
     // "brush": a freehand polyline through x1/y1, extraPoints (in order), then x2/y2 — no
@@ -3134,14 +3170,18 @@ export function CandlestickChart({
         const y2 = zoomedPriceScale(previewPoint.y);
         ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
       } else if (activeTool === "elbowArrow") {
-        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
-        const y1 = zoomedPriceScale(pendingPoint.y);
-        const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
-        const y2 = zoomedPriceScale(previewPoint.y);
+        // Open-ended — same "polyline through whatever's placed so far, plus a live segment to
+        // the cursor" preview as the fixed-count multi-point tools below, just without a point
+        // count to stop at (Escape is what ends it, see the keydown effect).
+        const placed = [pendingPoint, ...pendingExtraPoints];
         ctx.beginPath();
-        ctx.moveTo(x1, y1);
-        ctx.lineTo(x2, y1);
-        ctx.lineTo(x2, y2);
+        placed.forEach((p, i) => {
+          const x = zoomedXScale(indexForDate(p.x) + 0.5);
+          const y = zoomedPriceScale(p.y);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
         ctx.stroke();
       } else if (MULTI_POINT_TOOLS[activeTool]) {
         // fibonacciExtension/elliottCorrection/elliottImpulse: preview the polyline through
@@ -4419,14 +4459,13 @@ export function CandlestickChart({
                   canvas draw effect), "channel" (line 1's own two points; its second, parallel
                   line is set by the "Décalage" field below instead of its own coordinates),
                   "fibonacci" (its retracement levels are all derived from these same two points,
-                  0% at "Prix début" and 100% at "Prix fin"), "rectangle" (opposite corners) and
-                  "elbowArrow" (its start and end) all share the same two-point editor. */}
+                  0% at "Prix début" and 100% at "Prix fin") and "rectangle" (opposite corners)
+                  all share the same two-point editor. */}
               {(!draft.lineType ||
                 draft.lineType === "extended" ||
                 draft.lineType === "channel" ||
                 draft.lineType === "fibonacci" ||
-                draft.lineType === "rectangle" ||
-                draft.lineType === "elbowArrow") && (
+                draft.lineType === "rectangle") && (
                 <>
                   <div className="lq-chart__edit-drawing-row">
                     <div className="lq-field">
@@ -4490,6 +4529,44 @@ export function CandlestickChart({
                       setDraft({ ...draft, extraPoints: extra });
                     }
                   };
+                  return (
+                    <div className="lq-chart__edit-drawing-row" key={i}>
+                      <div className="lq-field">
+                        <label className="lq-field__label">{label}</label>
+                        <input
+                          type="date"
+                          className="lq-chart__date-input"
+                          value={toDateInputValue(point.x)}
+                          onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
+                        />
+                      </div>
+                      <NumberField
+                        label={`Prix (${label})`}
+                        step={0.01}
+                        value={point.y}
+                        onChange={(v) => v !== "" && setPointField({ y: round4(v) })}
+                      />
+                    </div>
+                  );
+                })}
+              {/* "elbowArrow" — same date+price-row-per-point idea as the generic multi-point
+                  block above, but over allPointsOf directly (numbered "Point N") instead of
+                  MULTI_POINT_TOOLS' fixed labels array, since it can have any number of points
+                  depending on how many clicks it took before Escape finalized it. */}
+              {draft.lineType === "elbowArrow" &&
+                allPointsOf(draft).map((point, i) => {
+                  const setPointField = (next: Partial<DataPoint>) => {
+                    if (i === 0) {
+                      setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
+                    } else if (i === 1) {
+                      setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
+                    } else {
+                      const extra = [...(draft.extraPoints ?? [])];
+                      extra[i - 2] = { ...extra[i - 2], ...next };
+                      setDraft({ ...draft, extraPoints: extra });
+                    }
+                  };
+                  const label = `Point ${i + 1}`;
                   return (
                     <div className="lq-chart__edit-drawing-row" key={i}>
                       <div className="lq-field">

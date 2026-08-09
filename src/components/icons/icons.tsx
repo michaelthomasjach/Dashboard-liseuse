@@ -587,13 +587,13 @@ export const RectangleShapeIcon = (props: IconProps) => (
   </IconBase>
 );
 
-/** An L-shaped (horizontal-then-vertical) connector with an arrowhead at its far end — the
- *  elbow-arrow tool's bend, not a plain diagonal. */
+/** A multi-segment zigzag ending in an arrowhead — an open-ended clicked polyline (any number of
+ *  vertices, not just two), distinct from TrendLineIcon's single diagonal. */
 export const ElbowArrowIcon = (props: IconProps) => (
   <IconBase {...props}>
-    <path d="M4 5h12v13" />
-    <path d="M12.5 14.5 16 19l3.5-4.5" />
-    <circle cx="4" cy="5" r="1.3" fill="currentColor" stroke="none" />
+    <path d="M2 18 7 10 10 14 14 6 17 15 20 11 22 7" />
+    <path d="M22 7 18.5 8M22 7 20.5 11" />
+    <circle cx="2" cy="18" r="1.3" fill="currentColor" stroke="none" />
   </IconBase>
 );
 
