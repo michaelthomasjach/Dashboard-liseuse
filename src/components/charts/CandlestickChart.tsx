@@ -601,28 +601,44 @@ function computeRenkoBrickSize(data: Candle[], period: number): number {
 /** Traditional close-based Renko: a new brick forms every time the close moves `brickSize` past
  *  the last brick's own close, one brick per `brickSize` of movement (a single big move can spawn
  *  several bricks between two candles) — reverses direction on a single opposite brick, the same
- *  simplification most retail platforms use instead of the stricter "2 bricks to reverse" rule. */
+ *  simplification most retail platforms use instead of the stricter "2 bricks to reverse" rule.
+ *
+ *  BUG FIXED: an earlier version gated each direction's check on the *current* `direction` itself
+ *  (`while (direction >= 0 && price >= basePrice + brickSize)`, and the mirror image below it) —
+ *  meant to stop the very first candle from qualifying for both directions at once, but it also
+ *  permanently locked out reversals: once direction settled to -1 after the first down-brick,
+ *  `direction >= 0` could never be true again for the rest of the dataset, so no up-brick could
+ *  ever form again either (and symmetrically for 1). On real (non-monotonic) data this collapsed
+ *  the whole series to just its first brick — exactly the "Renko doesn't work" symptom. Checking
+ *  the *price* against both thresholds unconditionally (whichever qualifies first) instead of
+ *  gating on the brick's own last direction fixes this — direction is now purely a label on each
+ *  brick, not a one-way gate on what can happen next. */
 function computeRenkoBricks(data: Candle[], brickSize: number): PriceBrick[] {
   if (brickSize <= 0 || data.length === 0) return [];
   const bricks: PriceBrick[] = [];
   let basePrice = data[0].close;
-  let direction: 1 | -1 | 0 = 0;
   let startIndex = 0;
   for (let i = 1; i < data.length; i++) {
     const price = data[i].close;
     // A single candle can confirm more than one brick if it moves far enough — keep peeling
-    // bricks off the same candle until it's no longer past the next threshold.
-    while (direction >= 0 && price >= basePrice + brickSize) {
-      bricks.push({ open: basePrice, close: basePrice + brickSize, direction: 1, startIndex, endIndex: i });
-      basePrice += brickSize;
-      direction = 1;
-      startIndex = i;
-    }
-    while (direction <= 0 && price <= basePrice - brickSize) {
-      bricks.push({ open: basePrice, close: basePrice - brickSize, direction: -1, startIndex, endIndex: i });
-      basePrice -= brickSize;
-      direction = -1;
-      startIndex = i;
+    // bricks off the same candle until it's no longer past the next threshold in either
+    // direction. Checked as if/else-if (not two independent whiles) since after moving basePrice
+    // one way, the opposite threshold is now further away, never closer — so at most one of the
+    // two conditions can ever be true on a given pass.
+    let moved = true;
+    while (moved) {
+      moved = false;
+      if (price >= basePrice + brickSize) {
+        bricks.push({ open: basePrice, close: basePrice + brickSize, direction: 1, startIndex, endIndex: i });
+        basePrice += brickSize;
+        startIndex = i;
+        moved = true;
+      } else if (price <= basePrice - brickSize) {
+        bricks.push({ open: basePrice, close: basePrice - brickSize, direction: -1, startIndex, endIndex: i });
+        basePrice -= brickSize;
+        startIndex = i;
+        moved = true;
+      }
     }
   }
   return bricks;
