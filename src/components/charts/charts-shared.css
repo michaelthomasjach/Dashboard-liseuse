@@ -669,6 +669,28 @@
   color: var(--lq-color-text);
 }
 
+/* The symbol name and the chart-type label are each their own zone (background on hover),
+   not just plain text — a plain <span> (symbol name without `symbolSearch`) never gets this,
+   it's only ever applied to the two <button>s. */
+.lq-chart__symbol-info-name--clickable {
+  font-family: inherit;
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  padding: 2px 4px;
+  margin: -2px -4px;
+  cursor: pointer;
+}
+
+.lq-chart__symbol-info-name--clickable:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__symbol-info-sep {
+  font-size: 0.75rem;
+  color: var(--lq-color-text-muted);
+}
+
 .lq-chart__symbol-info-ohlc {
   font-size: 0.7rem;
   font-weight: 600;
@@ -902,4 +924,160 @@
   font-size: 0.85rem;
   color: var(--lq-color-text-muted);
   text-align: center;
+}
+
+.lq-chart__symbol-search-clear {
+  display: flex;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--lq-color-text-muted);
+  cursor: pointer;
+}
+
+.lq-chart__symbol-search-clear:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__symbol-search-categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lq-space-2);
+  margin: var(--lq-space-3) 0;
+}
+
+.lq-chart__symbol-search-category {
+  padding: 5px 12px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-hover);
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lq-chart__symbol-search-category:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__symbol-search-category--active {
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-accent);
+}
+
+.lq-chart__symbol-search-results {
+  display: flex;
+  flex-direction: column;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.lq-chart__symbol-search-empty {
+  padding: 16px 8px;
+  font-size: 0.85rem;
+  color: var(--lq-color-text-muted);
+  text-align: center;
+}
+
+.lq-chart__symbol-search-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lq-chart__symbol-search-row:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__symbol-search-row-main {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  font-family: inherit;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-chart__symbol-search-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--lq-radius-sm);
+  overflow: hidden;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.lq-chart__symbol-search-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.lq-chart__symbol-search-ticker {
+  flex-shrink: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lq-chart__symbol-search-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.8rem;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-chart__symbol-search-source {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  color: var(--lq-color-text-muted);
+}
+
+/* Invisible until the row is hovered/focused — same reveal-on-hover convention as the
+   indicator legend's eye/trash/settings actions — unless already favorited, in which case it
+   stays visible so favorited results can be told apart at a glance. */
+.lq-chart__symbol-search-favorite {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-right: 4px;
+  padding: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.lq-chart__symbol-search-row:hover .lq-chart__symbol-search-favorite,
+.lq-chart__symbol-search-favorite:focus-visible,
+.lq-chart__symbol-search-favorite--active {
+  opacity: 1;
+}
+
+.lq-chart__symbol-search-favorite:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__symbol-search-favorite--active {
+  color: #e0a95c;
 }

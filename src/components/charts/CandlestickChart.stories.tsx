@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent } from "./CandlestickChart";
+import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent, type SymbolSearchResult } from "./CandlestickChart";
 import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
@@ -283,6 +283,81 @@ export const WithSymbolAndEvents: Story = {
       <CandlestickChart data={SYMBOL_DATASET} symbol="ACME" events={SYMBOL_EVENTS} showIndicators height={STORY_HEIGHT} />
     </div>
   ),
+};
+
+// A tiny mock "database" standing in for whatever real symbol search API an app would call —
+// the component itself never ships one (it has no opinion on where symbols come from), it only
+// renders whatever `symbolSearchResults` the app currently hands it.
+const MOCK_SYMBOL_DB: SymbolSearchResult[] = [
+  { id: "nvda", ticker: "NVDA", name: "NVIDIA Corporation", category: "stocks", source: "NASDAQ", logoColor: "#76b900" },
+  { id: "aapl", ticker: "AAPL", name: "Apple Inc.", category: "stocks", source: "NASDAQ", logoColor: "#555" },
+  { id: "msft", ticker: "MSFT", name: "Microsoft Corporation", category: "stocks", source: "NASDAQ", logoColor: "#00a4ef" },
+  { id: "spx", ticker: "SPX", name: "S&P 500 Index", category: "indices", source: "SP" },
+  { id: "eu50", ticker: "EU50", name: "Eurostoxx 50, Daily", category: "indices", source: "SPREADEX" },
+  { id: "btcusd", ticker: "BTCUSD", name: "Bitcoin / Dollar américain", category: "crypto", source: "COINBASE" },
+  { id: "ethusd", ticker: "ETHUSD", name: "Ethereum / Dollar américain", category: "crypto", source: "COINBASE" },
+  { id: "eurusd", ticker: "EURUSD", name: "Euro / Dollar américain", category: "forex", source: "OANDA" },
+  { id: "xauusd", ticker: "XAUUSD", name: "Gold", category: "forex", source: "OANDA" },
+  { id: "wti", ticker: "WTI", name: "West Texas Intermediate Crude Oil cash", category: "futures", source: "BLACKBULL" },
+  { id: "fib1", ticker: "FIB1!", name: "FTSE MIB Index Futures", category: "futures", source: "EURONEXT" },
+  { id: "de10y", ticker: "DE10Y", name: "Germany 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
+  { id: "fr10y", ticker: "FR10Y", name: "France 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
+  { id: "gdp", ticker: "USGDP", name: "United States GDP Growth Rate", category: "economy", source: "ECONOMICS" },
+  { id: "orbx", ticker: "ORBX", name: "Global X Space Tech ETF", category: "options", source: "NASDAQ" },
+];
+
+export const WithSymbolSearch: Story = {
+  name: "Recherche de symbole",
+  render: () => {
+    const [favorites, setFavorites] = useState<string[]>(["nvda"]);
+    const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
+    const [currentSymbol, setCurrentSymbol] = useState("NVDA");
+
+    // Stands in for a real search API call — filters the same mock list this story owns by
+    // query/category, exactly the kind of work `onSymbolSearchChange` hands off to the app.
+    function handleSearchChange(query: string, category: string) {
+      const q = query.trim().toLowerCase();
+      setResults(
+        MOCK_SYMBOL_DB.filter((r) => {
+          if (category === "favorites") return favorites.includes(r.id);
+          if (category !== "all" && r.category !== category) return false;
+          if (!q) return true;
+          return r.ticker.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
+        })
+      );
+    }
+
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          `symbol` devient sa propre zone survolable/cliquable une fois `symbolSearch` activé (fond au survol,
+          séparée du libellé du mode d'affichage juste à côté, qui garde son propre fond au survol et son
+          double-clic vers les paramètres) — cliquer dessus ouvre la modale <strong>"Symbol search"</strong> :
+          champ de recherche, pastilles de catégorie à sélection unique (<strong>All</strong>/Stocks/Futures/
+          Forex/Crypto/Indices/Bonds/Economy/Options/<strong>Favoris</strong>) et une liste de résultats — icône
+          carrée (ou pastille de couleur avec les initiales du ticker si `logoUrl` est absent), ticker, nom
+          complet, source, puis une <strong>étoile</strong> tout à droite (invisible sauf survol de la ligne, ou
+          en permanence si déjà en favori) pour l'ajouter/retirer des favoris. Recherche et filtrage sont
+          entièrement à la charge de l'app : `onSymbolSearchChange(query, category)` remonte la requête à chaque
+          changement (y compris à l'ouverture), `symbolSearchResults` est tel quel ce qui s'affiche — cette story
+          filtre une petite liste locale pour simuler un vrai appel API. `onSymbolSelect` remonte la ligne
+          cliquée (ferme la modale) ; les favoris sont non contrôlés comme `drawings`/`indicators`
+          (`defaultFavoriteSymbolIds`/`onFavoriteSymbolIdsChange`).
+        </p>
+        <CandlestickChart
+          data={SYMBOL_DATASET}
+          symbol={currentSymbol}
+          symbolSearch
+          symbolSearchResults={results}
+          onSymbolSearchChange={handleSearchChange}
+          onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
+          defaultFavoriteSymbolIds={favorites}
+          onFavoriteSymbolIdsChange={setFavorites}
+          height={STORY_HEIGHT}
+        />
+      </div>
+    );
+  },
 };
 
 export const AllFeatures: Story = {

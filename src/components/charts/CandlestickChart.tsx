@@ -51,6 +51,8 @@ import {
   ArrowLineIcon,
   ArrowUpIcon,
   ArrowDownIcon,
+  StarIcon,
+  CloseIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -76,6 +78,36 @@ export interface ChartEvent {
   /** 1-2 characters drawn inside the badge instead of `kind`'s own first letter. */
   symbol?: string;
   color?: string;
+}
+
+/** One pill in the symbol-search modal's category filter row — "all" and "favorites" are
+ *  never a result's own `category` (they're just filter views over the same results), every
+ *  other value can be. */
+export type SymbolSearchCategory =
+  | "all"
+  | "stocks"
+  | "futures"
+  | "forex"
+  | "crypto"
+  | "indices"
+  | "bonds"
+  | "economy"
+  | "options"
+  | "favorites";
+
+/** One row in the symbol-search modal's results list — see `CandlestickChartProps.symbolSearchResults`. */
+export interface SymbolSearchResult {
+  id: string;
+  ticker: string;
+  name: string;
+  category: Exclude<SymbolSearchCategory, "all" | "favorites">;
+  /** Exchange/data source, e.g. "NASDAQ", "EURONEXT" — shown right-aligned, just before the
+   *  favorite star. */
+  source: string;
+  /** Small square logo. Omit to fall back to a colored placeholder (`logoColor`, or one cycled
+   *  from a small palette) showing the ticker's first 1-2 letters instead. */
+  logoUrl?: string;
+  logoColor?: string;
 }
 
 export interface TrendLineDrawing {
@@ -837,6 +869,27 @@ const CHART_DISPLAY_MODES: ChartDisplayModeDef[] = [
   { mode: "tpo", label: "Time Price Opportunities (VAH/POC/VAL)", icon: TpoModeIcon },
 ];
 
+const SYMBOL_SEARCH_CATEGORIES: { value: SymbolSearchCategory; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "stocks", label: "Stocks" },
+  { value: "futures", label: "Futures" },
+  { value: "forex", label: "Forex" },
+  { value: "crypto", label: "Crypto" },
+  { value: "indices", label: "Indices" },
+  { value: "bonds", label: "Bonds" },
+  { value: "economy", label: "Economy" },
+  { value: "options", label: "Options" },
+  { value: "favorites", label: "Favoris" },
+];
+
+// Distinct from EVENT_COLORS/INDICATOR_COLORS so a symbol's own logo placeholder never
+// accidentally matches an indicator line or event badge's color at a glance.
+const SYMBOL_LOGO_COLORS = ["#5c7cd1", "#3ea377", "#c9a13a", "#c15d7a", "#8a6fd6", "#4f9fc9"];
+
+function defaultSymbolLogoColor(index: number): string {
+  return SYMBOL_LOGO_COLORS[((index % SYMBOL_LOGO_COLORS.length) + SYMBOL_LOGO_COLORS.length) % SYMBOL_LOGO_COLORS.length];
+}
+
 export interface TimeframeOption {
   label: string;
   value: string;
@@ -940,6 +993,29 @@ export interface CandlestickChartProps {
    *  presentational: positions are derived from `date` via the same index-based X scale
    *  everything else uses, so they pan/zoom with the candles. */
   events?: ChartEvent[];
+  /** Makes `symbol` its own hoverable/clickable zone (background on hover, separate from the
+   *  chart-type label right next to it) — clicking it opens a "Symbol search" modal (search
+   *  field + category filter pills + a results list you provide). Default false — with
+   *  `symbol` set but this left off, the label still renders, just as inert text. Ignored
+   *  entirely if `symbol` itself is omitted (nothing to click). */
+  symbolSearch?: boolean;
+  /** Results currently shown in the symbol-search modal. Searching/filtering — including for
+   *  the "Favoris" pill, see `defaultFavoriteSymbolIds` — is entirely the caller's job: this is
+   *  only what actually renders, driven by `onSymbolSearchChange`. */
+  symbolSearchResults?: SymbolSearchResult[];
+  /** Fires whenever the search modal's query text or category pill changes (including once,
+   *  right when the modal opens, with the query/category at their defaults) so the caller can
+   *  fetch/filter and update `symbolSearchResults` accordingly. `category: "favorites"` asks
+   *  for whichever results the caller currently considers favorited — `query` is meaningless in
+   *  that case and should be ignored. */
+  onSymbolSearchChange?: (query: string, category: SymbolSearchCategory) => void;
+  /** Fires when a result row is clicked — the modal closes automatically right after. */
+  onSymbolSelect?: (result: SymbolSearchResult) => void;
+  /** Uncontrolled set of favorited result ids — the star toggle at the far right of each result
+   *  row (visible on hover, or always once favorited). Persisted the same way as `drawings`/
+   *  `indicators`: seeds initial state, changes reported back via `onFavoriteSymbolIdsChange`. */
+  defaultFavoriteSymbolIds?: string[];
+  onFavoriteSymbolIdsChange?: (ids: string[]) => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -1191,6 +1267,12 @@ export function CandlestickChart({
   renkoAtrPeriod = 14,
   symbol,
   events,
+  symbolSearch = false,
+  symbolSearchResults,
+  onSymbolSearchChange,
+  onSymbolSelect,
+  defaultFavoriteSymbolIds,
+  onFavoriteSymbolIdsChange,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -1260,6 +1342,10 @@ export function CandlestickChart({
   // prop after mount.
   const [yAutoScalingState, setYAutoScalingState] = useState(YAutoScaling);
   const [hiddenEventKinds, setHiddenEventKinds] = useState<Set<string>>(new Set());
+  const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
+  const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
+  const [favoriteSymbolIds, setFavoriteSymbolIds] = useState<string[]>(defaultFavoriteSymbolIds ?? []);
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
@@ -1322,6 +1408,33 @@ export function CandlestickChart({
     setIndicators(next);
     onIndicatorsChange?.(next);
   }
+
+  function toggleFavoriteSymbol(id: string) {
+    setFavoriteSymbolIds((prev) => {
+      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
+      onFavoriteSymbolIdsChange?.(next);
+      return next;
+    });
+  }
+
+  // `onSymbolSearchChange` deliberately isn't a dependency below — a typical caller passes an
+  // inline (non-memoized) handler, which is a fresh function identity on every one of *its own*
+  // renders; if this effect re-ran every time that identity changed, and that handler calls back
+  // into state (e.g. setResults after searching, exactly what the story demonstrating this does),
+  // the resulting re-render would produce yet another fresh identity — an infinite loop. A ref
+  // always holding the latest callback sidesteps this while still calling the current version.
+  const onSymbolSearchChangeRef = useRef(onSymbolSearchChange);
+  useEffect(() => {
+    onSymbolSearchChangeRef.current = onSymbolSearchChange;
+  });
+
+  // Fires once right when the modal opens (query/category at their defaults) and again on every
+  // later change — searching/filtering itself (including resolving "favorites") is entirely the
+  // caller's job, this just reports what the modal's own controls are currently asking for.
+  useEffect(() => {
+    if (!symbolSearchOpen) return;
+    onSymbolSearchChangeRef.current?.(symbolSearchQuery, symbolSearchCategory);
+  }, [symbolSearchOpen, symbolSearchQuery, symbolSearchCategory]);
 
   function addIndicator(entry: IndicatorCatalogEntry) {
     commitIndicators([
@@ -3837,15 +3950,32 @@ export function CandlestickChart({
             — one shared top-left column instead of two independently-positioned corners, so
             neither has to guess the other's height to avoid overlapping it. */}
         <div className="lq-chart__plot-topleft" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
-          <div
-            className="lq-chart__symbol-info"
-            onDoubleClick={() => setSettingsOpen(true)}
-            title="Double-clic : paramètres du graphique"
-          >
-            <span className="lq-chart__symbol-info-name">
-              {symbol ? `${symbol} · ` : ""}
+          <div className="lq-chart__symbol-info">
+            {/* Its own hoverable/clickable zone (background on hover, click opens the
+                symbol-search modal) only once `symbolSearch` opts in — otherwise `symbol`
+                still renders, just as inert text, same as before this existed. */}
+            {symbol &&
+              (symbolSearch ? (
+                <button
+                  type="button"
+                  className="lq-chart__symbol-info-name lq-chart__symbol-info-name--clickable"
+                  onClick={() => setSymbolSearchOpen(true)}
+                  aria-label="Rechercher un symbole"
+                >
+                  {symbol}
+                </button>
+              ) : (
+                <span className="lq-chart__symbol-info-name">{symbol}</span>
+              ))}
+            {symbol && <span className="lq-chart__symbol-info-sep">·</span>}
+            <button
+              type="button"
+              className="lq-chart__symbol-info-name lq-chart__symbol-info-name--clickable"
+              onDoubleClick={() => setSettingsOpen(true)}
+              title="Double-clic : paramètres du graphique"
+            >
               {currentModeEntry.label}
-            </span>
+            </button>
             <span className={["lq-chart__symbol-info-ohlc", ohlcDelta >= 0 ? "lq-chart__symbol-info-ohlc--up" : "lq-chart__symbol-info-ohlc--down"].join(" ")}>
               O {pFmt(ohlcCandle.open)} H {pFmt(ohlcCandle.high)} L {pFmt(ohlcCandle.low)} C {pFmt(ohlcCandle.close)} {ohlcSign}
               {pFmt(ohlcDelta)} ({ohlcSign}
@@ -4944,6 +5074,98 @@ export function CandlestickChart({
               ))}
             </div>
           )}
+        </Modal>
+      )}
+
+      {symbolSearchOpen && (
+        <Modal open onClose={() => setSymbolSearchOpen(false)} title="Symbol search" footer={null}>
+          <TextField
+            placeholder="Rechercher un symbole…"
+            value={symbolSearchQuery}
+            onChange={(e) => setSymbolSearchQuery(e.target.value)}
+            leadingIcon={<SearchIcon size={14} />}
+            trailingIcon={
+              symbolSearchQuery ? (
+                <button
+                  type="button"
+                  className="lq-chart__symbol-search-clear"
+                  onClick={() => setSymbolSearchQuery("")}
+                  aria-label="Effacer la recherche"
+                >
+                  <CloseIcon size={12} />
+                </button>
+              ) : undefined
+            }
+            autoFocus
+          />
+          {/* Single-select pills, not checkboxes (CheckboxButton) — only one category filters
+              the results at a time, same "active" visual convention as the timeframe/
+              display-mode menus above. */}
+          <div className="lq-chart__symbol-search-categories">
+            {SYMBOL_SEARCH_CATEGORIES.map((cat) => (
+              <button
+                key={cat.value}
+                type="button"
+                className={[
+                  "lq-chart__symbol-search-category",
+                  cat.value === symbolSearchCategory && "lq-chart__symbol-search-category--active",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setSymbolSearchCategory(cat.value)}
+                aria-pressed={cat.value === symbolSearchCategory}
+              >
+                {cat.label}
+              </button>
+            ))}
+          </div>
+          <div className="lq-chart__symbol-search-results">
+            {(symbolSearchResults ?? []).length === 0 ? (
+              <p className="lq-chart__symbol-search-empty">Aucun résultat.</p>
+            ) : (
+              (symbolSearchResults ?? []).map((result, i) => {
+                const isFavorite = favoriteSymbolIds.includes(result.id);
+                return (
+                  <div className="lq-chart__symbol-search-row" key={result.id}>
+                    <button
+                      type="button"
+                      className="lq-chart__symbol-search-row-main"
+                      onClick={() => {
+                        onSymbolSelect?.(result);
+                        setSymbolSearchOpen(false);
+                      }}
+                    >
+                      <span
+                        className="lq-chart__symbol-search-logo"
+                        style={result.logoUrl ? undefined : { backgroundColor: result.logoColor ?? defaultSymbolLogoColor(i) }}
+                      >
+                        {result.logoUrl ? <img src={result.logoUrl} alt="" /> : result.ticker.slice(0, 2).toUpperCase()}
+                      </span>
+                      <span className="lq-chart__symbol-search-ticker">{result.ticker}</span>
+                      <span className="lq-chart__symbol-search-name">{result.name}</span>
+                      <span className="lq-chart__symbol-search-source">{result.source}</span>
+                    </button>
+                    {/* Invisible until the row is hovered/focused (see charts-shared.css) — unless
+                        already favorited, in which case it stays visible so favorited results
+                        can actually be told apart from a glance, not just while hovering. */}
+                    <button
+                      type="button"
+                      className={[
+                        "lq-chart__symbol-search-favorite",
+                        isFavorite && "lq-chart__symbol-search-favorite--active",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => toggleFavoriteSymbol(result.id)}
+                      aria-label={isFavorite ? `Retirer ${result.ticker} des favoris` : `Ajouter ${result.ticker} aux favoris`}
+                    >
+                      <StarIcon size={14} fill={isFavorite ? "currentColor" : "none"} />
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </Modal>
       )}
     </div>
