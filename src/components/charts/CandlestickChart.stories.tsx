@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent, type SymbolSearchResult } from "./CandlestickChart";
+import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent, type SymbolSearchResult, type Candle } from "./CandlestickChart";
 import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
@@ -134,12 +134,17 @@ export const WithShapesAndMeasure: Story = {
         Catégorie <strong>Mesure</strong> : 1er clic = départ, 2ème clic = arrivée — affiche une zone
         semi-transparente (verte/rouge selon le sens) plus un encadré à 4 valeurs (%, nombre de barres, nombre de
         jours, delta de prix en points) ; un 3ème clic démarre directement une nouvelle mesure, Échap ou changer
-        d'outil l'efface (ce n'est pas un dessin persistant comme les autres). Le bouton <strong>aimant</strong>{" "}
+        d'outil l'efface (ce n'est pas un dessin persistant comme les autres). Un fin trait sépare la catégorie{" "}
+        <strong>Formes</strong> de <strong>Mesure</strong> dans la colonne, dont l'outil a désormais une icône de
+        règle. Le bouton <strong>aimant</strong>{" "}
         (à droite des catégories) est un interrupteur, pas un outil : une fois activé, tout nouveau point placé
         par n'importe quel outil s'accroche à l'open/high/low/close le plus proche de la bougie visée, au lieu du
         prix exact sous le curseur — reste actif tant qu'on ne le désactive pas. Juste en dessous, un bouton{" "}
         <strong>œil</strong> masque/affiche tous les dessins d'un coup, sans les supprimer — les rebasculer
-        visibles les retrouve exactement tels quels. Le chevron d'une catégorie n'apparaît que si elle a plus d'un
+        visibles les retrouve exactement tels quels. Encore en dessous, un bouton <strong>cadenas</strong>{" "}
+        verrouille tous les dessins existants : toujours sélectionnable/supprimable, et{" "}
+        <strong>double-clic</strong> ouvre toujours sa modale de paramètres — seul le glisser (poignée ou corps
+        entier) est bloqué. Le chevron d'une catégorie n'apparaît que si elle a plus d'un
         outil : <strong>Mesure</strong> (un seul aujourd'hui) n'en a donc pas. Une ligne de tendance classique
         (pas "étendue") peut aussi recevoir une <strong>flèche à gauche</strong>/<strong>à droite</strong> depuis
         l'onglet Style de sa modale, une fois son "Extension" réglée sur "Ne pas étendre".
@@ -225,15 +230,18 @@ export const WithIndicators: Story = {
         (CHOP n'y existe pas, calculé à la main). "Volume" apparaît aussi dans cette même modale (si `showVolume`)
         pour re-afficher le panneau volume s'il a été réduit ou supprimé. Cliquer une entrée l'ajoute au graphe, la
         modale reste ouverte pour en ajouter plusieurs. SMA/EMA/WMA/VWAP/Bollinger se superposent au tracé des prix
-        (légende en haut à gauche, séparée par un simple trait, sans fond tant qu'elle n'est pas survolée ; survoler
-        une entrée fait apparaître œil/corbeille/roue crantée, <strong>double-clic</strong> ouvre directement les
+        (légende en haut à gauche, sans fond tant qu'elle n'est pas survolée, plus de trait entre les entrées ;
+        survoler une entrée fait apparaître œil/corbeille/roue crantée (une vraie roue à dents, plus lisible en
+        petit qu'avant), <strong>double-clic</strong> ouvre directement les
         paramètres, et <strong>Ctrl/Cmd+C</strong> en la survolant la copie — <strong>Ctrl/Cmd+V</strong> colle
         alors un doublon à la fin de la liste, même type/période/couleur, nouvel id) ; Bollinger se dessine en
-        bande (ligne médiane pleine, bornes fines, remplissage translucide) au lieu d'une simple ligne.{" "}
+        bande (ligne médiane pleine, bornes fines, remplissage translucide) au lieu d'une simple ligne. Chaque
+        indicateur superposé affiche aussi sa dernière valeur en badge sur l'axe Y, fond coloré dans sa propre
+        teinte.{" "}
         <strong>RSI/CHOP/MACD ont chacun leur propre panneau</strong> en dessous du
         graphe, comme le volume — même en-tête (nom, réduire/agrandir, supprimer, roue crantée pour les
-        paramètres), et <strong>chaque panneau (volume compris) se redimensionne</strong> en glissant le fin
-        liseré au-dessus de son en-tête.
+        paramètres, ces deux dernières juste à droite du nom), et <strong>chaque panneau (volume compris) se
+        redimensionne</strong> en glissant le fin liseré au-dessus de son en-tête.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators height={STORY_HEIGHT} />
     </div>
@@ -254,7 +262,9 @@ export const WithSubPaneIndicators: Story = {
         RSI et MACD pré-ajoutés (`defaultIndicators`), CHOP aussi mais réduit à son bandeau (`paneCollapsed: true`)
         pour montrer les deux états d'un coup — cliquer son bouton ▲ le rouvre. RSI/CHOP sont bornés 0-100 par
         définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son échelle en continu sur
-        ce qui est visible (histogramme + ligne MACD + ligne de signal). Glisser le fin liseré juste au-dessus d'un
+        ce qui est visible (histogramme + ligne MACD + ligne de signal). La roue crantée (paramètres) et la
+        corbeille (suppression) de chaque en-tête sont positionnées juste à droite du nom du panneau, seul le
+        chevron réduire/agrandir reste à l'extrême droite. Glisser le fin liseré juste au-dessus d'un
         en-tête de panneau (volume compris) redimensionne ce panneau.
       </p>
       <CandlestickChart data={MEDIUM_DATASET} showIndicators defaultIndicators={SUB_PANE_INDICATORS} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
@@ -372,20 +382,13 @@ export const AllFeatures: Story = {
   name: "Toutes les options",
   render: () => {
     const [timeframe, setTimeframe] = useState("1d");
-    const [showVolume, setShowVolume] = useState(true);
-    const [yAutoScaling, setYAutoScaling] = useState(false);
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
           Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
           l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
-          sélecteur d'intervalle (`timeframes`), zoom/pan (`zoomable`), volume masquable (`showVolume`) et rescale
-          automatique de l'axe Y (`YAutoScaling`), tous les deux cochables ci-dessous.
+          sélecteur d'intervalle (`timeframes`) et zoom/pan (`zoomable`).
         </p>
-        <div style={{ marginBottom: 12, display: "flex", gap: 16 }}>
-          <Checkbox checked={showVolume} onChange={setShowVolume} label="Afficher le volume" />
-          <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
-        </div>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
           symbol="MSFT"
@@ -393,8 +396,6 @@ export const AllFeatures: Story = {
           showIndicators
           fullscreenToggle
           zoomable
-          showVolume={showVolume}
-          YAutoScaling={yAutoScaling}
           timeframes={TIMEFRAMES}
           timeframe={timeframe}
           onTimeframeChange={setTimeframe}
@@ -439,6 +440,86 @@ export const WithYAutoScaling: Story = {
           <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
         </div>
         <CandlestickChart data={MEDIUM_DATASET} YAutoScaling={yAutoScaling} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
+      </div>
+    );
+  },
+};
+
+// 15 real seconds per candle (not a genuine "1m"/"5m" interval) purely so the countdown-to-
+// next-candle and a real new candle forming are both watchable within a normal Storybook
+// session instead of requiring several real minutes of patience.
+const LIVE_INTERVAL_MS = 15_000;
+
+function generateLiveSeed(count: number, start: number): Candle[] {
+  const candles: Candle[] = [];
+  let close = start;
+  const now = Date.now();
+  for (let i = count - 1; i >= 0; i--) {
+    const date = new Date(now - i * LIVE_INTERVAL_MS);
+    const open = close;
+    const change = (Math.random() - 0.5) * (start * 0.006);
+    close = Math.max(1, open + change);
+    const high = Math.max(open, close) + Math.random() * (start * 0.002);
+    const low = Math.min(open, close) - Math.random() * (start * 0.002);
+    candles.push({ date, open, high, low, close, volume: Math.round(Math.random() * 50_000) });
+  }
+  return candles;
+}
+
+export const LiveMarket: Story = {
+  name: "Marché ouvert (simulation)",
+  render: () => {
+    const [data, setData] = useState<Candle[]>(() => generateLiveSeed(120, 180));
+
+    // Every real second: either nudges the still-forming last candle's close (extending its
+    // high/low if this tick pushed past either), or — once LIVE_INTERVAL_MS has actually
+    // elapsed since it opened — closes it and starts a brand new one. This is the *story*
+    // simulating a live feed; the component itself has no polling/simulation of its own, it
+    // only ever renders whatever `data` it's given.
+    useEffect(() => {
+      const id = setInterval(() => {
+        setData((prev) => {
+          const last = prev[prev.length - 1];
+          const change = (Math.random() - 0.5) * (last.close * 0.004);
+          if (Date.now() - last.date.getTime() >= LIVE_INTERVAL_MS) {
+            const open = last.close;
+            const close = Math.max(1, open + change);
+            const next: Candle = {
+              date: new Date(last.date.getTime() + LIVE_INTERVAL_MS),
+              open,
+              close,
+              high: Math.max(open, close),
+              low: Math.min(open, close),
+              volume: Math.round(Math.random() * 50_000),
+            };
+            return [...prev, next];
+          }
+          const close = Math.max(1, last.close + change);
+          const updated: Candle = {
+            ...last,
+            close,
+            high: Math.max(last.high, close),
+            low: Math.min(last.low, close),
+            volume: (last.volume ?? 0) + Math.round(Math.random() * 500),
+          };
+          return [...prev.slice(0, -1), updated];
+        });
+      }, 1000);
+      return () => clearInterval(id);
+    }, []);
+
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          `data` change toutes les secondes ici, uniquement pour la démo — la bibliothèque elle-même ne simule
+          rien, elle se contente d'afficher ce qu'on lui passe. `livePrice` affiche une ligne pointillée sur le
+          close de la dernière bougie, sa valeur sur l'axe Y (verte/rouge selon le sens depuis la clôture
+          précédente) et, juste en dessous, un <strong>compte à rebours</strong> vers la prochaine bougie —
+          l'intervalle est déduit de l'écart entre les deux dernières bougies (pas une prop séparée) : à 5 minutes
+          il compterait de 05:00 à 00:00, ici (15 secondes par bougie, pour rester regardable) de 00:15 à 00:00,
+          avant qu'une vraie nouvelle bougie apparaisse.
+        </p>
+        <CandlestickChart data={data} symbol="LIVE" livePrice showVolume height={STORY_HEIGHT} />
       </div>
     );
   },

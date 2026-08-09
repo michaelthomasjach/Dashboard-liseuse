@@ -209,6 +209,13 @@
   position: relative;
 }
 
+.lq-chart__tool-separator {
+  width: 20px;
+  height: 1px;
+  margin: 2px 0;
+  background-color: var(--lq-color-border-subtle);
+}
+
 /* Invisible until the tool button or the chevron itself is hovered/focused — the group covers
    both, since the chevron is a descendant of it (hovering the chevron always also counts as
    hovering the group). Forced visible while its own menu is open so it doesn't vanish out from
@@ -422,6 +429,24 @@
 
 .lq-chart__axis-value--x {
   transform: translateX(-50%);
+}
+
+/* Countdown to the next candle, right below the live-price badge — same left-anchored/
+   overlapping idea as .lq-chart__axis-value--y, muted instead of colored since it's a
+   secondary reading, not a price. */
+.lq-chart__live-countdown {
+  position: absolute;
+  z-index: 999;
+  transform: translateY(-50%);
+  padding: 1px 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 /* Real header row (not a floating overlay) holding the timeframe picker and reset/fullscreen
@@ -734,13 +759,6 @@
   background-color: var(--lq-color-panel);
 }
 
-/* Separates stacked entries with a plain rule instead of boxing each one in its own border —
-   same token/weight as the chart's other dividers (the price/volume divider, the outer chart
-   border), just applied between list items instead of around them. */
-.lq-chart__indicator-legend-item:not(:last-child) {
-  border-bottom: 1px solid var(--lq-color-border-subtle);
-}
-
 .lq-chart__indicator-legend-label {
   color: inherit;
 }
@@ -817,6 +835,17 @@
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--lq-color-text-muted);
+}
+
+/* Groups the label with its settings/delete actions so they sit together right after the name
+   instead of both being pushed all the way to the pane's far right — only the collapse/expand
+   chevron (a separate, later flex child of .lq-chart__pane-header) stays there, pushed by the
+   same justify-content: space-between that used to apply to the whole actions group at once. */
+.lq-chart__pane-header-primary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
 }
 
 /* Visibility is driven by a class from React (hoverVolumeY), not a plain :hover — the hoverable

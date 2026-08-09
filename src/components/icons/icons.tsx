@@ -279,10 +279,13 @@ export const BellIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** A single scalloped outline tracing the whole cog silhouette (teeth fused to the ring, no
+ *  gap) plus the inner hole — reads as an actual toothed gear even at small toolbar sizes,
+ *  unlike detached spokes radiating from a small circle. */
 export const SettingsIcon = (props: IconProps) => (
   <IconBase {...props}>
+    <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     <circle cx="12" cy="12" r="3" />
-    <path d="M12 3v2.2M12 18.8V21M21 12h-2.2M5.2 12H3M18 6l-1.5 1.5M7.5 16.5 6 18M18 18l-1.5-1.5M7.5 7.5 6 6" />
   </IconBase>
 );
 
@@ -557,14 +560,14 @@ export const TpoModeIcon = (props: IconProps) => (
   </IconBase>
 );
 
-/** Like TrendLineIcon, but with small perpendicular tick marks along the line — the measure
- *  tool's ruler silhouette. */
+/** An actual ruler — a bar with graduation marks along it, tilted diagonally — rather than a
+ *  plain segment with a couple of ticks. */
 export const MeasureIcon = (props: IconProps) => (
   <IconBase {...props}>
-    <path d="M4 18 18 6" />
-    <path d="M7.5 14.5 9 13M11 11 12.5 9.5M14.5 8 16 6.5" />
-    <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
-    <circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none" />
+    <g transform="rotate(-45 12 12)">
+      <rect x="3" y="9" width="18" height="6" rx="1" />
+      <path d="M6 9v2.2M9.5 9v2.2M13 9v3.5M16.5 9v2.2" />
+    </g>
   </IconBase>
 );
 

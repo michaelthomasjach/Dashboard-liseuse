@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { VWAP, BollingerBands, RSI, MACD, ATR } from "technicalindicators";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
@@ -53,6 +53,7 @@ import {
   ArrowDownIcon,
   StarIcon,
   CloseIcon,
+  LockIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -1016,6 +1017,15 @@ export interface CandlestickChartProps {
    *  `indicators`: seeds initial state, changes reported back via `onFavoriteSymbolIdsChange`. */
   defaultFavoriteSymbolIds?: string[];
   onFavoriteSymbolIdsChange?: (ids: string[]) => void;
+  /** A dashed line across the price plot at the last candle's close, its price on the Y axis
+   *  (colored up/down against the previous close), and — right below that badge — a MM:SS
+   *  countdown to the next candle, ticking down every second. The countdown's interval is
+   *  inferred from the gap between the last two candles (so a 5-minute series counts down from
+   *  05:00), not a separate prop — pass data with at least 2 candles for it to show at all.
+   *  Meant for genuinely live-updating `data` (see the "Marché ouvert (simulation)" story); on
+   *  static historical data the countdown will just sit at 00:00 once it reaches it, since
+   *  nothing here fetches new candles on its own. Default false. */
+  livePrice?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -1037,6 +1047,8 @@ const CROSSHAIR_ADD_INSET = 20;
 /** How far the price/volume value badges' own left edge overlaps the chart, so their background
  *  englobes the "+" button living at its start instead of the button sitting outside it. */
 const AXIS_VALUE_Y_OVERLAP = 20;
+/** Vertical gap between the live-price badge and the countdown badge sitting right below it. */
+const LIVE_COUNTDOWN_OFFSET = 20;
 /** Single drag-handle position for an axis-constrained line, as a fraction of the plot's own
  *  size along the axis it doesn't move on: a horizontal line's handle sits 1/4 of the width in
  *  from the right edge, a vertical line's handle 1/4 of the height down from the top. */
@@ -1089,6 +1101,25 @@ function distanceToSegment(px: number, py: number, x1: number, y1: number, x2: n
   const cx = x1 + t * dx;
   const cy = y1 + t * dy;
   return Math.hypot(px - cx, py - cy);
+}
+
+/** Rounded at the *source* — every place a price gets computed from a pixel position (a new
+ *  point's placement, any kind of drag) — not just when the edit modal's own fields are typed
+ *  into, so a freshly-drawn or freshly-dragged line's coordinates never carry more precision
+ *  than the modal shows in the first place (a raw scale.invert() pixel→price conversion easily
+ *  produces a dozen-plus decimal digits). */
+function round4(v: number): number {
+  return Math.round(v * 10000) / 10000;
+}
+
+/** MM:SS, rounded up so a fresh 5-minute candle reads "05:00" (not "04:59") the instant it
+ *  starts — ceil(ms / 1000) rather than floor. Negative/zero clamps to "00:00" rather than
+ *  going negative, since nothing here forces a new candle to actually arrive on schedule. */
+function formatCountdown(ms: number): string {
+  const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 // "extended" lines keep their own two defining points (x1/y1/x2/y2, still what's draggable) but
@@ -1276,6 +1307,7 @@ export function CandlestickChart({
   onSymbolSelect,
   defaultFavoriteSymbolIds,
   onFavoriteSymbolIdsChange,
+  livePrice = false,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -1320,6 +1352,11 @@ export function CandlestickChart({
   // was, unlike deleting. See `visibleDrawings` below, the single point every drawing-reading
   // codepath was switched to read from instead of `drawings` directly.
   const [drawingsHidden, setDrawingsHidden] = useState(false);
+  // Blocks *starting* a body/endpoint/axis-handle drag (handleOverlayPointerDown/
+  // handleEndpointPointerDown/handleAxisHandlePointerDown all bail out early while this is on)
+  // — hover, the delete key, and double-click-to-edit are all untouched, so a locked drawing
+  // stays selectable/deletable/editable, just not draggable.
+  const [drawingsLocked, setDrawingsLocked] = useState(false);
   // Every codepath that reads drawn shapes for rendering, hit-testing, or handles reads this
   // instead of `drawings` directly — hiding never mutates `drawings` itself (toggling back on
   // restores everything exactly as it was), it just makes that read empty in the meantime.
@@ -1358,6 +1395,15 @@ export function CandlestickChart({
   const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
   const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
   const [favoriteSymbolIds, setFavoriteSymbolIds] = useState<string[]>(defaultFavoriteSymbolIds ?? []);
+  // Ticks once a second, only while `livePrice` is on — its only job is giving the countdown
+  // badge (a plain DOM element, not part of the canvas draw effect) a reason to re-render each
+  // second; the dashed line/price badge themselves only depend on `data` and don't need this.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!livePrice) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [livePrice]);
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
@@ -1967,7 +2013,7 @@ export function CandlestickChart({
     const rect = zoomRef.current!.getBoundingClientRect();
     const rawIndex = zoomedXScale.invert(e.clientX - rect.left);
     const rawY = zoomedPriceScale.invert(e.clientY - rect.top);
-    return { x: dateForIndex(rawIndex), y: magnetSnapPrice(rawIndex, rawY) };
+    return { x: dateForIndex(rawIndex), y: round4(magnetSnapPrice(rawIndex, rawY)) };
   }
 
   function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
@@ -1981,14 +2027,15 @@ export function CandlestickChart({
       const mouseY = e.clientY - rect.top;
       const d0 = data[0].date;
       const d1 = data[data.length - 1].date;
+      const roundedVolumeY = round4(volumeScale.invert(mouseY - priceHeight));
       const drawing: TrendLineDrawing =
         volumeVisible && mouseY > priceHeight
           ? {
               id: `drawing-${drawingIdRef.current++}`,
               x1: d0,
-              y1: volumeScale.invert(mouseY - priceHeight),
+              y1: roundedVolumeY,
               x2: d1,
-              y2: volumeScale.invert(mouseY - priceHeight),
+              y2: roundedVolumeY,
               lineType: "horizontal",
               valueAxis: "volume",
             }
@@ -2052,14 +2099,15 @@ export function CandlestickChart({
     if (activeTool === "ray") {
       const rect = zoomRef.current!.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
+      const roundedVolumeY = round4(volumeScale.invert(mouseY - priceHeight));
       const drawing: TrendLineDrawing =
         volumeVisible && mouseY > priceHeight
           ? {
               id: `drawing-${drawingIdRef.current++}`,
               x1: point.x,
-              y1: volumeScale.invert(mouseY - priceHeight),
+              y1: roundedVolumeY,
               x2: point.x,
-              y2: volumeScale.invert(mouseY - priceHeight),
+              y2: roundedVolumeY,
               lineType: "ray",
               valueAxis: "volume",
             }
@@ -2094,7 +2142,7 @@ export function CandlestickChart({
           x2: pendingSecondPoint.x,
           y2: pendingSecondPoint.y,
           lineType: "channel",
-          channelOffset: channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate),
+          channelOffset: round4(channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate)),
         },
       ]);
       cancelDrawingTool();
@@ -2121,7 +2169,7 @@ export function CandlestickChart({
         setPreviewPoint(point);
         return;
       }
-      const offset = channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate);
+      const offset = round4(channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate));
       commitDrawings([
         ...drawings,
         {
@@ -2132,8 +2180,8 @@ export function CandlestickChart({
           y2: pendingSecondPoint.y,
           lineType: "disjointChannel",
           extraPoints: [
-            { x: pendingSecondPoint.x, y: pendingSecondPoint.y + offset },
-            { x: pendingPoint.x, y: 2 * pendingSecondPoint.y - pendingPoint.y + offset },
+            { x: pendingSecondPoint.x, y: round4(pendingSecondPoint.y + offset) },
+            { x: pendingPoint.x, y: round4(2 * pendingSecondPoint.y - pendingPoint.y + offset) },
           ],
         },
       ]);
@@ -2223,12 +2271,6 @@ export function CandlestickChart({
     setDraft(null);
   }
 
-  /** Prices are rounded (not just displayed-rounded) to 4 decimals as soon as they're entered, so
-   *  stored drawing coordinates never accumulate more precision than the modal shows. */
-  function round4(v: number): number {
-    return Math.round(v * 10000) / 10000;
-  }
-
   function saveEditModal() {
     if (!editingId || !draft) return;
     commitDrawings(drawings.map((d) => (d.id === editingId ? draft : d)));
@@ -2246,7 +2288,10 @@ export function CandlestickChart({
   // of each needing its own, same as a regular trend line's two endpoints always have.
   function handleEndpointPointerDown(drawingId: string, pointIndex: number) {
     return (e: React.PointerEvent<SVGCircleElement>) => {
+      // Still stops propagation while locked — otherwise the blocked click would bubble up to
+      // the overlay underneath and start a whole-body drag instead, defeating the lock entirely.
       e.stopPropagation();
+      if (drawingsLocked) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       dragEndpointRef.current = { id: drawingId, pointIndex };
     };
@@ -2279,7 +2324,9 @@ export function CandlestickChart({
   // only ever changes x1/x2 (kept equal).
   function handleAxisHandlePointerDown(drawingId: string) {
     return (e: React.PointerEvent<SVGCircleElement>) => {
+      // Still stops propagation while locked — same reasoning as handleEndpointPointerDown above.
       e.stopPropagation();
+      if (drawingsLocked) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       dragAxisRef.current = { id: drawingId };
     };
@@ -2293,7 +2340,7 @@ export function CandlestickChart({
     const rect = zoomRef.current!.getBoundingClientRect();
     if (dr.lineType === "horizontal") {
       const mouseY = e.clientY - rect.top;
-      const value = dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY);
+      const value = round4(dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: value, y2: value } : d)));
     } else if (dr.lineType === "vertical") {
       const mouseX = e.clientX - rect.left;
@@ -2306,7 +2353,7 @@ export function CandlestickChart({
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
-      const value = dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY);
+      const value = round4(dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue, y1: value, y2: value } : d)));
     } else if (dr.lineType === "channel") {
       // A channel's 3rd handle only adjusts channelOffset (single axis, vertical) — line 1's own
@@ -2315,7 +2362,9 @@ export function CandlestickChart({
       // line 2 midpoint) — the midpoint's line-1 price simplifies to a plain average of y1/y2.
       const mouseY = e.clientY - rect.top;
       const midPrice = (dr.y1 + dr.y2) / 2;
-      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, channelOffset: zoomedPriceScale.invert(mouseY) - midPrice } : d)));
+      commitDrawings(
+        drawings.map((d) => (d.id === drag.id ? { ...d, channelOffset: round4(zoomedPriceScale.invert(mouseY) - midPrice) } : d))
+      );
     }
   }
 
@@ -2492,7 +2541,7 @@ export function CandlestickChart({
         // Dragging the body moves it exactly like its single handle would — only the
         // perpendicular axis (here, price/volume) can change.
         const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
-        const newValue = scale.invert(scale(drag.orig.y1) + dyPixels);
+        const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: newValue, y2: newValue } : d)));
       } else if (drag.orig.lineType === "vertical") {
         const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
@@ -2504,22 +2553,22 @@ export function CandlestickChart({
         const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
         const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
         const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
-        const newValue = scale.invert(scale(drag.orig.y1) + dyPixels);
+        const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate, y1: newValue, y2: newValue } : d)));
       } else {
         const origX1 = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
         const origX2 = zoomedXScale(indexForDate(drag.orig.x2) + 0.5);
         const newX1 = dateForIndex(zoomedXScale.invert(origX1 + dxPixels));
-        const newY1 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels);
+        const newY1 = round4(zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels));
         const newX2 = dateForIndex(zoomedXScale.invert(origX2 + dxPixels));
-        const newY2 = zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels);
+        const newY2 = round4(zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels));
         // Any extraPoints (fibonacciExtension/elliottCorrection/elliottImpulse) move by the same
         // pixel delta as x1/x2, keeping the whole multi-point shape intact.
         const newExtraPoints = drag.orig.extraPoints?.map((p) => {
           const origX = zoomedXScale(indexForDate(p.x) + 0.5);
           return {
             x: dateForIndex(zoomedXScale.invert(origX + dxPixels)),
-            y: zoomedPriceScale.invert(zoomedPriceScale(p.y) + dyPixels),
+            y: round4(zoomedPriceScale.invert(zoomedPriceScale(p.y) + dyPixels)),
           };
         });
         commitDrawings(
@@ -2696,6 +2745,11 @@ export function CandlestickChart({
     }
     if (activeTool) return;
     if (hoveredDrawingId) {
+      // Locked: absorb the gesture instead of dragging the line OR falling through to Y-pan —
+      // otherwise panning would shift the price scale under the (unmoved) line, breaking hit
+      // testing at the original screen position. The drawing stays selectable/deletable/editable
+      // (all driven by hover/double-click, untouched here), just not draggable.
+      if (drawingsLocked) return;
       const dr = drawings.find((d) => d.id === hoveredDrawingId);
       if (dr) {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -3476,6 +3530,25 @@ export function CandlestickChart({
       ctx.restore();
     }
 
+    // Live last-close reference line — drawn last (on top of candles/indicators/TPO) so it's
+    // never obscured. Its own Y-axis price badge and the countdown-to-next-candle badge below it
+    // are plain DOM (not canvas), see the JSX further down — this is only the dashed line itself.
+    if (livePrice && data.length > 0) {
+      const lastCandle = data[data.length - 1];
+      const prevCandle = data.length > 1 ? data[data.length - 2] : null;
+      const up = prevCandle ? lastCandle.close >= prevCandle.close : true;
+      const y = snapPixel(zoomedPriceScale(lastCandle.close));
+      ctx.save();
+      ctx.strokeStyle = up ? colorUp : colorDown;
+      ctx.lineWidth = 1;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(dims.boundedWidth, y);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.restore(); // end price-section clip
 
     if (volumeVisible) {
@@ -3740,6 +3813,7 @@ export function CandlestickChart({
     pendingExtraPoints,
     brushPreview,
     measurePoints,
+    livePrice,
     visibleIndicators,
     indexForDate,
     dims.boundedWidth,
@@ -3929,7 +4003,12 @@ export function CandlestickChart({
                 const CategoryIcon = selectedInCategory.icon;
                 const menuOpen = openToolMenu === category.id;
                 return (
-                  <div className="lq-chart__tool-group" key={category.id}>
+                  <Fragment key={category.id}>
+                    {/* A thin rule ahead of "Mesure" only — visually separates the shape/marker
+                        tools above from the standalone measuring tool, which doesn't add a
+                        drawing to the chart the way every category above it does. */}
+                    {category.id === "measure" && <div className="lq-chart__tool-separator" aria-hidden="true" />}
+                    <div className="lq-chart__tool-group">
                     <button
                       type="button"
                       className={["lq-chart__icon-button", activeTool === selectedInCategory.type && "lq-chart__icon-button--active"]
@@ -3984,7 +4063,8 @@ export function CandlestickChart({
                         </Popover>
                       </>
                     )}
-                  </div>
+                    </div>
+                  </Fragment>
                 );
               })}
               {/* A persistent modifier, not a tool of its own — stays on across tool switches
@@ -4012,6 +4092,19 @@ export function CandlestickChart({
                 title="Masquer/afficher tous les dessins"
               >
                 {drawingsHidden ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
+              </button>
+              {/* Blocks dragging (body, endpoints, and axis handles all check this before
+                  starting) without touching selectability — hover, Delete, and double-click to
+                  edit all keep working on a locked drawing, only click-and-drag is refused. */}
+              <button
+                type="button"
+                className={["lq-chart__icon-button", drawingsLocked && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setDrawingsLocked((l) => !l)}
+                aria-label={drawingsLocked ? "Déverrouiller les dessins" : "Verrouiller les dessins"}
+                aria-pressed={drawingsLocked}
+                title="Verrouiller/déverrouiller le déplacement des dessins"
+              >
+                <LockIcon size={14} />
               </button>
             </div>
           </div>
@@ -4131,7 +4224,25 @@ export function CandlestickChart({
                 aria-hidden="true"
               />
             )}
-            <span className="lq-chart__pane-header-label">Volume</span>
+            <div className="lq-chart__pane-header-primary">
+              <span className="lq-chart__pane-header-label">Volume</span>
+              {!volumeCollapsed && (
+                <div
+                  className={["lq-chart__pane-header-actions", hoverVolumeY !== null && "lq-chart__pane-header-actions--visible"]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => setVolumePaneState("hidden")}
+                    aria-label="Supprimer le panneau Volume"
+                  >
+                    <TrashIcon size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
             <div
               className={["lq-chart__pane-header-actions", (volumeCollapsed || hoverVolumeY !== null) && "lq-chart__pane-header-actions--visible"]
                 .filter(Boolean)
@@ -4147,24 +4258,14 @@ export function CandlestickChart({
                   <ChevronUpIcon size={12} />
                 </button>
               ) : (
-                <>
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumePaneState("hidden")}
-                    aria-label="Supprimer le panneau Volume"
-                  >
-                    <TrashIcon size={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumePaneState("collapsed")}
-                    aria-label="Réduire le panneau Volume"
-                  >
-                    <ChevronDownIcon size={12} />
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="lq-chart__pane-header-action"
+                  onClick={() => setVolumePaneState("collapsed")}
+                  aria-label="Réduire le panneau Volume"
+                >
+                  <ChevronDownIcon size={12} />
+                </button>
               )}
             </div>
           </div>
@@ -4197,19 +4298,10 @@ export function CandlestickChart({
                 aria-hidden="true"
               />
             )}
-            <span className="lq-chart__pane-header-label">{indicatorLabel(ind)}</span>
-            <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
-              {ind.paneCollapsed ? (
-                <button
-                  type="button"
-                  className="lq-chart__pane-header-action"
-                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))}
-                  aria-label={`Agrandir le panneau ${indicatorLabel(ind)}`}
-                >
-                  <ChevronUpIcon size={12} />
-                </button>
-              ) : (
-                <>
+            <div className="lq-chart__pane-header-primary">
+              <span className="lq-chart__pane-header-label">{indicatorLabel(ind)}</span>
+              {!ind.paneCollapsed && (
+                <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
                   <button
                     type="button"
                     className="lq-chart__pane-header-action"
@@ -4226,15 +4318,28 @@ export function CandlestickChart({
                   >
                     <TrashIcon size={12} />
                   </button>
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: true } : i)))}
-                    aria-label={`Réduire le panneau ${indicatorLabel(ind)}`}
-                  >
-                    <ChevronDownIcon size={12} />
-                  </button>
-                </>
+                </div>
+              )}
+            </div>
+            <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
+              {ind.paneCollapsed ? (
+                <button
+                  type="button"
+                  className="lq-chart__pane-header-action"
+                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))}
+                  aria-label={`Agrandir le panneau ${indicatorLabel(ind)}`}
+                >
+                  <ChevronUpIcon size={12} />
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="lq-chart__pane-header-action"
+                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: true } : i)))}
+                  aria-label={`Réduire le panneau ${indicatorLabel(ind)}`}
+                >
+                  <ChevronDownIcon size={12} />
+                </button>
               )}
             </div>
           </div>
@@ -4561,6 +4666,76 @@ export function CandlestickChart({
             </button>
           </>
         )}
+
+        {/* Live last-close price (up/down colored against the previous close) and, right below
+            it, a countdown to the next candle — the dashed line itself is canvas (see the draw
+            effect), this is just its own Y-axis badge plus the countdown, both plain DOM since
+            the countdown needs to re-render every second independent of the canvas. The interval
+            is inferred from the last two candles' own dates, not a separate prop. */}
+        {livePrice &&
+          data.length > 0 &&
+          (() => {
+            const lastCandle = data[data.length - 1];
+            const prevCandle = data.length > 1 ? data[data.length - 2] : null;
+            const up = prevCandle ? lastCandle.close >= prevCandle.close : true;
+            const y = dims.margin.top + zoomedPriceScale(lastCandle.close);
+            const intervalMs = prevCandle ? lastCandle.date.getTime() - prevCandle.date.getTime() : null;
+            const remainingMs = intervalMs ? lastCandle.date.getTime() + intervalMs - now : null;
+            return (
+              <>
+                <div
+                  className="lq-chart__axis-value lq-chart__axis-value--y"
+                  style={{
+                    top: y,
+                    left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+                    backgroundColor: `var(${up ? "--lq-color-up" : "--lq-color-down"})`,
+                  }}
+                >
+                  <span className="lq-chart__axis-value-text">{pFmt(lastCandle.close)}</span>
+                </div>
+                {remainingMs !== null && (
+                  <div
+                    className="lq-chart__live-countdown"
+                    style={{ top: y + LIVE_COUNTDOWN_OFFSET, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
+                  >
+                    {formatCountdown(remainingMs)}
+                  </div>
+                )}
+              </>
+            );
+          })()}
+
+        {/* Each active price-overlay indicator's own latest value, same axis-badge style,
+            colored to match that indicator's own line instead of the theme accent. "own"-pane
+            indicators (RSI/CHOP/MACD) already get axis ticks on their own separate scale below,
+            so they're excluded here — this is price-pane overlays only (SMA/EMA/WMA/VWAP/
+            Bollinger, whose "value" is a plain number; Bollinger's own band uses its middle
+            line). */}
+        {showIndicators &&
+          indicatorValues.map(({ indicator, values }, idx) => {
+            if (indicator.hidden || indicatorCatalogEntry(indicator.kind).pane !== "price") return null;
+            const last = values[values.length - 1];
+            if (last === null) return null;
+            // Only ever a plain number (SMA/EMA/WMA/VWAP) or a band (Bollinger, use its middle
+            // line) here — MACD's own shape only exists on the "own"-pane branch this filter
+            // above already excludes, but the values array's type covers all three.
+            const value = typeof last === "number" ? last : "middle" in last ? last.middle : null;
+            if (value === null) return null;
+            const color = indicator.color ?? defaultIndicatorColor(idx);
+            return (
+              <div
+                key={indicator.id}
+                className="lq-chart__axis-value lq-chart__axis-value--y"
+                style={{
+                  top: dims.margin.top + zoomedPriceScale(value),
+                  left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+                  backgroundColor: color,
+                }}
+              >
+                <span className="lq-chart__axis-value-text">{pFmt(value)}</span>
+              </div>
+            );
+          })}
 
         {/* A horizontal/ray line's own price, permanently on the price axis (not just on
             hover, unlike the badges above) — same visual as the hover badge, minus its "+"
