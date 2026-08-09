@@ -6,6 +6,16 @@
   overflow-x: auto;
 }
 
+/* The horizontal indicator sits at `bottom: -1px` (below), 1px past this element's own box —
+   harmless on its own, but per the CSS overflow spec setting only overflow-x to a non-"visible"
+   value forces overflow-y to compute as "auto" too, so that stray 1px was enough to spawn a real
+   (if tiny) vertical scrollbar on every horizontal tab bar. Pinned to "hidden" here (scoped to
+   horizontal only — vertical's own indicator overflows sideways instead via `right: -13px`, a
+   different axis, and vertical tab lists may legitimately want to scroll vertically). */
+.lq-tabs--horizontal {
+  overflow-y: hidden;
+}
+
 .lq-tabs__indicator {
   position: absolute;
   background-color: var(--lq-color-accent);

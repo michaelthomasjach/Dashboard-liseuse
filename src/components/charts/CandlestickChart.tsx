@@ -43,6 +43,14 @@ import {
   RenkoModeIcon,
   LineBreakModeIcon,
   TpoModeIcon,
+  MeasureIcon,
+  MagnetIcon,
+  RectangleShapeIcon,
+  ElbowArrowIcon,
+  BrushIcon,
+  ArrowLineIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -99,6 +107,13 @@ export interface TrendLineDrawing {
    *  field-existed reason as `dashed`/`lineStyle` above. Only meaningful for a free two-point
    *  line (no lineType, or "extended"); ignored by every other lineType. */
   extend?: "none" | "left" | "right" | "both";
+  /** Arrowhead at whichever endpoint sits further left/right *on screen* (not tied to which one
+   *  is x1/y1 vs x2/y2 — a line drawn right-to-left still gets "arrowLeft" at its visual left
+   *  end), same screen-space convention as `extend`. Only offered in the edit modal when `extend`
+   *  is "none" — an infinitely-extended end has nothing meaningful to put an arrowhead on.
+   *  Ignored by every lineType except a free two-point line (undefined, or "extended"). */
+  arrowLeft?: boolean;
+  arrowRight?: boolean;
   /** Font size, in px, for `text`. Default 11. */
   textSize?: number;
   /** Default true (matches the weight text has always rendered at). */
@@ -141,7 +156,16 @@ export interface TrendLineDrawing {
    *  (extraPoints[1], lined up with x1/y1) is mirrored — reflected across that far point's own
    *  price level — so line 2 slopes the opposite way from line 1 instead of running parallel to
    *  it. Both extraPoints are then just regular, independently draggable points like any other
-   *  multi-point tool's, letting the mirrored angle be reshaped by hand afterward. */
+   *  multi-point tool's, letting the mirrored angle be reshaped by hand afterward. "rectangle" is
+   *  a free two-point shape (x1/y1 and x2/y2 as opposite corners) drawn as a stroked box with a
+   *  faint fill of its own `color`. "elbowArrow" is also a free two-point shape, but drawn as an
+   *  L-shaped connector (horizontal from x1/y1, then vertical into x2/y2) with an arrowhead at
+   *  x2/y2. "brush" is a freehand stroke: x1/y1 is where the drag started, x2/y2 where it ended,
+   *  every point sampled in between lives in `extraPoints`, in order — unlike every other
+   *  multi-point tool, its points aren't independently draggable one at a time (there can be
+   *  dozens of them), only the whole stroke together. "arrowUp"/"arrowDown" are single-point
+   *  markers (x2/y2 always mirrors x1/y1, same convention as "horizontal") drawn as a small
+   *  triangle pointing up/down, anchored just clear of the point itself. */
   lineType?:
     | "horizontal"
     | "vertical"
@@ -152,7 +176,12 @@ export interface TrendLineDrawing {
     | "fibonacci"
     | "fibonacciExtension"
     | "elliottImpulse"
-    | "elliottCorrection";
+    | "elliottCorrection"
+    | "rectangle"
+    | "elbowArrow"
+    | "brush"
+    | "arrowUp"
+    | "arrowDown";
   /** Which value scale a "horizontal"/"ray" line's y is expressed in. Ignored for "vertical"
    *  lines and regular trend lines. Default "price". */
   valueAxis?: "price" | "volume";
@@ -700,7 +729,14 @@ type DrawingToolType =
   | "fibonacci"
   | "fibonacciExtension"
   | "elliottImpulse"
-  | "elliottCorrection";
+  | "elliottCorrection"
+  | "measure"
+  | "rectangle"
+  | "elbowArrow"
+  | "brush"
+  | "arrowUp"
+  | "arrowDown"
+  | "arrowLine";
 
 interface DrawingToolDef {
   type: DrawingToolType;
@@ -744,6 +780,21 @@ const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "elliottImpulse", label: "Vague d'Elliott (impulsive)", icon: ElliottImpulseIcon },
       { type: "elliottCorrection", label: "Vague d'Elliott (correctrice)", icon: ElliottCorrectionIcon },
     ],
+  },
+  {
+    id: "shapes",
+    tools: [
+      { type: "rectangle", label: "Rectangle", icon: RectangleShapeIcon },
+      { type: "elbowArrow", label: "Flèche coudée", icon: ElbowArrowIcon },
+      { type: "brush", label: "Pinceau", icon: BrushIcon },
+      { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon },
+      { type: "arrowDown", label: "Flèche bas", icon: ArrowDownIcon },
+      { type: "arrowLine", label: "Ligne fléchée", icon: ArrowLineIcon },
+    ],
+  },
+  {
+    id: "measure",
+    tools: [{ type: "measure", label: "Mesure", icon: MeasureIcon }],
   },
 ];
 
@@ -1061,6 +1112,23 @@ function drawDrawingText(
   ctx.restore();
 }
 
+/** A small filled triangle at (toX, toY), pointing away from (fromX, fromY) — the shared
+ *  arrowhead shape for arrowLeft/arrowRight on plain trend lines, the elbow-arrow tool's end,
+ *  and the arrow-line tool (a trend line with arrowRight preset). */
+function drawArrowhead(ctx: CanvasRenderingContext2D, fromX: number, fromY: number, toX: number, toY: number, color: string, size = 9) {
+  const angle = Math.atan2(toY - fromY, toX - fromX);
+  const spread = Math.PI / 7;
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.beginPath();
+  ctx.moveTo(toX, toY);
+  ctx.lineTo(toX - size * Math.cos(angle - spread), toY - size * Math.sin(angle - spread));
+  ctx.lineTo(toX - size * Math.cos(angle + spread), toY - size * Math.sin(angle + spread));
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+
 function toDateInputValue(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -1138,6 +1206,20 @@ export function CandlestickChart({
   // channel, which computes channelOffset from its 3rd click directly instead of collecting it
   // here.
   const [pendingExtraPoints, setPendingExtraPoints] = useState<DataPoint[]>([]);
+  // When on, every new point placed by any drawing tool (via toDataPoint) snaps to whichever of
+  // the nearest candle's open/high/low/close is closest — a persistent modifier rather than a
+  // tool of its own, so it stays on across tool switches until toggled off again.
+  const [magnetActive, setMagnetActive] = useState(false);
+  // The measure tool's own last completed 2-click measurement (not a `drawings` entry — it's
+  // ephemeral, cleared on Escape/tool switch instead of persisted). `pendingPoint`/`previewPoint`
+  // still drive its live 1st-click-to-cursor preview, same as every other 2-point tool.
+  const [measurePoints, setMeasurePoints] = useState<{ p1: DataPoint; p2: DataPoint } | null>(null);
+  // The brush tool's current in-progress stroke, for live preview only — the committed drawing
+  // (on pointer up) is built from brushPointsRef below, not from this state, so a stroke can be
+  // sampled at pointermove speed without every sample racing a stale closure over React state.
+  const [brushPreview, setBrushPreview] = useState<DataPoint[] | null>(null);
+  const brushPointsRef = useRef<DataPoint[]>([]);
+  const brushDrawingRef = useRef(false);
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
@@ -1605,6 +1687,7 @@ export function CandlestickChart({
     setPreviewPoint(null);
     setPendingSecondPoint(null);
     setPendingExtraPoints([]);
+    setMeasurePoints(null);
   }
 
   function handleToolClick(tool: DrawingToolType) {
@@ -1616,6 +1699,7 @@ export function CandlestickChart({
       setPreviewPoint(null);
       setPendingSecondPoint(null);
       setPendingExtraPoints([]);
+      setMeasurePoints(null);
     }
   }
 
@@ -1631,6 +1715,7 @@ export function CandlestickChart({
     setPreviewPoint(null);
     setPendingSecondPoint(null);
     setPendingExtraPoints([]);
+    setMeasurePoints(null);
   }
 
   useEffect(() => {
@@ -1642,12 +1727,44 @@ export function CandlestickChart({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [activeTool]);
 
+  // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
+  // already tracks the one line the user is pointing at, same thing a click-to-select would give
+  // here) when Delete/Backspace is pressed — skipped while the edit modal is open (its own
+  // "Supprimer" button is the deliberate action there) or while a text input has focus (typing a
+  // label in the Texte tab shouldn't delete the drawing out from under it).
+  useEffect(() => {
+    if (!hoveredDrawingId || editingId) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const active = document.activeElement;
+      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocused) return;
+      e.preventDefault();
+      const next = drawings.filter((d) => d.id !== hoveredDrawingId);
+      setDrawings(next);
+      onDrawingsChange?.(next);
+      setHoveredDrawingId(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hoveredDrawingId, editingId, drawings, onDrawingsChange]);
+
+  // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
+  // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
+  // No-op when the magnet is off, so every call site stays correct without its own branch.
+  function magnetSnapPrice(rawIndex: number, rawY: number): number {
+    if (!magnetActive || data.length === 0) return rawY;
+    const idx = Math.min(data.length - 1, Math.max(0, Math.round(rawIndex - 0.5)));
+    const candle = data[idx];
+    const candidates = [candle.open, candle.high, candle.low, candle.close];
+    return candidates.reduce((closest, v) => (Math.abs(v - rawY) < Math.abs(closest - rawY) ? v : closest), candidates[0]);
+  }
+
   function toDataPoint(e: { clientX: number; clientY: number }): DataPoint {
     const rect = zoomRef.current!.getBoundingClientRect();
-    return {
-      x: dateForIndex(zoomedXScale.invert(e.clientX - rect.left)),
-      y: zoomedPriceScale.invert(e.clientY - rect.top),
-    };
+    const rawIndex = zoomedXScale.invert(e.clientX - rect.left);
+    const rawY = zoomedPriceScale.invert(e.clientY - rect.top);
+    return { x: dateForIndex(rawIndex), y: magnetSnapPrice(rawIndex, rawY) };
   }
 
   function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
@@ -1684,6 +1801,31 @@ export function CandlestickChart({
         { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: p0, x2: point.x, y2: p1, lineType: "vertical" },
       ]);
       cancelDrawingTool();
+      return;
+    }
+    // Arrow markers are single-point, like horizontal/vertical — x2/y2 just mirrors x1/y1 (kept
+    // in sync by both the generic whole-body drag and a dedicated single-handle case, see
+    // handleEndpointPointerMove) so there's nothing meaningful a second point could add.
+    if (activeTool === "arrowUp" || activeTool === "arrowDown") {
+      commitDrawings([
+        ...drawings,
+        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: activeTool },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+    // Measure doesn't create a `drawings` entry — its result is ephemeral (measurePoints, cleared
+    // on Escape/tool switch). Deliberately doesn't cancelDrawingTool() after the 2nd click, so a
+    // 3rd click starts a fresh measurement immediately instead of needing the tool reselected.
+    if (activeTool === "measure") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      setMeasurePoints({ p1: pendingPoint, p2: point });
+      setPendingPoint(null);
+      setPreviewPoint(null);
       return;
     }
     // Same price/volume detection as "horizontal" above, but anchored at the clicked date
@@ -1821,8 +1963,10 @@ export function CandlestickChart({
       return;
     }
 
-    // "trendline", "extended" and "fibonacci" all share the same 2-click flow — they only differ
-    // in how they're drawn (see the canvas draw effect), not in how they're placed.
+    // "trendline", "extended", "fibonacci", "rectangle" and "elbowArrow" all share the same
+    // 2-click flow — they only differ in how they're drawn (see the canvas draw effect) and, for
+    // "rectangle"/"elbowArrow", hit-tested, not in how they're placed. "arrowLine" is the same
+    // flow again but stays lineType-less like a plain trend line, just with arrowRight preset.
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -1834,7 +1978,10 @@ export function CandlestickChart({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
-      ...(activeTool === "extended" || activeTool === "fibonacci" ? { lineType: activeTool } : {}),
+      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "elbowArrow"
+        ? { lineType: activeTool }
+        : {}),
+      ...(activeTool === "arrowLine" ? { arrowRight: true } : {}),
     };
     commitDrawings([...drawings, drawing]);
     cancelDrawingTool();
@@ -1936,8 +2083,10 @@ export function CandlestickChart({
       const mouseX = e.clientX - rect.left;
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue } : d)));
-    } else if (dr.lineType === "ray") {
-      // A ray's handle has both degrees of freedom, unlike horizontal/vertical's single axis.
+    } else if (dr.lineType === "ray" || dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
+      // Both a ray's anchor and an arrow marker's single point have both degrees of freedom,
+      // unlike horizontal/vertical's single axis — an arrow marker just never reads from the
+      // volume scale (it's always price-anchored).
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
@@ -2100,6 +2249,25 @@ export function CandlestickChart({
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
+    // Freehand capture: samples points into brushPointsRef (a ref, not state — pointermove can
+    // fire faster than React re-renders, and the committed drawing on pointer up reads straight
+    // from the ref instead of racing a stale closure over React state) throttled to roughly every
+    // 3px of on-screen movement, so a slow stroke isn't hundreds of near-duplicate points. Mirrors
+    // the same array into brushPreview state purely so the draw effect has something to render
+    // live — the ref stays the single source of truth for what actually gets committed.
+    if (brushDrawingRef.current) {
+      const last = brushPointsRef.current[brushPointsRef.current.length - 1];
+      if (last) {
+        const lastX = zoomedXScale(indexForDate(last.x) + 0.5);
+        const lastY = zoomedPriceScale(last.y);
+        if (Math.hypot(mouseX - lastX, mouseY - lastY) < 3) return;
+      }
+      const point = toDataPoint(e);
+      brushPointsRef.current = [...brushPointsRef.current, point];
+      setBrushPreview(brushPointsRef.current);
+      return;
+    }
+
     if (dragLineRef.current) {
       const drag = dragLineRef.current;
       const dxPixels = e.clientX - drag.startClientX;
@@ -2197,7 +2365,9 @@ export function CandlestickChart({
               return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
             })
           );
-        } else if (dr.lineType === "elliottImpulse" || dr.lineType === "elliottCorrection") {
+        } else if (dr.lineType === "elliottImpulse" || dr.lineType === "elliottCorrection" || dr.lineType === "brush") {
+          // Same "polyline through every point" distance for a freehand stroke as for an Elliott
+          // wave's own vertices — brush just usually has far more of them.
           const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
           let minSegmentDist = Infinity;
           for (let i = 1; i < screenPoints.length; i++) {
@@ -2207,6 +2377,28 @@ export function CandlestickChart({
             );
           }
           d = minSegmentDist;
+        } else if (dr.lineType === "rectangle") {
+          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const ry1 = zoomedPriceScale(dr.y1);
+          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const ry2 = zoomedPriceScale(dr.y2);
+          d = Math.min(
+            distanceToSegment(mouseX, mouseY, rx1, ry1, rx2, ry1),
+            distanceToSegment(mouseX, mouseY, rx2, ry1, rx2, ry2),
+            distanceToSegment(mouseX, mouseY, rx2, ry2, rx1, ry2),
+            distanceToSegment(mouseX, mouseY, rx1, ry2, rx1, ry1)
+          );
+        } else if (dr.lineType === "elbowArrow") {
+          const ex1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const ey1 = zoomedPriceScale(dr.y1);
+          const ex2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const ey2 = zoomedPriceScale(dr.y2);
+          d = Math.min(
+            distanceToSegment(mouseX, mouseY, ex1, ey1, ex2, ey1),
+            distanceToSegment(mouseX, mouseY, ex2, ey1, ex2, ey2)
+          );
+        } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
+          d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
         } else if (dr.lineType === "fibonacciExtension") {
           const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
           const ay = zoomedPriceScale(dr.y1);
@@ -2280,6 +2472,16 @@ export function CandlestickChart({
   // capture, so d3-zoom's own gesture (handling X) is completely unaffected by this running
   // alongside it for Y.
   function handleOverlayPointerDown(e: React.PointerEvent<SVGRectElement>) {
+    // Brush is the one drawing tool that places points by dragging instead of clicking — starts
+    // capturing here instead of falling through to the click-based tools' shared handleOverlayClick.
+    if (activeTool === "brush") {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const point = toDataPoint(e);
+      brushDrawingRef.current = true;
+      brushPointsRef.current = [point];
+      setBrushPreview(brushPointsRef.current);
+      return;
+    }
     if (activeTool) return;
     if (hoveredDrawingId) {
       const dr = drawings.find((d) => d.id === hoveredDrawingId);
@@ -2310,6 +2512,23 @@ export function CandlestickChart({
   }
 
   function handleOverlayPointerUp(e: React.PointerEvent<SVGRectElement>) {
+    if (brushDrawingRef.current) {
+      brushDrawingRef.current = false;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+      const points = brushPointsRef.current;
+      brushPointsRef.current = [];
+      setBrushPreview(null);
+      if (points.length >= 2) {
+        const first = points[0];
+        const last = points[points.length - 1];
+        commitDrawings([
+          ...drawings,
+          { id: `drawing-${drawingIdRef.current++}`, x1: first.x, y1: first.y, x2: last.x, y2: last.y, lineType: "brush", extraPoints: points.slice(1, -1) },
+        ]);
+      }
+      cancelDrawingTool();
+      return;
+    }
     if (!dragLineRef.current) return;
     dragLineRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
@@ -2399,11 +2618,24 @@ export function CandlestickChart({
       const bricks = chartDisplayMode === "renko" ? renkoBricks : lineBreakBricks;
       const rangeStart = Math.max(0, visibleRange.start - 2);
       const rangeEnd = Math.min(data.length, visibleRange.end + 2);
-      for (const brick of bricks) {
+      for (let bi = 0; bi < bricks.length; bi++) {
+        const brick = bricks[bi];
         if (brick.endIndex < rangeStart || brick.startIndex > rangeEnd) continue;
         const up = brick.direction > 0;
         const hueColor = up ? colorUp : colorDown;
-        const x1 = zoomedXScale(brick.startIndex);
+        // A brick's own `startIndex` is set to the *previous* brick's `endIndex` (see
+        // computeRenkoBricks/computeLineBreakBricks) — both bricks legitimately claim that same
+        // candle when it's the one that confirmed the earlier brick AND kicked off this one, so
+        // rendering both from that literal index doubled up one full candle-slot's width of
+        // overlap at every single transition, painting the new brick's color over part of the
+        // old one. Bumped forward by one slot here (render-only — the stored index driving the
+        // price math is untouched) whenever that overlap actually applies, i.e. never for the
+        // very first brick and never for one of several bricks confirmed within the same candle
+        // (startIndex === endIndex there already renders as a single deliberate 1-slot sliver).
+        const prevBrick = bi > 0 ? bricks[bi - 1] : null;
+        const sharesBoundaryWithPrev = prevBrick !== null && brick.startIndex === prevBrick.endIndex && brick.startIndex !== brick.endIndex;
+        const renderStartIndex = sharesBoundaryWithPrev ? brick.startIndex + 1 : brick.startIndex;
+        const x1 = zoomedXScale(renderStartIndex);
         const x2 = zoomedXScale(brick.endIndex + 1);
         const top = zoomedPriceScale(Math.max(brick.open, brick.close));
         const bottom = zoomedPriceScale(Math.min(brick.open, brick.close));
@@ -2566,7 +2798,20 @@ export function CandlestickChart({
     // Regular trend lines plus "horizontal" price lines (volume ones are drawn in the volume
     // section below, "vertical" ones are drawn full-height further down, outside any clip).
     for (const dr of drawings) {
-      if (dr.lineType === "vertical" || ((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
+      // "rectangle"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown" have their own geometry entirely
+      // unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras" shape
+      // every other type below shares — drawn in their own dedicated loops further down instead,
+      // same reasoning "vertical" (full-height, outside this clip) already skips this one for.
+      if (
+        dr.lineType === "vertical" ||
+        dr.lineType === "rectangle" ||
+        dr.lineType === "elbowArrow" ||
+        dr.lineType === "brush" ||
+        dr.lineType === "arrowUp" ||
+        dr.lineType === "arrowDown" ||
+        ((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")
+      )
+        continue;
       const lineColor = dr.color ?? colorAccent;
       ctx.strokeStyle = lineColor;
       ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
@@ -2607,6 +2852,16 @@ export function CandlestickChart({
       ctx.moveTo(drawX1, drawY1);
       ctx.lineTo(drawX2, drawY2);
       ctx.stroke();
+
+      // arrowLeft/arrowRight only apply to a free two-point line — always drawn at x1/y1–x2/y2
+      // themselves (never the extended edges above, since the two are mutually exclusive in the
+      // edit modal anyway) and identified by screen position, not by which of x1/x2 is smaller.
+      if ((!dr.lineType || dr.lineType === "extended") && (dr.arrowLeft || dr.arrowRight)) {
+        const leftPoint = x1 <= x2 ? { x: x1, y: y1 } : { x: x2, y: y2 };
+        const rightPoint = x1 <= x2 ? { x: x2, y: y2 } : { x: x1, y: y1 };
+        if (dr.arrowLeft) drawArrowhead(ctx, rightPoint.x, rightPoint.y, leftPoint.x, leftPoint.y, lineColor);
+        if (dr.arrowRight) drawArrowhead(ctx, leftPoint.x, leftPoint.y, rightPoint.x, rightPoint.y, lineColor);
+      }
 
       // "channel" draws a second segment parallel to x1/x2, offset by channelOffset (a price
       // delta — constant in pixel terms too, since zoomedPriceScale is linear).
@@ -2727,6 +2982,101 @@ export function CandlestickChart({
       }
     }
 
+    // "rectangle": x1/y1 and x2/y2 as opposite corners — stroked, plus a faint fill of its own
+    // color so it reads as a filled region instead of just an outline.
+    for (const dr of drawings) {
+      if (dr.lineType !== "rectangle") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+      const ry1 = zoomedPriceScale(dr.y1);
+      const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+      const ry2 = zoomedPriceScale(dr.y2);
+      const rectX = Math.min(rx1, rx2);
+      const rectY = Math.min(ry1, ry2);
+      const rectW = Math.abs(rx2 - rx1);
+      const rectH = Math.abs(ry2 - ry1);
+      ctx.save();
+      ctx.globalAlpha = 0.12;
+      ctx.fillStyle = lineColor;
+      ctx.fillRect(rectX, rectY, rectW, rectH);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.strokeRect(rectX, rectY, rectW, rectH);
+      ctx.restore();
+      drawDrawingText(ctx, dr, rx1, ry1, rx2, ry2, lineColor, fontFamily);
+    }
+
+    // "elbowArrow": horizontal from x1/y1 to (x2, y1), then vertical into x2/y2, with an
+    // arrowhead at the end.
+    for (const dr of drawings) {
+      if (dr.lineType !== "elbowArrow") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const ex1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+      const ey1 = zoomedPriceScale(dr.y1);
+      const ex2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+      const ey2 = zoomedPriceScale(dr.y2);
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      ctx.moveTo(ex1, ey1);
+      ctx.lineTo(ex2, ey1);
+      ctx.lineTo(ex2, ey2);
+      ctx.stroke();
+      ctx.restore();
+      drawArrowhead(ctx, ex2, ey1, ex2, ey2, lineColor);
+      drawDrawingText(ctx, dr, ex1, ey1, ex2, ey2, lineColor, fontFamily);
+    }
+
+    // "brush": a freehand polyline through x1/y1, extraPoints (in order), then x2/y2 — no
+    // per-point handles/hit-testing (see allPointsOf's callers), the whole stroke only moves or
+    // deletes as one piece.
+    for (const dr of drawings) {
+      if (dr.lineType !== "brush") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
+      if (screenPoints.length < 2) continue;
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 2.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      screenPoints.forEach((p, i) => (i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)));
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // "arrowUp"/"arrowDown": a single-point marker, drawn as a small triangle just clear of its
+    // own point (below it pointing up, above it pointing down) rather than centered on it, so it
+    // doesn't sit on top of whatever candle it's marking.
+    for (const dr of drawings) {
+      if (dr.lineType !== "arrowUp" && dr.lineType !== "arrowDown") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
+      const ay = zoomedPriceScale(dr.y1);
+      const markerSize = (dr.strokeWidth ?? 1.5) * 6 + 6;
+      const gap = 4;
+      if (dr.lineType === "arrowUp") {
+        drawArrowhead(ctx, ax, ay + gap + markerSize, ax, ay + gap, lineColor, markerSize);
+      } else {
+        drawArrowhead(ctx, ax, ay - gap - markerSize, ax, ay - gap, lineColor, markerSize);
+      }
+      if (dr.text) {
+        ctx.save();
+        ctx.font = `${dr.textBold === false ? 400 : 600} ${dr.textSize ?? 11}px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = dr.lineType === "arrowUp" ? "top" : "bottom";
+        ctx.fillStyle = dr.color ?? lineColor;
+        ctx.fillText(dr.text, ax, dr.lineType === "arrowUp" ? ay + gap + markerSize + 4 : ay - gap - markerSize - 4);
+        ctx.restore();
+      }
+    }
+
     if (activeTool && pendingPoint && previewPoint) {
       ctx.save();
       ctx.strokeStyle = colorAccent;
@@ -2777,6 +3127,22 @@ export function CandlestickChart({
         ctx.moveTo(zoomedXScale(indexForDate(p3.x) + 0.5), zoomedPriceScale(p3.y));
         ctx.lineTo(zoomedXScale(indexForDate(p4.x) + 0.5), zoomedPriceScale(p4.y));
         ctx.stroke();
+      } else if (activeTool === "rectangle") {
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(previewPoint.y);
+        ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      } else if (activeTool === "elbowArrow") {
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(previewPoint.y);
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.lineTo(x2, y1);
+        ctx.lineTo(x2, y2);
+        ctx.stroke();
       } else if (MULTI_POINT_TOOLS[activeTool]) {
         // fibonacciExtension/elliottCorrection/elliottImpulse: preview the polyline through
         // whatever points have been placed so far, plus one more segment out to the live cursor
@@ -2812,6 +3178,84 @@ export function CandlestickChart({
         ctx.lineTo(drawX2, drawY2);
         ctx.stroke();
       }
+      ctx.restore();
+    }
+
+    // Brush's own in-progress stroke — driven by brushPreview state (mirrored from
+    // brushPointsRef on every sampled point, see handlePointerMove) rather than
+    // pendingPoint/previewPoint, since it's a drag gesture, not a click sequence.
+    if (brushPreview && brushPreview.length >= 2) {
+      ctx.save();
+      ctx.strokeStyle = colorAccent;
+      ctx.globalAlpha = 0.75;
+      ctx.lineWidth = 2.5;
+      ctx.lineJoin = "round";
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      brushPreview.forEach((p, i) => {
+        const x = zoomedXScale(indexForDate(p.x) + 0.5);
+        const y = zoomedPriceScale(p.y);
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Measure's own last completed measurement — a translucent box between the two points (green
+    // if the price went up from p1 to p2, red if down, same up/down convention as candles) plus a
+    // small stats panel: % change, price delta ("points"), bar count and calendar-day count
+    // between them.
+    if (measurePoints) {
+      const { p1, p2 } = measurePoints;
+      const mx1 = zoomedXScale(indexForDate(p1.x) + 0.5);
+      const my1 = zoomedPriceScale(p1.y);
+      const mx2 = zoomedXScale(indexForDate(p2.x) + 0.5);
+      const my2 = zoomedPriceScale(p2.y);
+      const up = p2.y >= p1.y;
+      const boxColor = up ? colorUp : colorDown;
+
+      ctx.save();
+      ctx.globalAlpha = 0.15;
+      ctx.fillStyle = boxColor;
+      ctx.fillRect(Math.min(mx1, mx2), Math.min(my1, my2), Math.abs(mx2 - mx1), Math.abs(my2 - my1));
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(mx1, my1);
+      ctx.lineTo(mx2, my2);
+      ctx.stroke();
+
+      const bars = Math.abs(indexForDate(p2.x) - indexForDate(p1.x));
+      const days = Math.round(Math.abs(p2.x.getTime() - p1.x.getTime()) / 86_400_000);
+      const priceDelta = p2.y - p1.y;
+      const pct = p1.y !== 0 ? (priceDelta / p1.y) * 100 : 0;
+      const sign = priceDelta >= 0 ? "+" : "";
+      const lines = [
+        `${sign}${pct.toFixed(2)}%`,
+        `${bars} barre${bars > 1 ? "s" : ""}`,
+        `${days} jour${days > 1 ? "s" : ""}`,
+        `${sign}${priceDelta.toFixed(2)} points`,
+      ];
+      ctx.setLineDash([]);
+      ctx.font = `600 11px ${fontFamily}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "top";
+      const padding = 6;
+      const lineHeight = 14;
+      const boxWidth = Math.max(...lines.map((l) => ctx.measureText(l).width)) + padding * 2;
+      const boxHeight = lines.length * lineHeight + padding * 2;
+      const labelX = Math.max(mx1, mx2) + 8;
+      const labelY = Math.min(my1, my2);
+      ctx.fillStyle = colorBg;
+      ctx.fillRect(labelX, labelY, boxWidth, boxHeight);
+      ctx.strokeStyle = boxColor;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(labelX, labelY, boxWidth, boxHeight);
+      ctx.fillStyle = boxColor;
+      lines.forEach((line, i) => ctx.fillText(line, labelX + padding, labelY + padding + i * lineHeight));
       ctx.restore();
     }
 
@@ -3077,6 +3521,8 @@ export function CandlestickChart({
     previewPoint,
     pendingSecondPoint,
     pendingExtraPoints,
+    brushPreview,
+    measurePoints,
     visibleIndicators,
     indexForDate,
     dims.boundedWidth,
@@ -3315,6 +3761,19 @@ export function CandlestickChart({
                   </div>
                 );
               })}
+              {/* A persistent modifier, not a tool of its own — stays on across tool switches
+                  (see toDataPoint/magnetSnapPrice) until toggled off again, so it lives outside
+                  DRAWING_TOOL_CATEGORIES' button+chevron+menu pattern as a plain toggle. */}
+              <button
+                type="button"
+                className={["lq-chart__icon-button", magnetActive && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setMagnetActive((a) => !a)}
+                aria-label="Aimant"
+                aria-pressed={magnetActive}
+                title="Aimant : accroche les nouveaux points au prix (O/H/L/C) le plus proche"
+              >
+                <MagnetIcon size={14} />
+              </button>
             </div>
           </div>
         )}
@@ -3651,6 +4110,12 @@ export function CandlestickChart({
               {drawings.map((dr) => {
                 const isHovered = hoveredDrawingId === dr.id;
                 if (!isHovered) return null;
+                // A freehand stroke can have dozens of sampled points — individually draggable
+                // handles for each would be impractical clutter, so it only moves as a whole
+                // (the generic whole-body drag in handlePointerMove already covers that, no
+                // per-type code needed there since it shifts every point — extraPoints included —
+                // by the same pixel delta regardless of how many there are).
+                if (dr.lineType === "brush") return null;
                 // Axis-constrained lines get a single handle at a fixed point along the axis
                 // they don't move on (never at their data endpoints, which aren't meaningful
                 // drag targets here — the whole line only has one degree of freedom).
@@ -3694,6 +4159,22 @@ export function CandlestickChart({
                       className="lq-chart__drawing-handle"
                       cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
                       cy={cy}
+                      r={5}
+                      onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                      onPointerMove={handleAxisHandlePointerMove}
+                      onPointerUp={handleAxisHandlePointerUp}
+                    />
+                  );
+                }
+                // An arrow marker's one handle sits at its own point, same as a ray's anchor
+                // above — x2/y2 mirrors x1/y1 automatically (see handleAxisHandlePointerMove).
+                if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
+                  return (
+                    <circle
+                      key={dr.id}
+                      className="lq-chart__drawing-handle"
+                      cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
+                      cy={zoomedPriceScale(dr.y1)}
                       r={5}
                       onPointerDown={handleAxisHandlePointerDown(dr.id)}
                       onPointerMove={handleAxisHandlePointerMove}
@@ -3909,11 +4390,13 @@ export function CandlestickChart({
                 </div>
               )}
               {/* A ray keeps both its degrees of freedom (unlike horizontal/vertical), so it gets
-                  both fields — still just one of each, since x2/y2 always mirror x1/y1. */}
-              {draft.lineType === "ray" && (
+                  both fields — still just one of each, since x2/y2 always mirror x1/y1. Arrow
+                  markers share this same one-point editor (never a volume value — they're always
+                  price-anchored). */}
+              {(draft.lineType === "ray" || draft.lineType === "arrowUp" || draft.lineType === "arrowDown") && (
                 <div className="lq-chart__edit-drawing-row">
                   <div className="lq-field">
-                    <label className="lq-field__label">Date de départ</label>
+                    <label className="lq-field__label">Date</label>
                     <input
                       type="date"
                       className="lq-chart__date-input"
@@ -3934,11 +4417,16 @@ export function CandlestickChart({
               )}
               {/* Regular trend line, "extended" (same two points, just drawn further — see the
                   canvas draw effect), "channel" (line 1's own two points; its second, parallel
-                  line is set by the "Décalage" field below instead of its own coordinates) and
+                  line is set by the "Décalage" field below instead of its own coordinates),
                   "fibonacci" (its retracement levels are all derived from these same two points,
-                  0% at "Prix début" and 100% at "Prix fin") all share the same two-point
-                  editor. */}
-              {(!draft.lineType || draft.lineType === "extended" || draft.lineType === "channel" || draft.lineType === "fibonacci") && (
+                  0% at "Prix début" and 100% at "Prix fin"), "rectangle" (opposite corners) and
+                  "elbowArrow" (its start and end) all share the same two-point editor. */}
+              {(!draft.lineType ||
+                draft.lineType === "extended" ||
+                draft.lineType === "channel" ||
+                draft.lineType === "fibonacci" ||
+                draft.lineType === "rectangle" ||
+                draft.lineType === "elbowArrow") && (
                 <>
                   <div className="lq-chart__edit-drawing-row">
                     <div className="lq-field">
@@ -4143,6 +4631,16 @@ export function CandlestickChart({
                     { value: "both", label: "Étendre des deux côtés" },
                   ]}
                 />
+              )}
+              {/* Arrowheads only make sense on a line that actually stops somewhere — offered
+                  only once "Extension" above is set to "Ne pas étendre" (an infinitely-extended
+                  end has nothing to put an arrowhead on). "Gauche"/"Droite" are screen positions
+                  (see arrowLeft/arrowRight's own doc), not tied to which point is x1 vs x2. */}
+              {(!draft.lineType || draft.lineType === "extended") && effectiveExtendOf(draft) === "none" && (
+                <div className="lq-chart__edit-drawing-row">
+                  <Checkbox checked={draft.arrowLeft ?? false} onChange={(arrowLeft) => setDraft({ ...draft, arrowLeft })} label="Flèche à gauche" />
+                  <Checkbox checked={draft.arrowRight ?? false} onChange={(arrowRight) => setDraft({ ...draft, arrowRight })} label="Flèche à droite" />
+                </div>
               )}
             </>
           )}

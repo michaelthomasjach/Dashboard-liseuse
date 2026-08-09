@@ -73,4 +73,10 @@ export {
   RenkoModeIcon,
   LineBreakModeIcon,
   TpoModeIcon,
+  MeasureIcon,
+  MagnetIcon,
+  RectangleShapeIcon,
+  ElbowArrowIcon,
+  BrushIcon,
+  ArrowLineIcon,
 } from "./icons";

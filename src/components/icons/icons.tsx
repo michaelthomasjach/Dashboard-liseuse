@@ -556,3 +556,60 @@ export const TpoModeIcon = (props: IconProps) => (
     <circle cx="22" cy="12" r="1.3" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+/** Like TrendLineIcon, but with small perpendicular tick marks along the line — the measure
+ *  tool's ruler silhouette. */
+export const MeasureIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 18 18 6" />
+    <path d="M7.5 14.5 9 13M11 11 12.5 9.5M14.5 8 16 6.5" />
+    <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="18" cy="6" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** A horseshoe magnet, outer + inner U with a pole band near each open end. */
+export const MagnetIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M6 3H3v9a9 9 0 0 0 18 0V3h-3" />
+    <path d="M6 3v9a6 6 0 0 0 12 0V3" />
+    <path d="M3 7h3M18 7h3" />
+  </IconBase>
+);
+
+/** A box with dots at two opposite corners — same "A"/"D" two-point convention TrendLineIcon
+ *  uses for its own two dots, just applied to a rectangle's diagonal instead of a segment. */
+export const RectangleShapeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="3" y="6" width="18" height="12" />
+    <circle cx="3" cy="6" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="21" cy="18" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** An L-shaped (horizontal-then-vertical) connector with an arrowhead at its far end — the
+ *  elbow-arrow tool's bend, not a plain diagonal. */
+export const ElbowArrowIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 5h12v13" />
+    <path d="M12.5 14.5 16 19l3.5-4.5" />
+    <circle cx="4" cy="5" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+export const BrushIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 20c0-3 1.5-4.5 4-4.5S11 18 11 20" />
+    <path d="M9.5 14 18 5.5a2 2 0 0 1 3 3L12.5 17" />
+  </IconBase>
+);
+
+/** Same diagonal segment as TrendLineIcon, but a chevron arrowhead at one end instead of a
+ *  second dot — the "line with an arrow" shape distinguishing it from a plain trend line. */
+export const ArrowLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 18 16 6" />
+    <path d="M16 6 10.5 8M16 6 13.5 11.5" />
+    <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);

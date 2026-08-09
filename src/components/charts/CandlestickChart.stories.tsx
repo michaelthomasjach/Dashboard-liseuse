@@ -75,8 +75,9 @@ export const WithDrawingTools: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Trois catégories d'outils empilées dans la colonne à gauche du graphe (une vraie zone réservée, pas des
-        boutons superposés — elle reste visible en plein écran), chacune avec son propre bouton + chevron + menu :{" "}
+        Catégories d'outils empilées dans la colonne à gauche du graphe (une vraie zone réservée, pas des
+        boutons superposés — elle reste visible en plein écran), chacune avec son propre bouton + chevron + menu
+        (voir la story "Formes, mesure et aimant" pour les deux dernières) :{" "}
         <strong>Lignes</strong> (tendance, <strong>étendue</strong> — mêmes 2 points qu'une ligne de tendance mais le
         tracé continue jusqu'aux bords du graphe —, <strong>canal</strong> — 2 lignes parallèles, 2 clics pour la
         première comme une ligne de tendance puis un 3ème pour l'écart de la seconde —,{" "}
@@ -105,9 +106,38 @@ export const WithDrawingTools: Story = {
         <strong>Horizontale</strong>/<strong>horizontale à partir d'une date</strong> affichent en permanence leur
         propre prix sur l'axe Y (même badge que celui du survol) ; en plus, une{" "}
         <strong>horizontale à partir d'une date</strong> affiche sa date de départ sur l'axe X, mais seulement tant
-        que sa ligne est survolée (contrairement au badge de prix, toujours visible).
+        que sa ligne est survolée (contrairement au badge de prix, toujours visible). Survoler un dessin puis
+        appuyer sur <strong>Suppr</strong>/<strong>Retour arrière</strong> le supprime directement, sans passer par
+        sa modale.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 33)} drawingTools height={STORY_HEIGHT} />
+    </div>
+  ),
+};
+
+export const WithShapesAndMeasure: Story = {
+  name: "Formes, mesure et aimant",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        Catégorie <strong>Formes</strong> : <strong>rectangle</strong> (2 clics, coins opposés — tracé plus léger
+        remplissage de sa propre couleur), <strong>flèche coudée</strong> (2 clics — segment horizontal puis
+        vertical, avec une pointe de flèche à l'arrivée), <strong>pinceau</strong> (glisser au lieu de cliquer —
+        le seul outil de la colonne qui se dessine ainsi, un point échantillonné tous les ~3px de mouvement ; se
+        déplace uniquement en bloc, pas de poignée par point), <strong>flèche haut</strong>/
+        <strong>flèche bas</strong> (1 clic — petit triangle ancré juste à côté du point, pas dessus) et{" "}
+        <strong>ligne fléchée</strong> (une ligne de tendance ordinaire avec une pointe de flèche à son 2ème point).
+        Catégorie <strong>Mesure</strong> : 1er clic = départ, 2ème clic = arrivée — affiche une zone
+        semi-transparente (verte/rouge selon le sens) plus un encadré à 4 valeurs (%, nombre de barres, nombre de
+        jours, delta de prix en points) ; un 3ème clic démarre directement une nouvelle mesure, Échap ou changer
+        d'outil l'efface (ce n'est pas un dessin persistant comme les autres). Le bouton <strong>aimant</strong>{" "}
+        (à droite des catégories) est un interrupteur, pas un outil : une fois activé, tout nouveau point placé
+        par n'importe quel outil s'accroche à l'open/high/low/close le plus proche de la bougie visée, au lieu du
+        prix exact sous le curseur — reste actif tant qu'on ne le désactive pas. Une ligne de tendance classique
+        (pas "étendue") peut aussi recevoir une <strong>flèche à gauche</strong>/<strong>à droite</strong> depuis
+        l'onglet Style de sa modale, une fois son "Extension" réglée sur "Ne pas étendre".
+      </p>
+      <CandlestickChart data={generateCandles(220, 180, 44)} drawingTools height={STORY_HEIGHT} />
     </div>
   ),
 };
