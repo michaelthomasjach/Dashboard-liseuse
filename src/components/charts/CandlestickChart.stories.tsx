@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart, type TimeframeEntry } from "./CandlestickChart";
+import { CandlestickChart, type TimeframeEntry, type Indicator } from "./CandlestickChart";
 import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
@@ -131,22 +131,48 @@ export const WithIndicators: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-        Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles — SMA, EMA, WMA
-        (calculés en interne) plus <strong>VWAP</strong> et <strong>bandes de Bollinger</strong> (calculés via la
-        librairie npm{" "}
+        Bouton dans l'en-tête (icône activité) ouvre une modale listant les indicateurs disponibles, groupés par
+        catégorie avec une barre de recherche pour filtrer : "Moyennes mobiles" (SMA, EMA, WMA, VWAP — les 3
+        premiers calculés en interne), "Volatilité" (<strong>bandes de Bollinger</strong>, <strong>CHOP</strong>) et{" "}
+        <strong>Momentum</strong> (<strong>RSI</strong>, <strong>MACD</strong>) — Bollinger/RSI/CHOP/MACD calculés
+        via la librairie npm{" "}
         <a href="https://www.npmjs.com/package/technicalindicators" target="_blank" rel="noreferrer">
           technicalindicators
-        </a>
-        ) — cliquer une entrée l'ajoute au graphe, la modale reste ouverte pour en ajouter plusieurs. Les indicateurs
-        actifs sont listés en haut à gauche du graphe, séparés par un simple trait (pas de bordure autour de chaque
-        entrée, ni de fond tant qu'elle n'est pas survolée — le fond réapparaît seulement au survol) ; survoler une
-        entrée fait aussi apparaître trois icônes : œil (masque/affiche le tracé sans le supprimer
-        de la liste), corbeille (suppression directe) et roue crantée (paramètres — période, couleur, écart-type pour
-        Bollinger — <strong>double-clic sur l'entrée</strong> fait la même chose). Superposés sur le tracé des prix,
-        ils suivent le zoom/déplacement comme les bougies ; Bollinger se dessine en bande (ligne médiane pleine,
-        bornes fines, remplissage translucide) au lieu d'une simple ligne.
+        </a>{" "}
+        (CHOP n'y existe pas, calculé à la main). "Volume" apparaît aussi dans cette même modale (si `showVolume`)
+        pour re-afficher le panneau volume s'il a été réduit ou supprimé. Cliquer une entrée l'ajoute au graphe, la
+        modale reste ouverte pour en ajouter plusieurs. SMA/EMA/WMA/VWAP/Bollinger se superposent au tracé des prix
+        (légende en haut à gauche, séparée par un simple trait, sans fond tant qu'elle n'est pas survolée ; survoler
+        une entrée fait apparaître œil/corbeille/roue crantée, <strong>double-clic</strong> ouvre directement les
+        paramètres) ; Bollinger se dessine en bande (ligne médiane pleine, bornes fines, remplissage translucide) au
+        lieu d'une simple ligne. <strong>RSI/CHOP/MACD ont chacun leur propre panneau</strong> en dessous du
+        graphe, comme le volume — même en-tête (nom, réduire/agrandir, supprimer, roue crantée pour les
+        paramètres), et <strong>chaque panneau (volume compris) se redimensionne</strong> en glissant le fin
+        liseré au-dessus de son en-tête.
       </p>
       <CandlestickChart data={generateCandles(220, 180, 77)} showIndicators height={STORY_HEIGHT} />
+    </div>
+  ),
+};
+
+const SUB_PANE_INDICATORS: Indicator[] = [
+  { id: "story-rsi", kind: "rsi", period: 14 },
+  { id: "story-macd", kind: "macd", period: 0, fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 },
+  { id: "story-chop", kind: "chop", period: 14, paneCollapsed: true },
+];
+
+export const WithSubPaneIndicators: Story = {
+  name: "Indicateurs en sous-panneau (RSI/MACD/CHOP)",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        RSI et MACD pré-ajoutés (`defaultIndicators`), CHOP aussi mais réduit à son bandeau (`paneCollapsed: true`)
+        pour montrer les deux états d'un coup — cliquer son bouton ▲ le rouvre. RSI/CHOP sont bornés 0-100 par
+        définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son échelle en continu sur
+        ce qui est visible (histogramme + ligne MACD + ligne de signal). Glisser le fin liseré juste au-dessus d'un
+        en-tête de panneau (volume compris) redimensionne ce panneau.
+      </p>
+      <CandlestickChart data={MEDIUM_DATASET} showIndicators defaultIndicators={SUB_PANE_INDICATORS} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
     </div>
   ),
 };

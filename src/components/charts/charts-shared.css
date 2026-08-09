@@ -707,38 +707,79 @@
   color: var(--lq-color-text);
 }
 
+/* "own"-pane indicators (RSI/CHOP/MACD) have no equivalent of hoverVolumeY tracking their own
+   screen area, so their actions sit at a constant reduced opacity instead of hover-revealed —
+   each button's own :hover (above) still goes fully opaque individually. */
+.lq-chart__pane-header--always-visible .lq-chart__pane-header-actions {
+  opacity: 0.55;
+}
+
+/* Thin strip straddling the divider at a pane's own top edge — drag to resize (see
+   startPaneResize). A child of .lq-chart__pane-header (position: absolute), so top/left/right
+   here position it relative to that header's own box, not the whole plot — its negative top
+   keeps it entirely above the header's own label/actions row, so the two never overlap. */
+.lq-chart__pane-resize-handle {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 8px;
+  cursor: ns-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
 .lq-chart__indicator-picker {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 12px;
+  max-height: 50vh;
+  overflow-y: auto;
 }
 
-.lq-chart__indicator-picker-option {
+.lq-chart__indicator-picker-group {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
+  gap: 1px;
+}
+
+.lq-chart__indicator-picker-group-label {
+  padding: 4px 8px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lq-color-text-muted);
+}
+
+/* Flat rows, not individually boxed — a plain hover highlight is enough to tell them apart, same
+   "no border where a background does the job" convention as the indicator legend items. */
+.lq-chart__indicator-picker-option {
+  display: flex;
+  align-items: center;
+  padding: 8px;
   font-family: inherit;
   text-align: left;
   color: var(--lq-color-text);
   background: none;
-  border: 1px solid var(--lq-color-border-subtle);
+  border: none;
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
 }
 
-.lq-chart__indicator-picker-option:hover {
+.lq-chart__indicator-picker-option:hover,
+.lq-chart__indicator-picker-option:focus-visible {
   background-color: var(--lq-color-hover);
-  border-color: var(--lq-color-border);
 }
 
 .lq-chart__indicator-picker-name {
   font-size: 0.85rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
-.lq-chart__indicator-picker-hint {
-  font-size: 0.72rem;
+.lq-chart__indicator-picker-empty {
+  padding: 16px 8px;
+  font-size: 0.85rem;
   color: var(--lq-color-text-muted);
+  text-align: center;
 }

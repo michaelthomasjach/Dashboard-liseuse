@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
-import { VWAP, BollingerBands } from "technicalindicators";
+import { VWAP, BollingerBands, RSI, MACD } from "technicalindicators";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
 import { useAxisDragRescale } from "./internal/useAxisDragRescale";
@@ -25,6 +25,7 @@ import {
   FibonacciExtensionIcon,
   ElliottImpulseIcon,
   ElliottCorrectionIcon,
+  SearchIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   PlusIcon,
@@ -130,7 +131,7 @@ interface DataPoint {
   y: number;
 }
 
-export type IndicatorKind = "sma" | "ema" | "wma" | "vwap" | "bollinger";
+export type IndicatorKind = "sma" | "ema" | "wma" | "vwap" | "bollinger" | "rsi" | "chop" | "macd";
 
 /** A 3-line band value (Bollinger) instead of a single line's value — the draw effect tells the
  *  two apart with a plain `typeof value === "number"` check. */
@@ -140,18 +141,38 @@ export interface IndicatorBand {
   lower: number;
 }
 
+/** MACD's value shape: the MACD line always has a value once past its own warm-up, but `signal`
+ *  (an EMA *of* the MACD line) and `histogram` (MACD − signal) both start out `null` for a
+ *  further stretch until the signal EMA itself has enough history — same "null until ready"
+ *  convention as everything else here, just per-field instead of the whole value. */
+export interface IndicatorMACD {
+  macd: number;
+  signal: number | null;
+  histogram: number | null;
+}
+
 export interface Indicator {
   id: string;
   kind: IndicatorKind;
-  /** Lookback window, in candles. Ignored by "vwap" (a cumulative, unwindowed average). */
+  /** Lookback window, in candles. Ignored by "vwap" (a cumulative, unwindowed average) and
+   *  "macd" (uses fastPeriod/slowPeriod/signalPeriod instead). */
   period: number;
   /** Band width, in standard deviations. Only used by "bollinger". Default 2. */
   stdDev?: number;
+  /** "macd" only — defaults 12/26/9, the conventional parameters. */
+  fastPeriod?: number;
+  slowPeriod?: number;
+  signalPeriod?: number;
   /** CSS color. Defaults to a color cycled from a small built-in palette. */
   color?: string;
   /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the
-   *  legend's eye icon. Default false. */
+   *  legend's eye icon. Only meaningful for a `pane: "price"` indicator (see
+   *  IndicatorCatalogEntry) — a `pane: "own"` one uses `paneCollapsed` instead, same as the
+   *  volume pane. Default false. */
   hidden?: boolean;
+  /** A `pane: "own"` indicator's pane, collapsed to a header-only strip — same mechanism/UI as
+   *  the volume pane's own collapse. Default false (expanded). */
+  paneCollapsed?: boolean;
 }
 
 interface IndicatorCatalogEntry {
@@ -161,14 +182,87 @@ interface IndicatorCatalogEntry {
   defaultPeriod: number;
   hasPeriod: boolean;
   hasStdDev: boolean;
+  /** "price": overlaid on the price section, in the top-left legend (SMA/EMA/WMA/VWAP/Bollinger).
+   *  "own": gets its own sub-pane below price/volume, with a pane header instead of a legend
+   *  entry — an oscillator like RSI/CHOP/MACD isn't on the same scale as price at all. */
+  pane: "price" | "own";
+  /** Grouping shown in the picker modal — purely a display grouping, doesn't affect anything
+   *  about how the indicator itself behaves. */
+  category: "Moyennes mobiles" | "Volatilité" | "Momentum";
 }
 
 const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
-  { kind: "sma", label: "Moyenne mobile simple (SMA)", shortLabel: "SMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
-  { kind: "ema", label: "Moyenne mobile exponentielle (EMA)", shortLabel: "EMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
-  { kind: "wma", label: "Moyenne mobile pondérée (WMA)", shortLabel: "WMA", defaultPeriod: 20, hasPeriod: true, hasStdDev: false },
-  { kind: "vwap", label: "Volume Weighted Average Price (VWAP)", shortLabel: "VWAP", defaultPeriod: 0, hasPeriod: false, hasStdDev: false },
-  { kind: "bollinger", label: "Bandes de Bollinger", shortLabel: "BB", defaultPeriod: 20, hasPeriod: true, hasStdDev: true },
+  {
+    kind: "sma",
+    label: "Moyenne mobile simple (SMA)",
+    shortLabel: "SMA",
+    defaultPeriod: 20,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "price",
+    category: "Moyennes mobiles",
+  },
+  {
+    kind: "ema",
+    label: "Moyenne mobile exponentielle (EMA)",
+    shortLabel: "EMA",
+    defaultPeriod: 20,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "price",
+    category: "Moyennes mobiles",
+  },
+  {
+    kind: "wma",
+    label: "Moyenne mobile pondérée (WMA)",
+    shortLabel: "WMA",
+    defaultPeriod: 20,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "price",
+    category: "Moyennes mobiles",
+  },
+  {
+    kind: "vwap",
+    label: "Volume Weighted Average Price (VWAP)",
+    shortLabel: "VWAP",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "price",
+    category: "Moyennes mobiles",
+  },
+  {
+    kind: "bollinger",
+    label: "Bandes de Bollinger",
+    shortLabel: "BB",
+    defaultPeriod: 20,
+    hasPeriod: true,
+    hasStdDev: true,
+    pane: "price",
+    category: "Volatilité",
+  },
+  {
+    kind: "rsi",
+    label: "Relative Strength Index (RSI)",
+    shortLabel: "RSI",
+    defaultPeriod: 14,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "own",
+    category: "Momentum",
+  },
+  {
+    kind: "chop",
+    label: "Choppiness Index (CHOP)",
+    shortLabel: "CHOP",
+    defaultPeriod: 14,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "own",
+    category: "Volatilité",
+  },
+  { kind: "macd", label: "MACD", shortLabel: "MACD", defaultPeriod: 0, hasPeriod: false, hasStdDev: false, pane: "own", category: "Momentum" },
 ];
 
 function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
@@ -177,6 +271,7 @@ function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
 
 function indicatorLabel(indicator: Indicator): string {
   const entry = indicatorCatalogEntry(indicator.kind);
+  if (indicator.kind === "macd") return `MACD(${indicator.fastPeriod ?? 12},${indicator.slowPeriod ?? 26},${indicator.signalPeriod ?? 9})`;
   if (!entry.hasPeriod) return entry.shortLabel;
   if (entry.hasStdDev) return `${entry.shortLabel}(${indicator.period},${indicator.stdDev ?? 2})`;
   return `${entry.shortLabel}(${indicator.period})`;
@@ -257,7 +352,55 @@ function computeBollingerValues(data: Candle[], period: number, stdDev: number):
   return result.concat(values.map((v) => ({ upper: v.upper, middle: v.middle, lower: v.lower })));
 }
 
-function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | IndicatorBand | null)[] {
+function computeRSIValues(data: Candle[], period: number): (number | null)[] {
+  if (data.length === 0) return [];
+  const values = RSI.calculate({ period, values: data.map((d) => d.close) });
+  const offset = data.length - values.length;
+  return new Array(offset).fill(null).concat(values);
+}
+
+// Not in `technicalindicators` (no Choppiness Index there), so hand-rolled from its plain
+// definition: 100 * log10(sum of true range over `period`) / (highest high − lowest low over the
+// same window), scaled by log10(period) — same O(n·period) shape as the hand-rolled WMA above,
+// there's no rolling-window shortcut without also tracking a separate max/min structure.
+function computeCHOPValues(data: Candle[], period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(data.length).fill(null);
+  if (data.length === 0) return result;
+  const trueRanges = data.map((d, i) => {
+    const prevClose = i > 0 ? data[i - 1].close : d.close;
+    return Math.max(d.high - d.low, Math.abs(d.high - prevClose), Math.abs(d.low - prevClose));
+  });
+  for (let i = period - 1; i < data.length; i++) {
+    let trSum = 0;
+    let highest = -Infinity;
+    let lowest = Infinity;
+    for (let j = i - period + 1; j <= i; j++) {
+      trSum += trueRanges[j];
+      highest = Math.max(highest, data[j].high);
+      lowest = Math.min(lowest, data[j].low);
+    }
+    const range = highest - lowest;
+    result[i] = range > 0 ? (100 * Math.log10(trSum / range)) / Math.log10(period) : null;
+  }
+  return result;
+}
+
+function computeMACDValues(data: Candle[], fastPeriod: number, slowPeriod: number, signalPeriod: number): (IndicatorMACD | null)[] {
+  if (data.length === 0) return [];
+  const values = MACD.calculate({
+    values: data.map((d) => d.close),
+    fastPeriod,
+    slowPeriod,
+    signalPeriod,
+    SimpleMAOscillator: false,
+    SimpleMASignal: false,
+  });
+  const offset = data.length - values.length;
+  const result: (IndicatorMACD | null)[] = new Array(offset).fill(null);
+  return result.concat(values.map((v) => ({ macd: v.MACD ?? 0, signal: v.signal ?? null, histogram: v.histogram ?? null })));
+}
+
+function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | IndicatorBand | IndicatorMACD | null)[] {
   const period = Math.max(1, Math.round(indicator.period));
   switch (indicator.kind) {
     case "ema":
@@ -268,6 +411,12 @@ function computeIndicatorValues(data: Candle[], indicator: Indicator): (number |
       return computeVWAPValues(data);
     case "bollinger":
       return computeBollingerValues(data, period, indicator.stdDev ?? 2);
+    case "rsi":
+      return computeRSIValues(data, period);
+    case "chop":
+      return computeCHOPValues(data, period);
+    case "macd":
+      return computeMACDValues(data, indicator.fastPeriod ?? 12, indicator.slowPeriod ?? 26, indicator.signalPeriod ?? 9);
     case "sma":
     default:
       return computeSMAValues(data, period);
@@ -448,9 +597,16 @@ const DEFAULT_DRAWING_COLOR = "#6c87c9";
  *  caps how far each edge of the visible domain can sit past [0, data.length] to this fraction
  *  of the viewport, at every zoom level. */
 const MAX_EMPTY_FRACTION = 0.5;
-/** Height (px) of a sub-pane's (currently just volume) header strip when collapsed — the full
- *  pane shrinks to exactly this, full width, showing just its name and an expand button. */
-const VOLUME_PANE_COLLAPSED_HEIGHT = 40;
+/** Height (px) of a sub-pane's (volume, or an "own"-pane indicator — RSI/CHOP/MACD) header strip
+ *  when collapsed — the full pane shrinks to exactly this, full width, showing just its name and
+ *  an expand button. */
+const SUB_PANE_COLLAPSED_HEIGHT = 40;
+/** Default height of an expanded sub-pane, as a fraction of the plot's own bounded height — the
+ *  starting point before any manual resize (see paneHeightFractions/startPaneResize). */
+const DEFAULT_PANE_HEIGHT_FRACTION = 0.22;
+/** Drag-to-resize bounds for a sub-pane, same fraction units as DEFAULT_PANE_HEIGHT_FRACTION. */
+const MIN_PANE_HEIGHT_FRACTION = 0.08;
+const MAX_PANE_HEIGHT_FRACTION = 0.6;
 
 // A canvas 1px line drawn at an integer y (e.g. moveTo(0, 40)) straddles two physical pixel rows
 // half-and-half, so it rasterizes as a ~2px anti-aliased blur instead of a crisp line — unlike an
@@ -567,6 +723,7 @@ export function CandlestickChart({
   const [tfOpen, setTfOpen] = useState(false);
   const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
   const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
+  const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
   const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
   const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
   // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
@@ -594,6 +751,11 @@ export function CandlestickChart({
   // no request for the app to control or persist it, same as the other UI-only toggles here
   // (tool menu open, timeframe menu open…).
   const [volumePaneState, setVolumePaneState] = useState<"expanded" | "collapsed" | "hidden">("expanded");
+  // Manually-resized sub-pane heights (volume, or an "own"-pane indicator, keyed by "volume" or
+  // the indicator's own id), as a fraction of the plot's own bounded height — set by dragging a
+  // pane's own top divider (see startPaneResize). Missing entries fall back to
+  // DEFAULT_PANE_HEIGHT_FRACTION, same as before per-pane resize existed at all.
+  const [paneHeightFractions, setPaneHeightFractions] = useState<Record<string, number>>({});
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
   // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
@@ -625,7 +787,13 @@ export function CandlestickChart({
   function addIndicator(entry: IndicatorCatalogEntry) {
     commitIndicators([
       ...indicators,
-      { id: `indicator-${indicatorIdRef.current++}`, kind: entry.kind, period: entry.defaultPeriod, stdDev: entry.hasStdDev ? 2 : undefined },
+      {
+        id: `indicator-${indicatorIdRef.current++}`,
+        kind: entry.kind,
+        period: entry.defaultPeriod,
+        stdDev: entry.hasStdDev ? 2 : undefined,
+        ...(entry.kind === "macd" ? { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } : {}),
+      },
     ]);
   }
 
@@ -692,12 +860,62 @@ export function CandlestickChart({
   const volumeVisible = showVolume && volumePaneState !== "hidden";
   const volumeCollapsed = volumeVisible && volumePaneState === "collapsed";
 
+  function paneHeightFraction(key: string): number {
+    return paneHeightFractions[key] ?? DEFAULT_PANE_HEIGHT_FRACTION;
+  }
+
+  // Drag-to-resize a sub-pane via its own top divider: grow/shrink that one pane's height
+  // fraction directly, same window-pointermove-listener pattern the plot's own 2D-pan-Y drag
+  // uses (see handleOverlayPointerDown) rather than a second setPointerCapture on top of
+  // whatever's already attached to this element.
+  function startPaneResize(paneKey: string, e: React.PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startClientY = e.clientY;
+    const startFraction = paneHeightFraction(paneKey);
+    const onMove = (ev: PointerEvent) => {
+      if (plotBoundedHeight <= 0) return;
+      const deltaFraction = (ev.clientY - startClientY) / plotBoundedHeight;
+      const next = Math.min(MAX_PANE_HEIGHT_FRACTION, Math.max(MIN_PANE_HEIGHT_FRACTION, startFraction - deltaFraction));
+      setPaneHeightFractions((prev) => ({ ...prev, [paneKey]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
   // No breathing room between the price section and the volume section below it: the divider
   // line itself is the only separation, flush against both (same "the border delimits the
   // content" rule applied to the tools rail and the header above). Collapsed reduces the pane to
   // its own fixed-height header strip instead of the usual proportional split.
-  const volumeHeight = !volumeVisible ? 0 : volumeCollapsed ? VOLUME_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * 0.22);
-  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight);
+  const volumeHeight = !volumeVisible ? 0 : volumeCollapsed ? SUB_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * paneHeightFraction("volume"));
+
+  // "own"-pane indicators (RSI/CHOP/MACD) stack below volume, in the order they were added —
+  // each sized/collapsed exactly like the volume pane, just keyed by the indicator's own id
+  // instead of the fixed "volume" key.
+  // Memoized (not just plain derived consts) so the canvas draw effect below can depend on
+  // these three directly instead of their own wider, less-stable sources (indicators,
+  // paneHeightFractions) — without this they'd be a fresh array/reference every render, which
+  // would make an "only these deps" dependency array pointless (always "changed").
+  const { ownPaneIndicators, indicatorPaneHeights, indicatorPaneTops } = useMemo(() => {
+    const owned = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "own");
+    const heights = owned.map((ind) =>
+      ind.paneCollapsed ? SUB_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * (paneHeightFractions[ind.id] ?? DEFAULT_PANE_HEIGHT_FRACTION))
+    );
+    let cursor = 0; // relative to right after volume — added to priceHeight + volumeHeight below
+    const tops = heights.map((h) => {
+      const top = cursor;
+      cursor += h;
+      return top;
+    });
+    return { ownPaneIndicators: owned, indicatorPaneHeights: heights, indicatorPaneTops: tops };
+  }, [indicators, paneHeightFractions, plotBoundedHeight]);
+  const indicatorPanesTotalHeight = indicatorPaneHeights.reduce((sum, h) => sum + h, 0);
+
+  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight - indicatorPanesTotalHeight);
 
   // Positions candles by INDEX, not by literal calendar time — each candle i occupies the slot
   // [i, i+1], centered at i+0.5. A real d3.scaleTime() (mapping actual elapsed time to pixels)
@@ -1320,7 +1538,7 @@ export function CandlestickChart({
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
     return indicatorValues.map(({ indicator, values }) => {
-      const points: { i: number; value: number | IndicatorBand }[] = [];
+      const points: { i: number; value: number | IndicatorBand | IndicatorMACD }[] = [];
       for (let i = start; i < end; i++) {
         const v = values[i];
         if (v !== null) points.push({ i, value: v });
@@ -1328,6 +1546,32 @@ export function CandlestickChart({
       return { indicator, points };
     });
   }, [indicatorValues, data.length, visibleRange]);
+
+  // One Y-scale per "own"-pane indicator, shared between the canvas draw effect and the SVG axis
+  // ticks below it (computed once here instead of duplicated in both places, which would risk
+  // the two drifting out of sync). RSI/CHOP are always 0-100 by definition; MACD auto-fits to
+  // whatever's currently visible (macd/signal/histogram together), same spirit as YAutoScaling
+  // for price.
+  const ownPaneScales = useMemo(() => {
+    const scales: Record<string, d3.ScaleLinear<number, number>> = {};
+    ownPaneIndicators.forEach((ind, idx) => {
+      const height = indicatorPaneHeights[idx];
+      if (ind.kind === "macd") {
+        const points = (visibleIndicators.find((v) => v.indicator.id === ind.id)?.points ?? []) as { i: number; value: IndicatorMACD }[];
+        let lo = 0;
+        let hi = 0;
+        for (const p of points) {
+          lo = Math.min(lo, p.value.macd, p.value.signal ?? p.value.macd, p.value.histogram ?? 0);
+          hi = Math.max(hi, p.value.macd, p.value.signal ?? p.value.macd, p.value.histogram ?? 0);
+        }
+        const pad = (hi - lo) * 0.1 || 1;
+        scales[ind.id] = d3.scaleLinear().domain([lo - pad, hi + pad]).range([height, 0]);
+      } else {
+        scales[ind.id] = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+      }
+    });
+    return scales;
+  }, [ownPaneIndicators, indicatorPaneHeights, visibleIndicators]);
 
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
@@ -1608,8 +1852,10 @@ export function CandlestickChart({
       ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, bodyHeight);
     }
 
+    // Only price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger) draw here — "own"-pane ones
+    // (RSI/CHOP/MACD) get their own clipped section further down, alongside volume.
     visibleIndicators.forEach(({ indicator, points }, index) => {
-      if (indicator.hidden || points.length < 2) return;
+      if (indicator.hidden || points.length < 2 || indicatorCatalogEntry(indicator.kind).pane !== "price") return;
       const color = indicator.color ?? defaultIndicatorColor(index);
       ctx.save();
       ctx.strokeStyle = color;
@@ -1959,6 +2205,127 @@ export function CandlestickChart({
       }
     }
 
+    // "own"-pane indicators (RSI/CHOP/MACD) — one clipped section each, stacked below volume in
+    // the order they were added, each with its own scale (RSI/CHOP are always 0-100 by
+    // definition; MACD auto-fits to whatever's currently visible, same spirit as YAutoScaling
+    // for price). No hover-value badge for these (unlike price/volume) — not asked for, and
+    // wiring up N more of them was a lot of additional plumbing for its own sake.
+    ownPaneIndicators.forEach((ind, idx) => {
+      const paneTop = priceHeight + volumeHeight + indicatorPaneTops[idx];
+      const paneHeight = indicatorPaneHeights[idx];
+
+      ctx.save();
+      ctx.strokeStyle = colorGrid;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      const dividerY = snapPixel(paneTop);
+      ctx.moveTo(0, dividerY);
+      ctx.lineTo(dims.boundedWidth, dividerY);
+      ctx.stroke();
+      ctx.restore();
+
+      if (ind.paneCollapsed) return;
+
+      const entry = visibleIndicators.find((v) => v.indicator.id === ind.id);
+      const points = entry?.points ?? [];
+      if (points.length === 0) return;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, paneTop, dims.boundedWidth, paneHeight);
+      ctx.clip();
+      ctx.translate(0, paneTop);
+
+      const color = ind.color ?? defaultIndicatorColor(indicators.indexOf(ind));
+      const scale = ownPaneScales[ind.id];
+      if (!scale) {
+        ctx.restore();
+        return;
+      }
+
+      if (ind.kind === "rsi" || ind.kind === "chop") {
+        ctx.save();
+        ctx.strokeStyle = colorGrid;
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        for (const level of ind.kind === "rsi" ? [30, 70] : [38.2, 61.8]) {
+          const y = scale(level);
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(dims.boundedWidth, y);
+          ctx.stroke();
+        }
+        ctx.restore();
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        points.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value as number);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      } else if (ind.kind === "macd") {
+        const macdPoints = points as { i: number; value: IndicatorMACD }[];
+        const zeroY = scale(0);
+
+        ctx.save();
+        ctx.strokeStyle = colorGrid;
+        ctx.setLineDash([2, 3]);
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(0, zeroY);
+        ctx.lineTo(dims.boundedWidth, zeroY);
+        ctx.stroke();
+        ctx.restore();
+
+        for (const p of macdPoints) {
+          if (p.value.histogram === null) continue;
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value.histogram);
+          const up = p.value.histogram >= 0;
+          ctx.globalAlpha = isEink ? (up ? 0.25 : 0.45) : 0.6;
+          ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
+          ctx.fillRect(x - candleWidth / 2, Math.min(y, zeroY), Math.max(candleWidth, 1), Math.abs(y - zeroY));
+        }
+        ctx.globalAlpha = 1;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        macdPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value.macd);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        ctx.strokeStyle = colorMuted;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        let started = false;
+        for (const p of macdPoints) {
+          if (p.value.signal === null) continue;
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value.signal);
+          if (!started) {
+            ctx.moveTo(x, y);
+            started = true;
+          } else {
+            ctx.lineTo(x, y);
+          }
+        }
+        ctx.stroke();
+      }
+
+      ctx.restore();
+    });
+
     // "Vertical" drawn lines span the full plot height (price and volume together), same as the
     // hover crosshair below — deliberately outside either section's clip above.
     for (const dr of drawings) {
@@ -2007,6 +2374,11 @@ export function CandlestickChart({
     volumeScale,
     volumeHeight,
     priceHeight,
+    ownPaneIndicators,
+    indicatorPaneHeights,
+    indicatorPaneTops,
+    ownPaneScales,
+    indicators,
     hovered,
     hoverY,
     hoverVolumeY,
@@ -2097,7 +2469,10 @@ export function CandlestickChart({
             <button
               type="button"
               className="lq-chart__icon-button"
-              onClick={() => setIndicatorPickerOpen(true)}
+              onClick={() => {
+                setIndicatorSearchQuery("");
+                setIndicatorPickerOpen(true);
+              }}
               aria-label="Ajouter un indicateur"
             >
               <ActivityIcon size={14} />
@@ -2259,7 +2634,7 @@ export function CandlestickChart({
           </div>
         )}
         {/* Header strip for the volume pane — a fixed-height row pinned to the top of the pane
-            (whether expanded or collapsed, hence sharing VOLUME_PANE_COLLAPSED_HEIGHT: when
+            (whether expanded or collapsed, hence sharing SUB_PANE_COLLAPSED_HEIGHT: when
             collapsed the pane *is* this row, when expanded it's just the top slice of it). Name
             always visible; the remove/collapse actions only reveal on hover of the pane itself
             (hoverVolumeY, already tracked by handlePointerMove — reused here instead of a CSS
@@ -2269,8 +2644,17 @@ export function CandlestickChart({
         {volumeVisible && (
           <div
             className={["lq-chart__pane-header", volumeCollapsed && "lq-chart__pane-header--collapsed"].filter(Boolean).join(" ")}
-            style={{ top: dims.margin.top + priceHeight, left: dims.margin.left, width: dims.boundedWidth, height: VOLUME_PANE_COLLAPSED_HEIGHT }}
+            style={{ top: dims.margin.top + priceHeight, left: dims.margin.left, width: dims.boundedWidth, height: SUB_PANE_COLLAPSED_HEIGHT }}
           >
+            {/* Drag-to-resize: a thin strip straddling the divider above this pane, only while
+                expanded (collapsed panes are a fixed height, nothing to resize). */}
+            {!volumeCollapsed && (
+              <div
+                className="lq-chart__pane-resize-handle"
+                onPointerDown={(e) => startPaneResize("volume", e)}
+                aria-hidden="true"
+              />
+            )}
             <span className="lq-chart__pane-header-label">Volume</span>
             <div
               className={["lq-chart__pane-header-actions", (volumeCollapsed || hoverVolumeY !== null) && "lq-chart__pane-header-actions--visible"]
@@ -2309,6 +2693,76 @@ export function CandlestickChart({
             </div>
           </div>
         )}
+        {/* One header per "own"-pane indicator (RSI/CHOP/MACD), same strip as volume's above —
+            actions stay at a constant reduced opacity instead of hover-revealed (there's no
+            existing hover-tracking state covering these panes' own screen area the way
+            hoverVolumeY already did for volume, and building one just for this would be a lot of
+            plumbing for a cosmetic difference). Gear opens the same settings modal price-overlay
+            indicators use (period, or MACD's fast/slow/signal) — double-clicking the label does
+            the same, matching that same legend's convention. */}
+        {ownPaneIndicators.map((ind, idx) => (
+          <div
+            key={ind.id}
+            className={["lq-chart__pane-header", "lq-chart__pane-header--always-visible", ind.paneCollapsed && "lq-chart__pane-header--collapsed"]
+              .filter(Boolean)
+              .join(" ")}
+            style={{
+              top: dims.margin.top + priceHeight + volumeHeight + indicatorPaneTops[idx],
+              left: dims.margin.left,
+              width: dims.boundedWidth,
+              height: SUB_PANE_COLLAPSED_HEIGHT,
+            }}
+            onDoubleClick={() => openIndicatorSettings(ind.id)}
+          >
+            {!ind.paneCollapsed && (
+              <div
+                className="lq-chart__pane-resize-handle"
+                onPointerDown={(e) => startPaneResize(ind.id, e)}
+                aria-hidden="true"
+              />
+            )}
+            <span className="lq-chart__pane-header-label">{indicatorLabel(ind)}</span>
+            <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
+              {ind.paneCollapsed ? (
+                <button
+                  type="button"
+                  className="lq-chart__pane-header-action"
+                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))}
+                  aria-label={`Agrandir le panneau ${indicatorLabel(ind)}`}
+                >
+                  <ChevronUpIcon size={12} />
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => openIndicatorSettings(ind.id)}
+                    aria-label={`Paramètres ${indicatorLabel(ind)}`}
+                  >
+                    <SettingsIcon size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => removeIndicator(ind.id)}
+                    aria-label={`Supprimer ${indicatorLabel(ind)}`}
+                  >
+                    <TrashIcon size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: true } : i)))}
+                    aria-label={`Réduire le panneau ${indicatorLabel(ind)}`}
+                  >
+                    <ChevronDownIcon size={12} />
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
         <canvas
           ref={canvasRef}
           className="lq-chart__canvas"
@@ -2354,6 +2808,31 @@ export function CandlestickChart({
                 />
               </>
             )}
+
+            {/* Same pair (a few ticks + a divider extension into the price-axis label column) as
+                volume above, once per "own"-pane indicator — ownPaneScales is shared with the
+                canvas draw effect so these ticks always land exactly on what's actually drawn. */}
+            {ownPaneIndicators.map((ind, idx) => {
+              const paneTop = priceHeight + volumeHeight + indicatorPaneTops[idx];
+              const scale = ownPaneScales[ind.id];
+              if (!scale) return null;
+              return (
+                <g key={ind.id}>
+                  {!ind.paneCollapsed && (
+                    <g transform={`translate(0, ${paneTop})`}>
+                      <ChartAxis scale={scale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} ticks={3} />
+                    </g>
+                  )}
+                  <line
+                    className="lq-chart__price-volume-divider"
+                    x1={dims.boundedWidth}
+                    x2={dims.boundedWidth + dims.margin.right}
+                    y1={snapPixel(paneTop)}
+                    y2={snapPixel(paneTop)}
+                  />
+                </g>
+              );
+            })}
 
             <ChartAxis
               scale={zoomedXScale}
@@ -2730,13 +3209,66 @@ export function CandlestickChart({
 
       {indicatorPickerOpen && (
         <Modal open onClose={() => setIndicatorPickerOpen(false)} title="Ajouter un indicateur">
+          <TextField
+            placeholder="Rechercher un indicateur…"
+            value={indicatorSearchQuery}
+            onChange={(e) => setIndicatorSearchQuery(e.target.value)}
+            leadingIcon={<SearchIcon size={14} />}
+            autoFocus
+          />
           <div className="lq-chart__indicator-picker">
-            {INDICATOR_CATALOG.map((entry) => (
-              <button key={entry.kind} type="button" className="lq-chart__indicator-picker-option" onClick={() => addIndicator(entry)}>
-                <span className="lq-chart__indicator-picker-name">{entry.label}</span>
-                <span className="lq-chart__indicator-picker-hint">Période par défaut : {entry.defaultPeriod}</span>
-              </button>
-            ))}
+            {(() => {
+              const query = indicatorSearchQuery.trim().toLowerCase();
+              const showVolumeOption = showVolume && "volume".includes(query);
+              const matches = INDICATOR_CATALOG.filter(
+                (entry) => entry.label.toLowerCase().includes(query) || entry.shortLabel.toLowerCase().includes(query)
+              );
+              const groups: { category: string; entries: IndicatorCatalogEntry[] }[] = [];
+              for (const entry of matches) {
+                const group = groups.find((g) => g.category === entry.category);
+                if (group) group.entries.push(entry);
+                else groups.push({ category: entry.category, entries: [entry] });
+              }
+              if (!showVolumeOption && groups.length === 0) {
+                return <p className="lq-chart__indicator-picker-empty">Aucun indicateur ne correspond à « {indicatorSearchQuery} ».</p>;
+              }
+              return (
+                <>
+                  {/* Volume isn't part of INDICATOR_CATALOG — it's the caller's own data (not
+                      something computed), driven by `showVolume`/the volume pane's own header
+                      rather than an `Indicator` entry — but it's still just as valid an "add a
+                      pane" choice as RSI/CHOP/MACD, so it gets a slot here too, re-showing the
+                      pane if it was previously collapsed or removed. */}
+                  {showVolumeOption && (
+                    <div className="lq-chart__indicator-picker-group">
+                      <div className="lq-chart__indicator-picker-group-label">Volume</div>
+                      <button
+                        type="button"
+                        className="lq-chart__indicator-picker-option"
+                        onClick={() => setVolumePaneState("expanded")}
+                      >
+                        <span className="lq-chart__indicator-picker-name">Volume</span>
+                      </button>
+                    </div>
+                  )}
+                  {groups.map((group) => (
+                    <div className="lq-chart__indicator-picker-group" key={group.category}>
+                      <div className="lq-chart__indicator-picker-group-label">{group.category}</div>
+                      {group.entries.map((entry) => (
+                        <button
+                          key={entry.kind}
+                          type="button"
+                          className="lq-chart__indicator-picker-option"
+                          onClick={() => addIndicator(entry)}
+                        >
+                          <span className="lq-chart__indicator-picker-name">{entry.label}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </div>
         </Modal>
       )}
@@ -2776,6 +3308,34 @@ export function CandlestickChart({
               value={indicatorDraft.stdDev ?? 2}
               onChange={(v) => setIndicatorDraft({ ...indicatorDraft, stdDev: v === "" ? indicatorDraft.stdDev : v })}
             />
+          )}
+          {indicatorDraft.kind === "macd" && (
+            <div className="lq-chart__edit-drawing-row">
+              <NumberField
+                label="Rapide"
+                min={1}
+                max={200}
+                step={1}
+                value={indicatorDraft.fastPeriod ?? 12}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, fastPeriod: v === "" ? indicatorDraft.fastPeriod : v })}
+              />
+              <NumberField
+                label="Lent"
+                min={1}
+                max={400}
+                step={1}
+                value={indicatorDraft.slowPeriod ?? 26}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, slowPeriod: v === "" ? indicatorDraft.slowPeriod : v })}
+              />
+              <NumberField
+                label="Signal"
+                min={1}
+                max={200}
+                step={1}
+                value={indicatorDraft.signalPeriod ?? 9}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, signalPeriod: v === "" ? indicatorDraft.signalPeriod : v })}
+              />
+            </div>
           )}
           <div className="lq-field">
             <label className="lq-field__label">Couleur</label>
