@@ -43,7 +43,7 @@ export const Default: Story = {
         droite, un bouton pour le réduire à un simple bandeau (nom + bouton pour l'agrandir de nouveau) et un pour le
         supprimer entièrement.
       </p>
-      <CandlestickChart data={generateCandles(220, 180, 11)} height={STORY_HEIGHT} />
+      <CandlestickChart data={generateCandles(220, 180, 11)} symbol="AAPL" height={STORY_HEIGHT} />
     </div>
   ),
 };
@@ -194,6 +194,7 @@ export const WithDisplayModes: Story = {
         </p>
         <CandlestickChart
           data={generateCandles(400, 180, 91)}
+          symbol="TSLA"
           timeframes={TIMEFRAMES}
           timeframe="1d"
           defaultChartDisplayMode={mode}
@@ -380,6 +381,7 @@ export const AllFeatures: Story = {
         </div>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
+          symbol="MSFT"
           drawingTools
           showIndicators
           fullscreenToggle
@@ -407,7 +409,7 @@ export const LargeDataset: Story = {
         (`initialVisibleCandles`, appliqué une seule fois au montage) plutôt que tout l'historique dézoomé — clic sur
         "Réinitialiser le zoom" pour voir les 2 500.
       </p>
-      <CandlestickChart data={MEDIUM_DATASET} drawingTools timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
+      <CandlestickChart data={MEDIUM_DATASET} symbol="GOOGL" drawingTools timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
     </div>
   ),
 };
