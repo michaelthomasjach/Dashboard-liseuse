@@ -1051,6 +1051,9 @@ const EVENT_MARKER_RADIUS = 8;
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 const MAX_DATE_TICKS = 12;
 const DEFAULT_DRAWING_COLOR = "#6c87c9";
+// Stable reference (not a fresh `[]` every render) for `visibleDrawings` to fall back to while
+// drawings are hidden — avoids retriggering effects/memos keyed on it purely from array identity.
+const EMPTY_DRAWINGS: TrendLineDrawing[] = [];
 /** How far past the data's own edges panning can reveal empty "future"/"past" space, as a
  *  fraction of the *current* viewport width — not a fixed candle count, which would feel
  *  enormous zoomed in (a handful of real candles next to a huge empty block) and negligible
@@ -1312,6 +1315,15 @@ export function CandlestickChart({
   // the nearest candle's open/high/low/close is closest — a persistent modifier rather than a
   // tool of its own, so it stays on across tool switches until toggled off again.
   const [magnetActive, setMagnetActive] = useState(false);
+  // Hides every drawing (canvas render, hover/hit-testing, handles, axis badges) without
+  // touching `drawings` itself — toggling it back off brings everything back exactly as it
+  // was, unlike deleting. See `visibleDrawings` below, the single point every drawing-reading
+  // codepath was switched to read from instead of `drawings` directly.
+  const [drawingsHidden, setDrawingsHidden] = useState(false);
+  // Every codepath that reads drawn shapes for rendering, hit-testing, or handles reads this
+  // instead of `drawings` directly — hiding never mutates `drawings` itself (toggling back on
+  // restores everything exactly as it was), it just makes that read empty in the meantime.
+  const visibleDrawings = drawingsHidden ? EMPTY_DRAWINGS : drawings;
   // The measure tool's own last completed 2-click measurement (not a `drawings` entry — it's
   // ephemeral, cleared on Escape/tool switch instead of persisted). `pendingPoint`/`previewPoint`
   // still drive its live 1st-click-to-cursor preview, same as every other 2-point tool.
@@ -1351,6 +1363,13 @@ export function CandlestickChart({
   const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
   const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
   const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
+  const [hoveredIndicatorId, setHoveredIndicatorId] = useState<string | null>(null);
+  // Ctrl/Cmd+C over a legend item copies it here (a ref, not state — it's never read during
+  // render, so there's no reason to pay for a re-render just to remember it); Ctrl/Cmd+V pastes
+  // a fresh copy (new id) appended to `indicators` from wherever this last got set. Deliberately
+  // chart-local (not the real OS clipboard) — copying between two *different* chart instances on
+  // the same page isn't a scenario this was built for.
+  const copiedIndicatorRef = useRef<Indicator | null>(null);
   // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
   const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
   const dragAxisRef = useRef<{ id: string } | null>(null);
@@ -1903,6 +1922,35 @@ export function CandlestickChart({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hoveredDrawingId, editingId, drawings, onDrawingsChange]);
+
+  // Ctrl/Cmd+C over a hovered legend item copies that indicator (copiedIndicatorRef); Ctrl/Cmd+V
+  // pastes a duplicate of whatever was last copied (new id, everything else — kind/period/
+  // color/etc. — unchanged) appended to the list. Mirrors the browser's own shortcuts rather than
+  // inventing new ones, so it's skipped while a text input has focus for the same reason the
+  // drawing-delete effect above is.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const active = document.activeElement;
+      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocused) return;
+      if (key === "c") {
+        if (!hoveredIndicatorId) return;
+        const indicator = indicators.find((i) => i.id === hoveredIndicatorId);
+        if (indicator) copiedIndicatorRef.current = indicator;
+        return;
+      }
+      if (!copiedIndicatorRef.current) return;
+      e.preventDefault();
+      const next = [...indicators, { ...copiedIndicatorRef.current, id: `indicator-${indicatorIdRef.current++}` }];
+      setIndicators(next);
+      onIndicatorsChange?.(next);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hoveredIndicatorId, indicators, onIndicatorsChange]);
 
   // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
   // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
@@ -2494,10 +2542,10 @@ export function CandlestickChart({
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
-    } else if (!activeTool && drawings.length > 0) {
+    } else if (!activeTool && visibleDrawings.length > 0) {
       let closestId: string | null = null;
       let closestDist = DRAWING_HIT_DISTANCE;
-      for (const dr of drawings) {
+      for (const dr of visibleDrawings) {
         // Axis-constrained lines render full-span (see the canvas draw effect below) rather
         // than between their stored x1/x2 pixel positions, so hit-testing has to match that.
         let d: number;
@@ -2961,7 +3009,7 @@ export function CandlestickChart({
 
     // Regular trend lines plus "horizontal" price lines (volume ones are drawn in the volume
     // section below, "vertical" ones are drawn full-height further down, outside any clip).
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       // "rectangle"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown" have their own geometry entirely
       // unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras" shape
       // every other type below shares — drawn in their own dedicated loops further down instead,
@@ -3148,7 +3196,7 @@ export function CandlestickChart({
 
     // "rectangle": x1/y1 and x2/y2 as opposite corners — stroked, plus a faint fill of its own
     // color so it reads as a filled region instead of just an outline.
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       if (dr.lineType !== "rectangle") continue;
       const lineColor = dr.color ?? colorAccent;
       const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
@@ -3176,7 +3224,7 @@ export function CandlestickChart({
     // clicked before Escape finalized it — see handleOverlayClick/the keydown effect), drawn as
     // a straight segment between each consecutive point, with a single arrowhead at the last one
     // pointing in that final segment's own direction.
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       if (dr.lineType !== "elbowArrow") continue;
       const lineColor = dr.color ?? colorAccent;
       const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
@@ -3199,7 +3247,7 @@ export function CandlestickChart({
     // "brush": a freehand polyline through x1/y1, extraPoints (in order), then x2/y2 — no
     // per-point handles/hit-testing (see allPointsOf's callers), the whole stroke only moves or
     // deletes as one piece.
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       if (dr.lineType !== "brush") continue;
       const lineColor = dr.color ?? colorAccent;
       const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
@@ -3219,7 +3267,7 @@ export function CandlestickChart({
     // "arrowUp"/"arrowDown": a single-point marker, drawn as a small triangle just clear of its
     // own point (below it pointing up, above it pointing down) rather than centered on it, so it
     // doesn't sit on top of whatever candle it's marking.
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       if (dr.lineType !== "arrowUp" && dr.lineType !== "arrowDown") continue;
       const lineColor = dr.color ?? colorAccent;
       const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
@@ -3471,7 +3519,7 @@ export function CandlestickChart({
           ctx.lineTo(dims.boundedWidth, hoverVolumeY);
           ctx.stroke();
         }
-        for (const dr of drawings) {
+        for (const dr of visibleDrawings) {
           if (!((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis === "volume")) continue;
           const lineColor = dr.color ?? colorAccent;
           ctx.strokeStyle = lineColor;
@@ -3620,7 +3668,7 @@ export function CandlestickChart({
 
     // "Vertical" drawn lines span the full plot height (price and volume together), same as the
     // hover crosshair below — deliberately outside either section's clip above.
-    for (const dr of drawings) {
+    for (const dr of visibleDrawings) {
       if (dr.lineType !== "vertical") continue;
       const lineColor = dr.color ?? colorAccent;
       ctx.save();
@@ -3683,7 +3731,7 @@ export function CandlestickChart({
     hoverY,
     hoverVolumeY,
     hoverIndex,
-    drawings,
+    visibleDrawings,
     hoveredDrawingId,
     activeTool,
     pendingPoint,
@@ -3893,40 +3941,49 @@ export function CandlestickChart({
                     >
                       <CategoryIcon size={14} />
                     </button>
-                    <button
-                      ref={menuAnchorRefFor(category.id)}
-                      type="button"
-                      className={["lq-chart__tool-chevron", menuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
-                      onClick={() => setOpenToolMenu((o) => (o === category.id ? null : category.id))}
-                      aria-label={`Autres outils — ${category.id}`}
-                    >
-                      <ChevronDownIcon size={8} />
-                    </button>
-                    <Popover
-                      open={menuOpen}
-                      onClose={() => setOpenToolMenu(null)}
-                      anchorRef={menuAnchorRefFor(category.id)}
-                      placement="bottom"
-                    >
-                      <div className="lq-chart__tool-menu">
-                        {category.tools.map((opt) => {
-                          const OptionIcon = opt.icon;
-                          return (
-                            <button
-                              key={opt.type}
-                              type="button"
-                              className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
-                                .filter(Boolean)
-                                .join(" ")}
-                              onClick={() => handleSelectToolType(opt.type)}
-                            >
-                              <OptionIcon size={14} />
-                              {opt.label}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </Popover>
+                    {/* Only worth a dropdown once there's actually something to pick between —
+                        a single-tool category (e.g. "Mesure" today) has nowhere else for the
+                        chevron to lead, so it stays off entirely instead of opening an empty-ish
+                        one-item menu. Adding a 2nd tool to that category later makes this
+                        reappear on its own, no extra wiring needed. */}
+                    {category.tools.length > 1 && (
+                      <>
+                        <button
+                          ref={menuAnchorRefFor(category.id)}
+                          type="button"
+                          className={["lq-chart__tool-chevron", menuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
+                          onClick={() => setOpenToolMenu((o) => (o === category.id ? null : category.id))}
+                          aria-label={`Autres outils — ${category.id}`}
+                        >
+                          <ChevronDownIcon size={8} />
+                        </button>
+                        <Popover
+                          open={menuOpen}
+                          onClose={() => setOpenToolMenu(null)}
+                          anchorRef={menuAnchorRefFor(category.id)}
+                          placement="bottom"
+                        >
+                          <div className="lq-chart__tool-menu">
+                            {category.tools.map((opt) => {
+                              const OptionIcon = opt.icon;
+                              return (
+                                <button
+                                  key={opt.type}
+                                  type="button"
+                                  className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
+                                    .filter(Boolean)
+                                    .join(" ")}
+                                  onClick={() => handleSelectToolType(opt.type)}
+                                >
+                                  <OptionIcon size={14} />
+                                  {opt.label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </Popover>
+                      </>
+                    )}
                   </div>
                 );
               })}
@@ -3943,6 +4000,19 @@ export function CandlestickChart({
               >
                 <MagnetIcon size={14} />
               </button>
+              {/* Hides every drawing without deleting any of them — same eye/eye-off convention
+                  the indicator legend already uses for a single indicator, applied here to all
+                  of `drawings` at once. */}
+              <button
+                type="button"
+                className={["lq-chart__icon-button", drawingsHidden && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setDrawingsHidden((h) => !h)}
+                aria-label={drawingsHidden ? "Afficher les dessins" : "Masquer les dessins"}
+                aria-pressed={drawingsHidden}
+                title="Masquer/afficher tous les dessins"
+              >
+                {drawingsHidden ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
+              </button>
             </div>
           </div>
         )}
@@ -3951,16 +4021,21 @@ export function CandlestickChart({
             neither has to guess the other's height to avoid overlapping it. */}
         <div className="lq-chart__plot-topleft" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
           <div className="lq-chart__symbol-info">
-            {/* Its own hoverable/clickable zone (background on hover, click opens the
-                symbol-search modal) only once `symbolSearch` opts in — otherwise `symbol`
-                still renders, just as inert text, same as before this existed. */}
+            {/* Its own hoverable zone (background on hover) only once `symbolSearch` opts in —
+                otherwise `symbol` still renders, just as inert text, same as before this
+                existed. Double-click only (not single), matching the chart-type label right
+                next to it — deliberately NOT also wired to onClick: Modal's own overlay closes
+                on click, covering the full viewport once open, so a single click that opened it
+                would leave the *second* click of the same double-click gesture landing on that
+                overlay instead of this button, closing the modal again immediately. */}
             {symbol &&
               (symbolSearch ? (
                 <button
                   type="button"
                   className="lq-chart__symbol-info-name lq-chart__symbol-info-name--clickable"
-                  onClick={() => setSymbolSearchOpen(true)}
+                  onDoubleClick={() => setSymbolSearchOpen(true)}
                   aria-label="Rechercher un symbole"
+                  title="Double-clic : rechercher un symbole"
                 >
                   {symbol}
                 </button>
@@ -3990,6 +4065,8 @@ export function CandlestickChart({
                 className="lq-chart__indicator-legend-item"
                 style={{ color: indicator.color ?? defaultIndicatorColor(i) }}
                 onDoubleClick={() => openIndicatorSettings(indicator.id)}
+                onMouseEnter={() => setHoveredIndicatorId(indicator.id)}
+                onMouseLeave={() => setHoveredIndicatorId((id) => (id === indicator.id ? null : id))}
               >
                 <span
                   className={["lq-chart__indicator-legend-label", indicator.hidden && "lq-chart__indicator-legend-label--hidden"]
@@ -4293,7 +4370,7 @@ export function CandlestickChart({
             {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
                 actually receive pointer events instead of the overlay swallowing them first. */}
             <g clipPath={`url(#${clipId})`}>
-              {drawings.map((dr) => {
+              {visibleDrawings.map((dr) => {
                 const isHovered = hoveredDrawingId === dr.id;
                 if (!isHovered) return null;
                 // A freehand stroke can have dozens of sampled points — individually draggable
@@ -4489,7 +4566,7 @@ export function CandlestickChart({
             hover, unlike the badges above) — same visual as the hover badge, minus its "+"
             button since there's nothing left to add. Anchored to the volume axis instead when
             the line's `valueAxis` says so, same as the hover volume badge does. */}
-        {drawings
+        {visibleDrawings
           .filter((dr) => (dr.lineType === "horizontal" || dr.lineType === "ray") && (dr.valueAxis !== "volume" || volumeVisible))
           .map((dr) => (
             <div
@@ -4507,7 +4584,7 @@ export function CandlestickChart({
         {/* A "ray"'s own start date, only while its line is hovered (unlike the price badge
             above, which stays up permanently) — same X-axis badge style as the hover date
             badge, anchored to the line's own x1 instead of the live cursor position. */}
-        {drawings
+        {visibleDrawings
           .filter((dr) => dr.lineType === "ray" && dr.id === hoveredDrawingId)
           .map((dr) => (
             <div

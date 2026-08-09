@@ -137,7 +137,10 @@ export const WithShapesAndMeasure: Story = {
         d'outil l'efface (ce n'est pas un dessin persistant comme les autres). Le bouton <strong>aimant</strong>{" "}
         (à droite des catégories) est un interrupteur, pas un outil : une fois activé, tout nouveau point placé
         par n'importe quel outil s'accroche à l'open/high/low/close le plus proche de la bougie visée, au lieu du
-        prix exact sous le curseur — reste actif tant qu'on ne le désactive pas. Une ligne de tendance classique
+        prix exact sous le curseur — reste actif tant qu'on ne le désactive pas. Juste en dessous, un bouton{" "}
+        <strong>œil</strong> masque/affiche tous les dessins d'un coup, sans les supprimer — les rebasculer
+        visibles les retrouve exactement tels quels. Le chevron d'une catégorie n'apparaît que si elle a plus d'un
+        outil : <strong>Mesure</strong> (un seul aujourd'hui) n'en a donc pas. Une ligne de tendance classique
         (pas "étendue") peut aussi recevoir une <strong>flèche à gauche</strong>/<strong>à droite</strong> depuis
         l'onglet Style de sa modale, une fois son "Extension" réglée sur "Ne pas étendre".
       </p>
@@ -224,8 +227,10 @@ export const WithIndicators: Story = {
         modale reste ouverte pour en ajouter plusieurs. SMA/EMA/WMA/VWAP/Bollinger se superposent au tracé des prix
         (légende en haut à gauche, séparée par un simple trait, sans fond tant qu'elle n'est pas survolée ; survoler
         une entrée fait apparaître œil/corbeille/roue crantée, <strong>double-clic</strong> ouvre directement les
-        paramètres) ; Bollinger se dessine en bande (ligne médiane pleine, bornes fines, remplissage translucide) au
-        lieu d'une simple ligne. <strong>RSI/CHOP/MACD ont chacun leur propre panneau</strong> en dessous du
+        paramètres, et <strong>Ctrl/Cmd+C</strong> en la survolant la copie — <strong>Ctrl/Cmd+V</strong> colle
+        alors un doublon à la fin de la liste, même type/période/couleur, nouvel id) ; Bollinger se dessine en
+        bande (ligne médiane pleine, bornes fines, remplissage translucide) au lieu d'une simple ligne.{" "}
+        <strong>RSI/CHOP/MACD ont chacun leur propre panneau</strong> en dessous du
         graphe, comme le volume — même en-tête (nom, réduire/agrandir, supprimer, roue crantée pour les
         paramètres), et <strong>chaque panneau (volume compris) se redimensionne</strong> en glissant le fin
         liseré au-dessus de son en-tête.
@@ -331,9 +336,11 @@ export const WithSymbolSearch: Story = {
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-          `symbol` devient sa propre zone survolable/cliquable une fois `symbolSearch` activé (fond au survol,
-          séparée du libellé du mode d'affichage juste à côté, qui garde son propre fond au survol et son
-          double-clic vers les paramètres) — cliquer dessus ouvre la modale <strong>"Symbol search"</strong> :
+          `symbol` devient sa propre zone survolable une fois `symbolSearch` activé (fond au survol, séparée du
+          libellé du mode d'affichage juste à côté, qui garde son propre fond au survol et son double-clic vers les
+          paramètres) — <strong>double-clic</strong> dessus (pas simple clic : le fond plein écran de la modale se
+          ferme lui-même au clic, donc un simple clic en plus aurait laissé le 2ème clic du double-clic retomber
+          dessus et la refermer aussitôt) ouvre la modale <strong>"Symbol search"</strong> :
           champ de recherche, pastilles de catégorie à sélection unique (<strong>All</strong>/Stocks/Futures/
           Forex/Crypto/Indices/Bonds/Economy/Options/<strong>Favoris</strong>) et une liste de résultats — icône
           carrée (ou pastille de couleur avec les initiales du ticker si `logoUrl` est absent), ticker, nom
