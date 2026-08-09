@@ -27,6 +27,78 @@ const TIMEFRAMES: TimeframeEntry[] = [
   { group: "Jours", options: [{ label: "1 jour", value: "1d" }, { label: "1 semaine", value: "1w" }, { label: "1 mois", value: "1M" }] },
 ];
 
+// A tiny mock "database" standing in for whatever real symbol search API an app would call —
+// the component itself never ships one (it has no opinion on where symbols come from), it only
+// renders whatever `symbolSearchResults` the app currently hands it. Shared by every story that
+// enables `symbolSearch`.
+const MOCK_SYMBOL_DB: SymbolSearchResult[] = [
+  { id: "nvda", ticker: "NVDA", name: "NVIDIA Corporation", category: "stocks", source: "NASDAQ", logoColor: "#76b900" },
+  { id: "aapl", ticker: "AAPL", name: "Apple Inc.", category: "stocks", source: "NASDAQ", logoColor: "#555" },
+  { id: "msft", ticker: "MSFT", name: "Microsoft Corporation", category: "stocks", source: "NASDAQ", logoColor: "#00a4ef" },
+  { id: "spx", ticker: "SPX", name: "S&P 500 Index", category: "indices", source: "SP" },
+  { id: "eu50", ticker: "EU50", name: "Eurostoxx 50, Daily", category: "indices", source: "SPREADEX" },
+  { id: "btcusd", ticker: "BTCUSD", name: "Bitcoin / Dollar américain", category: "crypto", source: "COINBASE" },
+  { id: "ethusd", ticker: "ETHUSD", name: "Ethereum / Dollar américain", category: "crypto", source: "COINBASE" },
+  { id: "eurusd", ticker: "EURUSD", name: "Euro / Dollar américain", category: "forex", source: "OANDA" },
+  { id: "xauusd", ticker: "XAUUSD", name: "Gold", category: "forex", source: "OANDA" },
+  { id: "wti", ticker: "WTI", name: "West Texas Intermediate Crude Oil cash", category: "futures", source: "BLACKBULL" },
+  { id: "fib1", ticker: "FIB1!", name: "FTSE MIB Index Futures", category: "futures", source: "EURONEXT" },
+  { id: "de10y", ticker: "DE10Y", name: "Germany 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
+  { id: "fr10y", ticker: "FR10Y", name: "France 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
+  { id: "gdp", ticker: "USGDP", name: "United States GDP Growth Rate", category: "economy", source: "ECONOMICS" },
+  { id: "orbx", ticker: "ORBX", name: "Global X Space Tech ETF", category: "options", source: "NASDAQ" },
+];
+
+// Stands in for a real search API call — filters `MOCK_SYMBOL_DB` by query/category, exactly the
+// kind of work `onSymbolSearchChange` hands off to the app.
+function filterMockSymbols(query: string, category: string, favorites: string[]): SymbolSearchResult[] {
+  const q = query.trim().toLowerCase();
+  return MOCK_SYMBOL_DB.filter((r) => {
+    if (category === "favorites") return favorites.includes(r.id);
+    if (category !== "all" && r.category !== category) return false;
+    if (!q) return true;
+    return r.ticker.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
+  });
+}
+
+export const AllFeatures: Story = {
+  name: "Toutes les options",
+  render: () => {
+    const [timeframe, setTimeframe] = useState("1d");
+    const [favorites, setFavorites] = useState<string[]>(["msft"]);
+    const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
+    const [currentSymbol, setCurrentSymbol] = useState("MSFT");
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
+          l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
+          sélecteur d'intervalle (`timeframes`), recherche de symbole (`symbolSearch` — <strong>double-clic</strong>{" "}
+          sur "MSFT" ouvre la modale) et zoom/pan (`zoomable`).
+        </p>
+        <CandlestickChart
+          data={ALL_FEATURES_DATASET}
+          symbol={currentSymbol}
+          drawingTools
+          showIndicators
+          fullscreenToggle
+          zoomable
+          timeframes={TIMEFRAMES}
+          timeframe={timeframe}
+          onTimeframeChange={setTimeframe}
+          symbolSearch
+          symbolSearchResults={results}
+          onSymbolSearchChange={(query, category) => setResults(filterMockSymbols(query, category, favorites))}
+          onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
+          defaultFavoriteSymbolIds={favorites}
+          onFavoriteSymbolIdsChange={setFavorites}
+          height={STORY_HEIGHT}
+        />
+      </div>
+    );
+  },
+};
+
 export const Default: Story = {
   render: () => (
     <div style={{ padding: 24 }}>
@@ -301,47 +373,12 @@ export const WithSymbolAndEvents: Story = {
   ),
 };
 
-// A tiny mock "database" standing in for whatever real symbol search API an app would call —
-// the component itself never ships one (it has no opinion on where symbols come from), it only
-// renders whatever `symbolSearchResults` the app currently hands it.
-const MOCK_SYMBOL_DB: SymbolSearchResult[] = [
-  { id: "nvda", ticker: "NVDA", name: "NVIDIA Corporation", category: "stocks", source: "NASDAQ", logoColor: "#76b900" },
-  { id: "aapl", ticker: "AAPL", name: "Apple Inc.", category: "stocks", source: "NASDAQ", logoColor: "#555" },
-  { id: "msft", ticker: "MSFT", name: "Microsoft Corporation", category: "stocks", source: "NASDAQ", logoColor: "#00a4ef" },
-  { id: "spx", ticker: "SPX", name: "S&P 500 Index", category: "indices", source: "SP" },
-  { id: "eu50", ticker: "EU50", name: "Eurostoxx 50, Daily", category: "indices", source: "SPREADEX" },
-  { id: "btcusd", ticker: "BTCUSD", name: "Bitcoin / Dollar américain", category: "crypto", source: "COINBASE" },
-  { id: "ethusd", ticker: "ETHUSD", name: "Ethereum / Dollar américain", category: "crypto", source: "COINBASE" },
-  { id: "eurusd", ticker: "EURUSD", name: "Euro / Dollar américain", category: "forex", source: "OANDA" },
-  { id: "xauusd", ticker: "XAUUSD", name: "Gold", category: "forex", source: "OANDA" },
-  { id: "wti", ticker: "WTI", name: "West Texas Intermediate Crude Oil cash", category: "futures", source: "BLACKBULL" },
-  { id: "fib1", ticker: "FIB1!", name: "FTSE MIB Index Futures", category: "futures", source: "EURONEXT" },
-  { id: "de10y", ticker: "DE10Y", name: "Germany 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
-  { id: "fr10y", ticker: "FR10Y", name: "France 10 Year Government Bonds Yield", category: "bonds", source: "TVC" },
-  { id: "gdp", ticker: "USGDP", name: "United States GDP Growth Rate", category: "economy", source: "ECONOMICS" },
-  { id: "orbx", ticker: "ORBX", name: "Global X Space Tech ETF", category: "options", source: "NASDAQ" },
-];
-
 export const WithSymbolSearch: Story = {
   name: "Recherche de symbole",
   render: () => {
     const [favorites, setFavorites] = useState<string[]>(["nvda"]);
     const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
     const [currentSymbol, setCurrentSymbol] = useState("NVDA");
-
-    // Stands in for a real search API call — filters the same mock list this story owns by
-    // query/category, exactly the kind of work `onSymbolSearchChange` hands off to the app.
-    function handleSearchChange(query: string, category: string) {
-      const q = query.trim().toLowerCase();
-      setResults(
-        MOCK_SYMBOL_DB.filter((r) => {
-          if (category === "favorites") return favorites.includes(r.id);
-          if (category !== "all" && r.category !== category) return false;
-          if (!q) return true;
-          return r.ticker.toLowerCase().includes(q) || r.name.toLowerCase().includes(q);
-        })
-      );
-    }
 
     return (
       <div style={{ padding: 24 }}>
@@ -367,38 +404,10 @@ export const WithSymbolSearch: Story = {
           symbol={currentSymbol}
           symbolSearch
           symbolSearchResults={results}
-          onSymbolSearchChange={handleSearchChange}
+          onSymbolSearchChange={(query, category) => setResults(filterMockSymbols(query, category, favorites))}
           onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
           defaultFavoriteSymbolIds={favorites}
           onFavoriteSymbolIdsChange={setFavorites}
-          height={STORY_HEIGHT}
-        />
-      </div>
-    );
-  },
-};
-
-export const AllFeatures: Story = {
-  name: "Toutes les options",
-  render: () => {
-    const [timeframe, setTimeframe] = useState("1d");
-    return (
-      <div style={{ padding: 24 }}>
-        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-          Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
-          l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
-          sélecteur d'intervalle (`timeframes`) et zoom/pan (`zoomable`).
-        </p>
-        <CandlestickChart
-          data={ALL_FEATURES_DATASET}
-          symbol="MSFT"
-          drawingTools
-          showIndicators
-          fullscreenToggle
-          zoomable
-          timeframes={TIMEFRAMES}
-          timeframe={timeframe}
-          onTimeframeChange={setTimeframe}
           height={STORY_HEIGHT}
         />
       </div>
