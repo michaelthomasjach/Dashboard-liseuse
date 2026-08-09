@@ -1049,6 +1049,8 @@ const CROSSHAIR_ADD_INSET = 20;
 const AXIS_VALUE_Y_OVERLAP = 20;
 /** Vertical gap between the live-price badge and the countdown badge sitting right below it. */
 const LIVE_COUNTDOWN_OFFSET = 20;
+/** Half the rendered height of a `.lq-chart__axis-value--y` badge — see clampToPriceAxis. */
+const AXIS_BADGE_HALF_HEIGHT = 10;
 /** Single drag-handle position for an axis-constrained line, as a fraction of the plot's own
  *  size along the axis it doesn't move on: a horizontal line's handle sits 1/4 of the width in
  *  from the right edge, a vertical line's handle 1/4 of the height down from the top. */
@@ -1701,6 +1703,16 @@ export function CandlestickChart({
   }, [data, priceHeight]);
 
   const zoomedPriceScale = yTransform.rescaleY(priceScale);
+
+  // Permanent price-axis badges (live price, indicator values, horizontal/ray drawing lines)
+  // are positioned from a *value*, not from the mouse — unlike the hover badge, which can never
+  // leave the pane because it's driven by a pointer position already inside it. Once the price
+  // axis is zoomed/panned far enough that a value's pixel position falls outside the price
+  // pane, its badge would otherwise render past the axis (over the toolbar above, or into the
+  // volume/indicator panes below) instead of pinned to the edge like every trading platform
+  // does. `AXIS_BADGE_HALF_HEIGHT` keeps the (vertically centered, `translateY(-50%)`) badge
+  // fully inside the pane at the clamp, not just its center pixel.
+  const clampToPriceAxis = (y: number) => Math.min(priceHeight - AXIS_BADGE_HALF_HEIGHT, Math.max(AXIS_BADGE_HALF_HEIGHT, y));
 
   // When YAutoScaling is on and the user hasn't manually adjusted the Y axis themselves (see
   // yManuallyAdjusted, set by yAxisDrag/yAxisWheelRef/the 2D-pan-Y handler below, and cleared by
@@ -4678,7 +4690,7 @@ export function CandlestickChart({
             const lastCandle = data[data.length - 1];
             const prevCandle = data.length > 1 ? data[data.length - 2] : null;
             const up = prevCandle ? lastCandle.close >= prevCandle.close : true;
-            const y = dims.margin.top + zoomedPriceScale(lastCandle.close);
+            const y = dims.margin.top + clampToPriceAxis(zoomedPriceScale(lastCandle.close));
             const intervalMs = prevCandle ? lastCandle.date.getTime() - prevCandle.date.getTime() : null;
             const remainingMs = intervalMs ? lastCandle.date.getTime() + intervalMs - now : null;
             return (
@@ -4727,7 +4739,7 @@ export function CandlestickChart({
                 key={indicator.id}
                 className="lq-chart__axis-value lq-chart__axis-value--y"
                 style={{
-                  top: dims.margin.top + zoomedPriceScale(value),
+                  top: dims.margin.top + clampToPriceAxis(zoomedPriceScale(value)),
                   left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
                   backgroundColor: color,
                 }}
@@ -4748,7 +4760,7 @@ export function CandlestickChart({
               key={dr.id}
               className="lq-chart__axis-value lq-chart__axis-value--y"
               style={{
-                top: dims.margin.top + (dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1)),
+                top: dims.margin.top + (dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : clampToPriceAxis(zoomedPriceScale(dr.y1))),
                 left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
               }}
             >
