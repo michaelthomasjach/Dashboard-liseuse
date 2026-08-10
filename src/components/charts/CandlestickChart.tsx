@@ -162,6 +162,12 @@ export interface TrendLineDrawing {
   textVerticalAlign?: "top" | "center" | "bottom";
   /** Painted behind the text as a small padded rect. Unset (default): no background. */
   textBackgroundColor?: string;
+  /** The text's own color. Unset (default): falls back to `color` (the line's own color), same
+   *  as before this field existed. The edit modal's background-color picker overwrites this with
+   *  whichever of black/white contrasts better (see contrastingTextColor) every time the
+   *  background changes, so the label stays readable without the user having to think about
+   *  it — still freely overridable by hand afterward via its own picker. */
+  textColor?: string;
   /** Constrains the line to one axis instead of a free-form two-point line: "horizontal" keeps
    *  y1 === y2 and can only be dragged vertically (its price/volume changes, never its date
    *  span, which always covers the full width); "vertical" keeps x1 === x2 and can only be
@@ -1114,6 +1120,19 @@ function round4(v: number): number {
   return Math.round(v * 10000) / 10000;
 }
 
+/** Picks whichever of black/white reads better against `hex` (a "#rrggbb" background), by
+ *  perceived luminance (ITU-R BT.601 weights) rather than a plain average — the eye is far more
+ *  sensitive to green than red/blue, so that's the split that actually predicts legibility. Used
+ *  to keep a drawing's text label background editable without ever landing on an unreadable
+ *  text/background pairing by accident. */
+function contrastingTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.55 ? "#000000" : "#ffffff";
+}
+
 /** MM:SS, rounded up so a fresh 5-minute candle reads "05:00" (not "04:59") the instant it
  *  starts — ceil(ms / 1000) rather than floor. Negative/zero clamps to "00:00" rather than
  *  going negative, since nothing here forces a new candle to actually arrive on schedule. */
@@ -1239,7 +1258,7 @@ function drawDrawingText(
     ctx.fillRect(bgX - pad, drawY - ascent - pad, metrics.width + pad * 2, ascent + descent + pad * 2);
   }
 
-  ctx.fillStyle = dr.color ?? fallbackColor;
+  ctx.fillStyle = dr.textColor ?? dr.color ?? fallbackColor;
   ctx.fillText(dr.text, 0, drawY);
   ctx.restore();
 }
@@ -5084,18 +5103,27 @@ export function CandlestickChart({
                   onChange={(v) => setDraft({ ...draft, textSize: v === "" ? 11 : v })}
                 />
                 <div className="lq-field">
-                  <label className="lq-field__label">Couleur de fond</label>
+                  <label className="lq-field__label">Couleur du texte</label>
                   <input
                     type="color"
                     className="lq-chart__color-input"
-                    value={draft.textBackgroundColor ?? "#000000"}
-                    onChange={(e) => setDraft({ ...draft, textBackgroundColor: e.target.value })}
+                    value={draft.textColor ?? draft.color ?? DEFAULT_DRAWING_COLOR}
+                    onChange={(e) => setDraft({ ...draft, textColor: e.target.value })}
                   />
                 </div>
               </div>
-              <div className="lq-chart__edit-drawing-row">
-                <Checkbox checked={draft.textBold ?? true} onChange={(textBold) => setDraft({ ...draft, textBold })} label="Gras" />
-                <Checkbox checked={draft.textItalic ?? false} onChange={(textItalic) => setDraft({ ...draft, textItalic })} label="Italique" />
+              <div className="lq-field">
+                <label className="lq-field__label">Couleur de fond</label>
+                <input
+                  type="color"
+                  className="lq-chart__color-input"
+                  value={draft.textBackgroundColor ?? "#000000"}
+                  // Auto-picks a contrasting text color every time the background changes, so the
+                  // label never accidentally lands on an unreadable pairing — still overridable by
+                  // hand afterward via "Couleur du texte" above, which this doesn't touch again
+                  // unless the background itself changes once more.
+                  onChange={(e) => setDraft({ ...draft, textBackgroundColor: e.target.value, textColor: contrastingTextColor(e.target.value) })}
+                />
               </div>
               {draft.textBackgroundColor && (
                 <button
@@ -5106,6 +5134,10 @@ export function CandlestickChart({
                   Retirer la couleur de fond
                 </button>
               )}
+              <div className="lq-chart__edit-drawing-row">
+                <Checkbox checked={draft.textBold ?? true} onChange={(textBold) => setDraft({ ...draft, textBold })} label="Gras" />
+                <Checkbox checked={draft.textItalic ?? false} onChange={(textItalic) => setDraft({ ...draft, textItalic })} label="Italique" />
+              </div>
               <div className="lq-chart__edit-drawing-row">
                 <Select
                   label="Alignement vertical"

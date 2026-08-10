@@ -170,8 +170,10 @@ export const WithDrawingTools: Story = {
         annule. Survoler une ligne dessinée fait apparaître ses poignées (une par point placé, plus celle de canal
         pour son écart) — glisser une poignée pour redéfinir ce point, ou glisser directement sur la ligne pour
         déplacer tous ses points ensemble. <strong>Double-clic sur une ligne</strong> pour l'éditer dans une modale à trois
-        onglets — <strong>Coordonnées</strong>, <strong>Texte</strong> (taille, gras/italique, alignement avec la
-        ligne, alignement vertical/horizontal, couleur de fond) et <strong>Style</strong> (épaisseur, couleur,
+        onglets — <strong>Coordonnées</strong>, <strong>Texte</strong> (taille, sa propre couleur, gras/italique,
+        alignement avec la ligne, alignement vertical/horizontal, couleur de fond — changer cette dernière réécrit
+        automatiquement la couleur du texte en noir ou blanc, celui des deux qui contraste le mieux, librement
+        modifiable ensuite à la main) et <strong>Style</strong> (épaisseur, couleur,
         style de trait continu/tirets/pointillés/tiret-point, extension aucune/droite/gauche/des deux côtés) —{" "}
         <strong>double-clic ailleurs sur le graphe</strong> réinitialise le zoom à la place. Les lignes sont ancrées
         en coordonnées date/prix : elles suivent le zoom et le déplacement du graphe.{" "}
