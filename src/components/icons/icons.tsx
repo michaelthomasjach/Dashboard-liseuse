@@ -245,11 +245,14 @@ export const GripIcon = (props: IconProps) => (
   </IconBase>
 );
 
-/** Three stacked horizontal bars of decreasing width — reads as a "list/manage" affordance,
- *  distinct from the hamburger-menu three-equal-bars look most icon sets reserve for navigation. */
+/** A flat diamond with two chevrons stacked underneath — the standard "layers panel" glyph (as
+ *  seen in most design tools), reading as "everything currently on the chart, as a stack of
+ *  distinct items" rather than a generic list/menu. */
 export const LayersIcon = (props: IconProps) => (
   <IconBase {...props}>
-    <path d="M4 6h16M4 12h11M4 18h7" />
+    <path d="M12 3.5 3.5 9 12 14.5 20.5 9 12 3.5Z" />
+    <path d="M3.5 12.5 12 18l8.5-5.5" />
+    <path d="M3.5 16 12 21.5 20.5 16" />
   </IconBase>
 );
 

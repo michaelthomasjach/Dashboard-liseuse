@@ -337,7 +337,8 @@ export const WithSubPaneIndicators: Story = {
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         RSI et MACD pré-ajoutés (`defaultIndicators`), CHOP aussi mais réduit à son bandeau (`paneCollapsed: true`)
         pour montrer les deux états d'un coup — cliquer son bouton ▲ ou <strong>double-clic sur son nom</strong>{" "}
-        le rouvre (double-clic sur le nom d'un panneau déjà ouvert ouvre plutôt ses paramètres). RSI/CHOP sont
+        le rouvre (double-clic sur le nom d'un panneau déjà ouvert ouvre plutôt ses paramètres — <strong>Volume
+        aussi</strong>, ses seuls paramètres étant les couleurs de ses barres haussières/baissières). RSI/CHOP sont
         bornés 0-100 par définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son
         échelle en continu sur ce qui est visible (histogramme + ligne MACD + ligne de signal). La roue crantée
         (paramètres) et la corbeille (suppression) de chaque en-tête sont positionnées juste à droite du nom du
@@ -346,8 +347,9 @@ export const WithSubPaneIndicators: Story = {
         réinitialiser) son propre axe Y le rescale verticalement, indépendamment des autres. La{" "}
         <strong>poignée à 6 points</strong> juste avant le nom de RSI/MACD/CHOP glisse pour réordonner les
         panneaux entre eux (Volume reste toujours en premier). Le dernier bouton de la colonne d'outils, tout en
-        bas, ouvre <strong>"Gérer les indicateurs"</strong> : la liste de tous les indicateurs actifs, groupés
-        superposés au prix / en sous-panneau avec un badge par type, chacun avec sa propre roue crantée/corbeille.
+        bas, ouvre <strong>"Dessins et indicateurs"</strong> : trois groupes — dessins actuellement sur le
+        graphe, indicateurs superposés au prix, indicateurs en sous-panneau (Volume compris) — chacun avec un
+        badge identifiant son type et sa propre roue crantée/corbeille.
       </p>
       <CandlestickChart
         data={MEDIUM_DATASET}

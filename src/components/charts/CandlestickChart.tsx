@@ -865,6 +865,26 @@ function categoryOfTool(type: DrawingToolType): DrawingToolCategory {
   return DRAWING_TOOL_CATEGORIES.find((c) => c.tools.some((t) => t.type === type)) ?? DRAWING_TOOL_CATEGORIES[0];
 }
 
+// Which tool would have created a drawing shaped like this one — `lineType` covers most of them
+// directly, but a plain two-point line (undefined `lineType`) is either "Ligne de tendance" or
+// "Ligne fléchée" depending on arrowLeft/arrowRight, since neither of those two tools sets a
+// `lineType` of its own to disambiguate by. Used for both its label and its icon, e.g. in the
+// "Dessins et indicateurs" modal's per-row badge.
+function drawingToolMeta(dr: TrendLineDrawing): { label: string; icon: typeof TrendLineIcon } {
+  const toolId: DrawingToolType = dr.lineType ?? (dr.arrowLeft || dr.arrowRight ? "arrowLine" : "trendline");
+  for (const category of DRAWING_TOOL_CATEGORIES) {
+    const tool = category.tools.find((t) => t.type === toolId);
+    if (tool) return tool;
+  }
+  return DRAWING_TOOL_CATEGORIES[0].tools[0];
+}
+
+// A drawing's own `text` (set from its edit modal's Texte tab) if it has one, otherwise falls
+// back to its tool's own name (see drawingToolMeta).
+function drawingLabel(dr: TrendLineDrawing): string {
+  return dr.text || drawingToolMeta(dr).label;
+}
+
 interface ChartDisplayModeDef {
   mode: ChartDisplayMode;
   label: string;
@@ -1411,6 +1431,12 @@ export function CandlestickChart({
   // theme's own --lq-color-up/--lq-color-down", same as before this modal existed.
   const [upColorOverride, setUpColorOverride] = useState<string | undefined>(undefined);
   const [downColorOverride, setDownColorOverride] = useState<string | undefined>(undefined);
+  // Same idea, scoped to the volume pane's own bars instead of the candles — `undefined` means
+  // "mirror whichever of colorUp/colorDown above is currently in effect" (theme or its own
+  // override), same as volume bars have always done, just now overridable independently.
+  const [volumeUpColorOverride, setVolumeUpColorOverride] = useState<string | undefined>(undefined);
+  const [volumeDownColorOverride, setVolumeDownColorOverride] = useState<string | undefined>(undefined);
+  const [volumeSettingsOpen, setVolumeSettingsOpen] = useState(false);
   // Seeded from the `YAutoScaling` prop, then owned locally once the settings-modal checkbox can
   // change it — same uncontrolled pattern as `drawings`/`indicators`, not a live mirror of the
   // prop after mount.
@@ -3778,12 +3804,17 @@ export function CandlestickChart({
         ctx.rect(0, priceHeight, dims.boundedWidth, volumeHeight);
         ctx.clip();
         ctx.translate(0, priceHeight);
+        // Falls back to whichever of colorUp/colorDown is already in effect (theme or its own
+        // override) — only actually diverges from the candles' own colors once set from the
+        // volume pane's own settings modal (see the gear icon in its header below).
+        const volColorUp = volumeUpColorOverride ?? colorUp;
+        const volColorDown = volumeDownColorOverride ?? colorDown;
         for (const { d, i } of visible) {
           const cx = zoomedXScale(i + 0.5);
           const up = d.close >= d.open;
           const barHeight = Math.max(0, volumeHeight - zoomedVolumeScale(d.volume ?? 0));
           ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
-          ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
+          ctx.fillStyle = isEink ? colorText : up ? volColorUp : volColorDown;
           ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
         }
         ctx.globalAlpha = 1;
@@ -3994,6 +4025,8 @@ export function CandlestickChart({
     visibleRange,
     upColorOverride,
     downColorOverride,
+    volumeUpColorOverride,
+    volumeDownColorOverride,
     volumeVisible,
     volumeCollapsed,
     zoomedVolumeScale,
@@ -4312,23 +4345,24 @@ export function CandlestickChart({
               </button>
               {/* Pinned to the rail's own bottom edge (see .lq-chart__tools-rail-bottom-button),
                   separate from every tool/toggle above — opens a flat, grouped list of every
-                  currently active indicator (overlay and own-pane alike) with a settings/delete
-                  action per row, instead of having to hunt each one down on the chart itself
-                  (hovering a legend entry, or a collapsed pane that hides its own actions). */}
-              {showIndicators && (
-                <button
-                  type="button"
-                  className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", indicatorsManagerOpen && "lq-chart__icon-button--active"]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => setIndicatorsManagerOpen((o) => !o)}
-                  aria-label="Gérer les indicateurs"
-                  aria-pressed={indicatorsManagerOpen}
-                  title="Voir et gérer tous les indicateurs actifs"
-                >
-                  <LayersIcon size={14} />
-                </button>
-              )}
+                  drawing and indicator currently on the chart (overlay and own-pane alike) with
+                  a settings/delete action per row, instead of having to hunt each one down on
+                  the chart itself (hovering a legend entry, or a collapsed pane that hides its
+                  own actions). Shown whenever the rail itself is (drawingTools) regardless of
+                  showIndicators — even drawings-only usage benefits from a single place to see
+                  and clear everything drawn. */}
+              <button
+                type="button"
+                className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", indicatorsManagerOpen && "lq-chart__icon-button--active"]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => setIndicatorsManagerOpen((o) => !o)}
+                aria-label="Dessins et indicateurs"
+                aria-pressed={indicatorsManagerOpen}
+                title="Voir et gérer tous les dessins et indicateurs actifs"
+              >
+                <LayersIcon size={14} />
+              </button>
             </div>
           </div>
         )}
@@ -4450,9 +4484,12 @@ export function CandlestickChart({
             <div className="lq-chart__pane-header-primary">
               {/* The header itself is pointer-events: none (see .lq-chart__pane-header-label's
                   own CSS) so double-clicking has to target the label specifically, not the
-                  header div as a whole — only collapsed → expanded, there's no equivalent
-                  "settings" action an already-expanded pane's name would make sense opening. */}
-              <span className="lq-chart__pane-header-label" onDoubleClick={() => volumeCollapsed && setVolumePaneState("expanded")}>
+                  header div as a whole. Collapsed: expands. Expanded: opens the volume settings
+                  modal, matching every other pane's double-click-on-name convention. */}
+              <span
+                className="lq-chart__pane-header-label"
+                onDoubleClick={() => (volumeCollapsed ? setVolumePaneState("expanded") : setVolumeSettingsOpen(true))}
+              >
                 Volume
               </span>
               {!volumeCollapsed && (
@@ -4461,6 +4498,14 @@ export function CandlestickChart({
                     .filter(Boolean)
                     .join(" ")}
                 >
+                  <button
+                    type="button"
+                    className="lq-chart__pane-header-action"
+                    onClick={() => setVolumeSettingsOpen(true)}
+                    aria-label="Paramètres du panneau Volume"
+                  >
+                    <SettingsIcon size={11} />
+                  </button>
                   <button
                     type="button"
                     className="lq-chart__pane-header-action"
@@ -5511,22 +5556,23 @@ export function CandlestickChart({
       )}
 
       {indicatorsManagerOpen && (
-        <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Gérer les indicateurs" footer={null}>
+        <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Dessins et indicateurs" footer={null}>
           <div className="lq-chart__indicators-manager">
             {(() => {
               const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
               const own = ownPaneIndicators;
-              if (overlay.length === 0 && own.length === 0 && !volumeVisible) {
-                return <p className="lq-chart__indicator-picker-empty">Aucun indicateur actif.</p>;
+              if (overlay.length === 0 && own.length === 0 && !volumeVisible && visibleDrawings.length === 0) {
+                return <p className="lq-chart__indicator-picker-empty">Rien à gérer pour l'instant — aucun dessin ni indicateur actif.</p>;
               }
               // A row's own two actions mirror exactly what's already reachable from the chart
               // itself (the legend's roue crantée/corbeille for an overlay, a pane header's for an
-              // "own" one) — this list is a second way to reach the same actions, not a new set of
-              // them, so nothing here can do anything the chart's own hover/pane-header UI can't.
-              const row = (label: string, badge: "overlay" | "pane", onSettings: (() => void) | null, onDelete: () => void, key: string) => (
+              // "own" one, Suppr/double-clic for a drawing) — this list is a second way to reach
+              // the same actions, not a new set of them, so nothing here can do anything the
+              // chart's own hover/pane-header UI can't.
+              const row = (label: string, badge: React.ReactNode, badgeTitle: string, onSettings: (() => void) | null, onDelete: () => void, key: string) => (
                 <div className="lq-chart__indicators-manager-row" key={key}>
-                  <span className="lq-chart__indicators-manager-badge" title={badge === "overlay" ? "Superposé au prix" : "Panneau séparé"}>
-                    {badge === "overlay" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
+                  <span className="lq-chart__indicators-manager-badge" title={badgeTitle}>
+                    {badge}
                   </span>
                   <span className="lq-chart__indicators-manager-name">{label}</span>
                   <span className="lq-chart__indicators-manager-actions">
@@ -5543,17 +5589,56 @@ export function CandlestickChart({
               );
               return (
                 <>
+                  {visibleDrawings.length > 0 && (
+                    <div className="lq-chart__indicator-picker-group">
+                      <div className="lq-chart__indicator-picker-group-label">Dessins</div>
+                      {visibleDrawings.map((dr) => {
+                        const ToolIcon = drawingToolMeta(dr).icon;
+                        return row(
+                          drawingLabel(dr),
+                          <ToolIcon size={13} />,
+                          drawingToolMeta(dr).label,
+                          () => {
+                            setEditingId(dr.id);
+                            setDraft(dr);
+                            setEditModalTab("coords");
+                          },
+                          () => commitDrawings(drawings.filter((d) => d.id !== dr.id)),
+                          dr.id
+                        );
+                      })}
+                    </div>
+                  )}
                   {overlay.length > 0 && (
                     <div className="lq-chart__indicator-picker-group">
                       <div className="lq-chart__indicator-picker-group-label">Superposés au prix</div>
-                      {overlay.map((ind) => row(indicatorLabel(ind), "overlay", () => openIndicatorSettings(ind.id), () => removeIndicator(ind.id), ind.id))}
+                      {overlay.map((ind) =>
+                        row(
+                          indicatorLabel(ind),
+                          <OverlayBadgeIcon size={13} />,
+                          "Superposé au prix",
+                          () => openIndicatorSettings(ind.id),
+                          () => removeIndicator(ind.id),
+                          ind.id
+                        )
+                      )}
                     </div>
                   )}
                   {(own.length > 0 || volumeVisible) && (
                     <div className="lq-chart__indicator-picker-group">
                       <div className="lq-chart__indicator-picker-group-label">En sous-panneau</div>
-                      {volumeVisible && row("Volume", "pane", null, () => setVolumePaneState("hidden"), "volume")}
-                      {own.map((ind) => row(indicatorLabel(ind), "pane", () => openIndicatorSettings(ind.id), () => removeIndicator(ind.id), ind.id))}
+                      {volumeVisible &&
+                        row("Volume", <PaneBadgeIcon size={13} />, "Panneau séparé", () => setVolumeSettingsOpen(true), () => setVolumePaneState("hidden"), "volume")}
+                      {own.map((ind) =>
+                        row(
+                          indicatorLabel(ind),
+                          <PaneBadgeIcon size={13} />,
+                          "Panneau séparé",
+                          () => openIndicatorSettings(ind.id),
+                          () => removeIndicator(ind.id),
+                          ind.id
+                        )
+                      )}
                     </div>
                   )}
                 </>
@@ -5700,6 +5785,43 @@ export function CandlestickChart({
                 />
               ))}
             </div>
+          )}
+        </Modal>
+      )}
+
+      {volumeSettingsOpen && (
+        <Modal open onClose={() => setVolumeSettingsOpen(false)} title="Paramètres du panneau Volume" footer={null}>
+          <div className="lq-chart__edit-drawing-row">
+            <div className="lq-field">
+              <label className="lq-field__label">Barres haussières</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={volumeUpColorOverride ?? upColorOverride ?? "#26a69a"}
+                onChange={(e) => setVolumeUpColorOverride(e.target.value)}
+              />
+            </div>
+            <div className="lq-field">
+              <label className="lq-field__label">Barres baissières</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={volumeDownColorOverride ?? downColorOverride ?? "#ef5350"}
+                onChange={(e) => setVolumeDownColorOverride(e.target.value)}
+              />
+            </div>
+          </div>
+          {(volumeUpColorOverride || volumeDownColorOverride) && (
+            <button
+              type="button"
+              className="lq-chart__inline-reset"
+              onClick={() => {
+                setVolumeUpColorOverride(undefined);
+                setVolumeDownColorOverride(undefined);
+              }}
+            >
+              Réinitialiser aux couleurs des bougies
+            </button>
           )}
         </Modal>
       )}
