@@ -338,18 +338,24 @@ export const WithSubPaneIndicators: Story = {
         RSI et MACD pré-ajoutés (`defaultIndicators`), CHOP aussi mais réduit à son bandeau (`paneCollapsed: true`)
         pour montrer les deux états d'un coup — cliquer son bouton ▲ ou <strong>double-clic sur son nom</strong>{" "}
         le rouvre (double-clic sur le nom d'un panneau déjà ouvert ouvre plutôt ses paramètres — <strong>Volume
-        aussi</strong>, ses seuls paramètres étant les couleurs de ses barres haussières/baissières). RSI/CHOP sont
-        bornés 0-100 par définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son
-        échelle en continu sur ce qui est visible (histogramme + ligne MACD + ligne de signal). La roue crantée
-        (paramètres) et la corbeille (suppression) de chaque en-tête sont positionnées juste à droite du nom du
-        panneau, seul le chevron réduire/agrandir reste à l'extrême droite. Glisser le fin liseré juste au-dessus
-        d'un en-tête de panneau (volume compris) redimensionne ce panneau ; glisser (ou double-clic pour
-        réinitialiser) son propre axe Y le rescale verticalement, indépendamment des autres. La{" "}
-        <strong>poignée à 6 points</strong> juste avant le nom de RSI/MACD/CHOP glisse pour réordonner les
-        panneaux entre eux (Volume reste toujours en premier). Le dernier bouton de la colonne d'outils, tout en
-        bas, ouvre <strong>"Dessins et indicateurs"</strong> : trois groupes — dessins actuellement sur le
-        graphe, indicateurs superposés au prix, indicateurs en sous-panneau (Volume compris) — chacun avec un
-        badge identifiant son type et sa propre roue crantée/corbeille.
+        aussi</strong>, ses seuls paramètres étant les couleurs de ses barres haussières/baissières). Juste à côté
+        du nom, un résumé de la valeur survolée (l'équivalent de l'OHLC du prix pour ce panneau — volume, valeur
+        RSI/CHOP, ou MACD/Signal/Histogramme). RSI/CHOP sont bornés 0-100 par définition (lignes de référence
+        30/70 et 38.2/61.8 en pointillés) ; MACD recadre son échelle en continu sur ce qui est visible
+        (histogramme + ligne MACD + ligne de signal). Le chevron réduire/agrandir est <strong>juste après la
+        poignée de réordonnancement, avant le nom</strong> (plus à l'extrême droite) ; la roue crantée
+        (paramètres) et la corbeille (suppression) restent juste après le nom. Glisser le fin liseré juste
+        au-dessus d'un en-tête de panneau (volume compris) redimensionne ce panneau ; glisser (ou double-clic
+        pour réinitialiser) son propre axe Y le rescale verticalement, indépendamment des autres. La{" "}
+        <strong>poignée à 6 points</strong> tout à gauche de RSI/MACD/CHOP glisse pour réordonner les panneaux
+        entre eux (l'échange se déclenche dès que le curseur franchit la moitié de la hauteur d'un panneau
+        voisin, pas besoin d'atteindre son bord — Volume reste toujours en premier). Le dernier bouton de la
+        colonne d'outils, tout en bas, ouvre <strong>"Dessins et indicateurs"</strong> : trois groupes — dessins
+        actuellement sur le graphe, indicateurs superposés au prix, indicateurs en sous-panneau (Volume compris)
+        — chacun avec un badge identifiant son type et sa propre roue crantée/corbeille. Les outils{" "}
+        <strong>Ligne horizontale</strong> et <strong>Ligne horizontale à partir d'une date</strong> se
+        dessinent aussi directement sur RSI/MACD/CHOP (pas seulement sur les prix ou le volume) : cliquer dans
+        un panneau y ancre la ligne dans son échelle propre.
       </p>
       <CandlestickChart
         data={MEDIUM_DATASET}

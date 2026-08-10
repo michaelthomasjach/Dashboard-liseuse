@@ -924,18 +924,13 @@
   cursor: grabbing;
 }
 
-/* "own"-pane indicators (RSI/CHOP/MACD) have no equivalent of hoverVolumeY tracking their own
-   screen area, so the collapse/expand chevron (a *direct* child of .lq-chart__pane-header — the
-   settings/delete group next to the name is nested one level deeper, inside
-   .lq-chart__pane-header-primary, so this direct-child selector doesn't reach it) sits at a
-   constant reduced opacity instead of hover-revealed — each button's own :hover (above) still
-   goes fully opaque individually. The settings/delete group next to the name stays fully opaque
-   at all times instead — it was accidentally caught by this same rule before the ">" combinator
-   was added here, since a plain descendant selector has higher specificity than the "--visible"
-   modifier class alone and silently won regardless of that class being present, making those two
-   buttons nearly invisible against the muted header text. */
-.lq-chart__pane-header--always-visible > .lq-chart__pane-header-actions {
-  opacity: 0.55;
+/* While a pane is being dragged by its own grip handle (see draggingPaneId/
+   handlePaneDragHandlePointer*) — the only feedback that a drag is actually in progress before
+   it crosses into a neighboring pane's own midpoint and triggers a swap, since the header itself
+   doesn't otherwise move or preview anything mid-drag. */
+.lq-chart__pane-header--dragging {
+  opacity: 0.6;
+  background-color: var(--lq-color-hover);
 }
 
 /* Thin strip straddling the divider at a pane's own top edge — drag to resize (see
@@ -981,6 +976,10 @@
 .lq-chart__indicator-picker-option {
   display: flex;
   align-items: center;
+  /* Pushes the trailing overlay/pane badge (see .lq-chart__indicators-manager-badge, reused
+     here) to the row's own right edge instead of sitting right after the name. */
+  justify-content: space-between;
+  width: 100%;
   padding: 8px;
   font-family: inherit;
   text-align: left;
