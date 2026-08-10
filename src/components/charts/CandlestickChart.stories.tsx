@@ -336,14 +336,28 @@ export const WithSubPaneIndicators: Story = {
     <div style={{ padding: 24 }}>
       <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
         RSI et MACD pré-ajoutés (`defaultIndicators`), CHOP aussi mais réduit à son bandeau (`paneCollapsed: true`)
-        pour montrer les deux états d'un coup — cliquer son bouton ▲ le rouvre. RSI/CHOP sont bornés 0-100 par
-        définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son échelle en continu sur
-        ce qui est visible (histogramme + ligne MACD + ligne de signal). La roue crantée (paramètres) et la
-        corbeille (suppression) de chaque en-tête sont positionnées juste à droite du nom du panneau, seul le
-        chevron réduire/agrandir reste à l'extrême droite. Glisser le fin liseré juste au-dessus d'un
-        en-tête de panneau (volume compris) redimensionne ce panneau.
+        pour montrer les deux états d'un coup — cliquer son bouton ▲ ou <strong>double-clic sur son nom</strong>{" "}
+        le rouvre (double-clic sur le nom d'un panneau déjà ouvert ouvre plutôt ses paramètres). RSI/CHOP sont
+        bornés 0-100 par définition (lignes de référence 30/70 et 38.2/61.8 en pointillés) ; MACD recadre son
+        échelle en continu sur ce qui est visible (histogramme + ligne MACD + ligne de signal). La roue crantée
+        (paramètres) et la corbeille (suppression) de chaque en-tête sont positionnées juste à droite du nom du
+        panneau, seul le chevron réduire/agrandir reste à l'extrême droite. Glisser le fin liseré juste au-dessus
+        d'un en-tête de panneau (volume compris) redimensionne ce panneau ; glisser (ou double-clic pour
+        réinitialiser) son propre axe Y le rescale verticalement, indépendamment des autres. La{" "}
+        <strong>poignée à 6 points</strong> juste avant le nom de RSI/MACD/CHOP glisse pour réordonner les
+        panneaux entre eux (Volume reste toujours en premier). Le dernier bouton de la colonne d'outils, tout en
+        bas, ouvre <strong>"Gérer les indicateurs"</strong> : la liste de tous les indicateurs actifs, groupés
+        superposés au prix / en sous-panneau avec un badge par type, chacun avec sa propre roue crantée/corbeille.
       </p>
-      <CandlestickChart data={MEDIUM_DATASET} showIndicators defaultIndicators={SUB_PANE_INDICATORS} timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
+      <CandlestickChart
+        data={MEDIUM_DATASET}
+        drawingTools
+        showIndicators
+        defaultIndicators={SUB_PANE_INDICATORS}
+        timeframes={TIMEFRAMES}
+        timeframe="1d"
+        height={STORY_HEIGHT}
+      />
     </div>
   ),
 };

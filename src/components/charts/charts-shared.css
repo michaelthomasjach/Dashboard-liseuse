@@ -203,6 +203,19 @@
   align-items: center;
   gap: 4px;
   padding-top: 4px;
+  padding-bottom: 4px;
+  /* So a button can be pinned to the bottom via margin-top: auto below — without a height, the
+     column would only ever be as tall as its own content and "pushed to the bottom" would have
+     nowhere to push to. */
+  height: 100%;
+}
+
+/* The indicators-manager button sits apart from every tool/toggle above it (it doesn't draw
+   anything or change tool state, it opens a management modal) — pinned to the rail's own bottom
+   edge via the auto margin above it eating the remaining flex space, rather than living inline
+   with the tool buttons where it'd read as one more drawing tool. */
+.lq-chart__tools-rail-bottom-button {
+  margin-top: auto;
 }
 
 .lq-chart__tool-group {
@@ -835,6 +848,12 @@
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--lq-color-text-muted);
+  /* The header itself is pointer-events: none (see .lq-chart__pane-header above) so it never
+     blocks the zoom/pan overlay underneath — the label opts back in on its own, same as the
+     action buttons do, so double-clicking it (see the header's own onDoubleClick) is actually
+     reachable instead of silently falling through to the overlay behind it. */
+  pointer-events: auto;
+  cursor: pointer;
 }
 
 /* Groups the label with its settings/delete actions so they sit together right after the name
@@ -878,10 +897,44 @@
   color: var(--lq-color-text);
 }
 
+/* Dedicated drag-to-reorder handle for an "own"-pane indicator header, right before its name —
+   a separate small button rather than making the whole header draggable, since the header
+   already carries the resize strip, double-click, and its own action buttons; giving reordering
+   its own explicit target keeps all of those unambiguous. touch-action: none so a touch-drag
+   doesn't also scroll the page while reordering. */
+.lq-chart__pane-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px;
+  margin-right: 2px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.lq-chart__pane-drag-handle:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__pane-drag-handle:active {
+  cursor: grabbing;
+}
+
 /* "own"-pane indicators (RSI/CHOP/MACD) have no equivalent of hoverVolumeY tracking their own
-   screen area, so their actions sit at a constant reduced opacity instead of hover-revealed —
-   each button's own :hover (above) still goes fully opaque individually. */
-.lq-chart__pane-header--always-visible .lq-chart__pane-header-actions {
+   screen area, so the collapse/expand chevron (a *direct* child of .lq-chart__pane-header — the
+   settings/delete group next to the name is nested one level deeper, inside
+   .lq-chart__pane-header-primary, so this direct-child selector doesn't reach it) sits at a
+   constant reduced opacity instead of hover-revealed — each button's own :hover (above) still
+   goes fully opaque individually. The settings/delete group next to the name stays fully opaque
+   at all times instead — it was accidentally caught by this same rule before the ">" combinator
+   was added here, since a plain descendant selector has higher specificity than the "--visible"
+   modifier class alone and silently won regardless of that class being present, making those two
+   buttons nearly invisible against the muted header text. */
+.lq-chart__pane-header--always-visible > .lq-chart__pane-header-actions {
   opacity: 0.55;
 }
 
@@ -953,6 +1006,50 @@
   font-size: 0.85rem;
   color: var(--lq-color-text-muted);
   text-align: center;
+}
+
+/* The "Gérer les indicateurs" modal — reuses .lq-chart__indicator-picker-group/-group-label
+   for its two sections (grouping is the one part identical to the "Ajouter un indicateur"
+   modal), just with its own row layout (badge + name + actions) instead of a plain button. */
+.lq-chart__indicators-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.lq-chart__indicators-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-chart__indicators-manager-row:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__indicators-manager-badge {
+  display: inline-flex;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-chart__indicators-manager-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-chart__indicators-manager-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
 .lq-chart__symbol-search-clear {

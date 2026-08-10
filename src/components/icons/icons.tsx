@@ -231,6 +231,46 @@ export const LockIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Six small dots in a 2x3 grid — the standard drag-handle affordance, filled rather than the
+ *  usual stroke-only outline (overridden per-shape since IconBase's own `fill="none"` is just a
+ *  default, not a hard constraint) since a handle this small reads far better solid. */
+export const GripIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <circle cx="9" cy="6" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="9" cy="18" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="6" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="12" r="1.3" fill="currentColor" stroke="none" />
+    <circle cx="15" cy="18" r="1.3" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Three stacked horizontal bars of decreasing width — reads as a "list/manage" affordance,
+ *  distinct from the hamburger-menu three-equal-bars look most icon sets reserve for navigation. */
+export const LayersIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 6h16M4 12h11M4 18h7" />
+  </IconBase>
+);
+
+/** Badge marking an indicator as drawn directly over the price candles (SMA/EMA/…) — a small
+ *  jagged line above a baseline, reading as "a line over the chart" even at badge size. */
+export const OverlayBadgeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 16h16" />
+    <path d="M6 13l4-5 4 3 4-6" />
+  </IconBase>
+);
+
+/** Badge marking an indicator as living in its own sub-panel below price (RSI/MACD/CHOP/Volume)
+ *  — two stacked rectangles, reading as "a separate panel of its own" even at badge size. */
+export const PaneBadgeIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="3.5" y="4" width="17" height="7" rx="1" />
+    <rect x="3.5" y="13" width="17" height="7" rx="1" />
+  </IconBase>
+);
+
 export const CalendarIcon = (props: IconProps) => (
   <IconBase {...props}>
     <rect x="3.5" y="5" width="17" height="15.5" rx="1.5" />

@@ -54,6 +54,10 @@ import {
   StarIcon,
   CloseIcon,
   LockIcon,
+  GripIcon,
+  LayersIcon,
+  OverlayBadgeIcon,
+  PaneBadgeIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -1431,6 +1435,10 @@ export function CandlestickChart({
   const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
   const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
   const [hoveredIndicatorId, setHoveredIndicatorId] = useState<string | null>(null);
+  // The tools-rail "manage indicators" modal (a flat list grouped by overlay/own-pane, not tied
+  // to hovering any one legend/pane entry) — separate from editingIndicatorId above, which is
+  // "which indicator's settings modal is open" and can be triggered *from* a row in this list.
+  const [indicatorsManagerOpen, setIndicatorsManagerOpen] = useState(false);
   // Ctrl/Cmd+C over a legend item copies it here (a ref, not state — it's never read during
   // render, so there's no reason to pay for a re-render just to remember it); Ctrl/Cmd+V pastes
   // a fresh copy (new id) appended to `indicators` from wherever this last got set. Deliberately
@@ -1444,6 +1452,9 @@ export function CandlestickChart({
   // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
   // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
   const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
+  // Which "own"-pane indicator is currently being dragged by its header's grip handle, for
+  // reordering (see reorderOwnPaneIndicators/handlePaneDragHandlePointer* below).
+  const dragPaneRef = useRef<{ id: string } | null>(null);
   const drawingIdRef = useRef(0);
   const indicatorIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1471,6 +1482,57 @@ export function CandlestickChart({
   // pane's own top divider (see startPaneResize). Missing entries fall back to
   // DEFAULT_PANE_HEIGHT_FRACTION, same as before per-pane resize existed at all.
   const [paneHeightFractions, setPaneHeightFractions] = useState<Record<string, number>>({});
+  // Manual vertical rescale for a sub-pane's own value axis (volume, or an "own"-pane
+  // indicator's, keyed the same way as paneHeightFractions above) — dragging that pane's own Y
+  // axis strip (see handlePaneYAxisPointerDown) sets a d3.ZoomTransform here, the same
+  // scale+translate representation `yTransform` already uses for the price axis, applied via the
+  // same `.rescaleY(baseScale)` call. Missing entries mean "not manually adjusted" (d3.zoomIdentity).
+  const [paneYTransform, setPaneYTransform] = useState<Record<string, d3.ZoomTransform>>({});
+  const paneYAxisDragRef = useRef<{ paneId: string; startPos: number; startTransform: d3.ZoomTransform; size: number } | null>(null);
+
+  function getPaneYTransform(paneId: string): d3.ZoomTransform {
+    return paneYTransform[paneId] ?? d3.zoomIdentity;
+  }
+
+  // Same drag-to-rescale math as useAxisDragRescale (dragging up zooms in, scales around the
+  // strip's own midpoint) — reimplemented rather than reused because that hook calls useRef
+  // itself, and the number of sub-panes needing this varies at runtime (one per indicator plus
+  // volume), which the rules of hooks don't allow calling a hook a variable number of times for.
+  // A single shared ref keyed by paneId, mirroring how dragEndpointRef/dragMeasureRef above
+  // already handle "one of several possible targets" without a hook each, does the same job.
+  function handlePaneYAxisPointerDown(paneId: string, size: number) {
+    return (e: React.PointerEvent) => {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      paneYAxisDragRef.current = { paneId, startPos: e.clientY, startTransform: getPaneYTransform(paneId), size };
+    };
+  }
+
+  function handlePaneYAxisPointerMove(e: React.PointerEvent) {
+    const drag = paneYAxisDragRef.current;
+    if (!drag) return;
+    const delta = e.clientY - drag.startPos;
+    const factor = Math.exp(-delta * 0.008);
+    const k0 = drag.startTransform.k;
+    const k1 = Math.min(20, Math.max(1, k0 * factor));
+    const center = drag.size / 2;
+    const t0 = drag.startTransform.y;
+    const t1 = center - (center - t0) * (k1 / k0);
+    setPaneYTransform((prev) => ({ ...prev, [drag.paneId]: d3.zoomIdentity.scale(k1).translate(0, t1 / k1) }));
+  }
+
+  function handlePaneYAxisPointerUp(e: React.PointerEvent) {
+    paneYAxisDragRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
+  function resetPaneYAxis(paneId: string) {
+    setPaneYTransform((prev) => {
+      if (!(paneId in prev)) return prev;
+      const next = { ...prev };
+      delete next[paneId];
+      return next;
+    });
+  }
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
   // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
@@ -1629,6 +1691,59 @@ export function CandlestickChart({
     window.addEventListener("pointerup", onUp);
   }
 
+  // Reorders the "own"-pane indicators (RSI/CHOP/MACD) among themselves, leaving every
+  // price-overlay indicator (SMA/EMA/…) exactly where it already sat in `indicators` — dragging a
+  // pane never needs a separate order field of its own since ownPaneIndicators' displayed order
+  // already *is* just indicators.filter(pane === "own"), so reordering the panes means splicing
+  // that subsequence back into the full array in its new order. Volume isn't reorderable (it
+  // isn't an `Indicator` at all, and stays pinned directly under price like most platforms do).
+  // Defensive against `newOwnOrder` being built from a snapshot that's gone slightly stale by
+  // the time this runs (pointermove can fire faster than React re-renders during a fast drag,
+  // so a queued call can still be working off the *previous* render's ownPaneIndicators) —
+  // rather than a bare `.find()!` that would throw and corrupt `indicators` with an `undefined`
+  // entry the moment an id doesn't resolve, unmatched ids are just dropped and any own-pane
+  // indicator this pass doesn't have a replacement for keeps its current spot.
+  function reorderOwnPaneIndicators(newOwnOrder: string[]) {
+    const byId = new Map(indicators.map((ind) => [ind.id, ind]));
+    const reordered = newOwnOrder.map((id) => byId.get(id)).filter((ind): ind is Indicator => ind !== undefined);
+    let cursor = 0;
+    const next = indicators.map((ind) => (indicatorCatalogEntry(ind.kind).pane === "own" ? (reordered[cursor++] ?? ind) : ind));
+    commitIndicators(next);
+  }
+
+  // Drag-to-reorder via a dedicated grip handle (not the whole header — that already carries
+  // resize/double-click/other buttons) — pointer capture routes move/up here regardless of what's
+  // under the cursor, same self-contained pattern as the endpoint-drag handlers above. Reorders
+  // live as the pointer crosses into a neighboring pane's own vertical span, rather than only
+  // committing on drop, so it reads as a real drag rather than a delayed swap.
+  function handlePaneDragHandlePointerDown(id: string) {
+    return (e: React.PointerEvent) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragPaneRef.current = { id };
+    };
+  }
+
+  function handlePaneDragHandlePointerMove(e: React.PointerEvent) {
+    const drag = dragPaneRef.current;
+    if (!drag) return;
+    const rect = zoomRef.current!.getBoundingClientRect();
+    const relY = e.clientY - rect.top - priceHeight - volumeHeight;
+    const targetIdx = indicatorPaneTops.findIndex((top, i) => relY >= top && relY < top + indicatorPaneHeights[i]);
+    if (targetIdx === -1) return;
+    const currentIds = ownPaneIndicators.map((i) => i.id);
+    const fromIdx = currentIds.indexOf(drag.id);
+    if (fromIdx === -1 || fromIdx === targetIdx) return;
+    currentIds.splice(fromIdx, 1);
+    currentIds.splice(targetIdx, 0, drag.id);
+    reorderOwnPaneIndicators(currentIds);
+  }
+
+  function handlePaneDragHandlePointerUp(e: React.PointerEvent) {
+    dragPaneRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
   // No breathing room between the price section and the volume section below it: the divider
   // line itself is the only separation, flush against both (same "the border delimits the
   // content" rule applied to the tools rail and the header above). Collapsed reduces the pane to
@@ -1769,6 +1884,11 @@ export function CandlestickChart({
     const max = d3.max(data, (d) => d.volume ?? 0) ?? 0;
     return d3.scaleLinear().domain([0, (max || 1) * 1.1]).range([volumeHeight, 0]);
   }, [data, volumeHeight]);
+  // Manually rescaled view of volumeScale (see paneYTransform above) — every rendering/hit-test/
+  // drawing-placement site below reads this instead of the base scale, same "zoomedX wraps X"
+  // convention as zoomedPriceScale/priceScale; volumeScale itself stays the un-rescaled source of
+  // truth the transform is applied on top of.
+  const zoomedVolumeScale = useMemo(() => (paneYTransform["volume"] ?? d3.zoomIdentity).rescaleY(volumeScale), [paneYTransform, volumeScale]);
 
   // High enough that zooming all the way in leaves roughly one candle's slot filling the
   // viewport, regardless of how many candles are in `data` (a fixed cap like 20 would only
@@ -1893,7 +2013,7 @@ export function CandlestickChart({
 
   function addVolumeLine() {
     if (hoverVolumeY === null) return;
-    const volume = volumeScale.invert(hoverVolumeY);
+    const volume = zoomedVolumeScale.invert(hoverVolumeY);
     commitDrawings([
       ...drawings,
       {
@@ -2066,7 +2186,7 @@ export function CandlestickChart({
       const mouseY = e.clientY - rect.top;
       const d0 = data[0].date;
       const d1 = data[data.length - 1].date;
-      const roundedVolumeY = round4(volumeScale.invert(mouseY - priceHeight));
+      const roundedVolumeY = round4(zoomedVolumeScale.invert(mouseY - priceHeight));
       const drawing: TrendLineDrawing =
         volumeVisible && mouseY > priceHeight
           ? {
@@ -2141,7 +2261,7 @@ export function CandlestickChart({
     if (activeTool === "ray") {
       const rect = zoomRef.current!.getBoundingClientRect();
       const mouseY = e.clientY - rect.top;
-      const roundedVolumeY = round4(volumeScale.invert(mouseY - priceHeight));
+      const roundedVolumeY = round4(zoomedVolumeScale.invert(mouseY - priceHeight));
       const drawing: TrendLineDrawing =
         volumeVisible && mouseY > priceHeight
           ? {
@@ -2405,7 +2525,7 @@ export function CandlestickChart({
     const rect = zoomRef.current!.getBoundingClientRect();
     if (dr.lineType === "horizontal") {
       const mouseY = e.clientY - rect.top;
-      const value = round4(dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
+      const value = round4(dr.valueAxis === "volume" ? zoomedVolumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: value, y2: value } : d)));
     } else if (dr.lineType === "vertical") {
       const mouseX = e.clientX - rect.left;
@@ -2418,7 +2538,7 @@ export function CandlestickChart({
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
-      const value = round4(dr.valueAxis === "volume" ? volumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
+      const value = round4(dr.valueAxis === "volume" ? zoomedVolumeScale.invert(mouseY - priceHeight) : zoomedPriceScale.invert(mouseY));
       commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue, y1: value, y2: value } : d)));
     } else if (dr.lineType === "channel") {
       // A channel's 3rd handle only adjusts channelOffset (single axis, vertical) — line 1's own
@@ -2572,6 +2692,18 @@ export function CandlestickChart({
     });
     return scales;
   }, [ownPaneIndicators, indicatorPaneHeights, visibleIndicators]);
+  // Manually rescaled view of each own-pane indicator's own scale, same idea as
+  // zoomedVolumeScale above — RSI/CHOP's 0-100 domain or MACD's auto-fit one, whichever
+  // ownPaneScales built for that pane, rescaled by whatever that one pane's own axis has been
+  // dragged to (independent of every other pane's).
+  const zoomedOwnPaneScales = useMemo(() => {
+    const scales: Record<string, d3.ScaleLinear<number, number>> = {};
+    ownPaneIndicators.forEach((ind) => {
+      const base = ownPaneScales[ind.id];
+      if (base) scales[ind.id] = (paneYTransform[ind.id] ?? d3.zoomIdentity).rescaleY(base);
+    });
+    return scales;
+  }, [ownPaneIndicators, ownPaneScales, paneYTransform]);
 
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
@@ -2605,7 +2737,7 @@ export function CandlestickChart({
       if (drag.orig.lineType === "horizontal") {
         // Dragging the body moves it exactly like its single handle would — only the
         // perpendicular axis (here, price/volume) can change.
-        const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
+        const scale = drag.orig.valueAxis === "volume" ? zoomedVolumeScale : zoomedPriceScale;
         const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: newValue, y2: newValue } : d)));
       } else if (drag.orig.lineType === "vertical") {
@@ -2617,7 +2749,7 @@ export function CandlestickChart({
         // moves its one anchor point in both date and price/volume at once.
         const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
         const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
-        const scale = drag.orig.valueAxis === "volume" ? volumeScale : zoomedPriceScale;
+        const scale = drag.orig.valueAxis === "volume" ? zoomedVolumeScale : zoomedPriceScale;
         const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
         commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate, y1: newValue, y2: newValue } : d)));
       } else {
@@ -2652,7 +2784,14 @@ export function CandlestickChart({
     const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
     setHoverIndex(index);
     setHoverY(mouseY <= priceHeight ? mouseY : null);
-    setHoverVolumeY(volumeVisible && !volumeCollapsed && mouseY > priceHeight ? mouseY - priceHeight : null);
+    // Upper-bounded by priceHeight + volumeHeight, not just a bare "> priceHeight" — without the
+    // upper bound, hovering into an "own"-pane indicator below volume (RSI/MACD/CHOP, which also
+    // satisfies mouseY > priceHeight) incorrectly kept showing the volume hover line/badge there
+    // too, since nothing distinguished "below the price section" from "specifically inside the
+    // volume pane".
+    setHoverVolumeY(
+      volumeVisible && !volumeCollapsed && mouseY > priceHeight && mouseY <= priceHeight + volumeHeight ? mouseY - priceHeight : null
+    );
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
@@ -2664,11 +2803,11 @@ export function CandlestickChart({
         // than between their stored x1/x2 pixel positions, so hit-testing has to match that.
         let d: number;
         if (dr.lineType === "horizontal") {
-          const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+          const y = dr.valueAxis === "volume" ? priceHeight + zoomedVolumeScale(dr.y1) : zoomedPriceScale(dr.y1);
           d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
         } else if (dr.lineType === "ray") {
           const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const y = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+          const y = dr.valueAxis === "volume" ? priceHeight + zoomedVolumeScale(dr.y1) : zoomedPriceScale(dr.y1);
           d = distanceToSegment(mouseX, mouseY, x, y, dims.boundedWidth, y);
         } else if (dr.lineType === "vertical") {
           const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
@@ -3642,7 +3781,7 @@ export function CandlestickChart({
         for (const { d, i } of visible) {
           const cx = zoomedXScale(i + 0.5);
           const up = d.close >= d.open;
-          const barHeight = Math.max(0, volumeHeight - volumeScale(d.volume ?? 0));
+          const barHeight = Math.max(0, volumeHeight - zoomedVolumeScale(d.volume ?? 0));
           ctx.globalAlpha = isEink ? (up ? 0.15 : 0.35) : 0.55;
           ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
           ctx.fillRect(cx - candleWidth / 2, volumeHeight - barHeight, candleWidth, barHeight);
@@ -3663,7 +3802,7 @@ export function CandlestickChart({
           ctx.strokeStyle = lineColor;
           ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
           ctx.setLineDash(lineDashArray(dr));
-          const y = volumeScale(dr.y1);
+          const y = zoomedVolumeScale(dr.y1);
           const x = dr.lineType === "ray" ? zoomedXScale(indexForDate(dr.x1) + 0.5) : 0;
           ctx.beginPath();
           ctx.moveTo(x, y);
@@ -3715,7 +3854,7 @@ export function CandlestickChart({
       ctx.translate(0, paneTop);
 
       const color = ind.color ?? defaultIndicatorColor(indicators.indexOf(ind));
-      const scale = ownPaneScales[ind.id];
+      const scale = zoomedOwnPaneScales[ind.id];
       if (!scale) {
         ctx.restore();
         return;
@@ -3857,13 +3996,13 @@ export function CandlestickChart({
     downColorOverride,
     volumeVisible,
     volumeCollapsed,
-    volumeScale,
+    zoomedVolumeScale,
     volumeHeight,
     priceHeight,
     ownPaneIndicators,
     indicatorPaneHeights,
     indicatorPaneTops,
-    ownPaneScales,
+    zoomedOwnPaneScales,
     indicators,
     hovered,
     hoverY,
@@ -4171,6 +4310,25 @@ export function CandlestickChart({
               >
                 <LockIcon size={14} />
               </button>
+              {/* Pinned to the rail's own bottom edge (see .lq-chart__tools-rail-bottom-button),
+                  separate from every tool/toggle above — opens a flat, grouped list of every
+                  currently active indicator (overlay and own-pane alike) with a settings/delete
+                  action per row, instead of having to hunt each one down on the chart itself
+                  (hovering a legend entry, or a collapsed pane that hides its own actions). */}
+              {showIndicators && (
+                <button
+                  type="button"
+                  className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", indicatorsManagerOpen && "lq-chart__icon-button--active"]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => setIndicatorsManagerOpen((o) => !o)}
+                  aria-label="Gérer les indicateurs"
+                  aria-pressed={indicatorsManagerOpen}
+                  title="Voir et gérer tous les indicateurs actifs"
+                >
+                  <LayersIcon size={14} />
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -4290,7 +4448,13 @@ export function CandlestickChart({
               />
             )}
             <div className="lq-chart__pane-header-primary">
-              <span className="lq-chart__pane-header-label">Volume</span>
+              {/* The header itself is pointer-events: none (see .lq-chart__pane-header-label's
+                  own CSS) so double-clicking has to target the label specifically, not the
+                  header div as a whole — only collapsed → expanded, there's no equivalent
+                  "settings" action an already-expanded pane's name would make sense opening. */}
+              <span className="lq-chart__pane-header-label" onDoubleClick={() => volumeCollapsed && setVolumePaneState("expanded")}>
+                Volume
+              </span>
               {!volumeCollapsed && (
                 <div
                   className={["lq-chart__pane-header-actions", hoverVolumeY !== null && "lq-chart__pane-header-actions--visible"]
@@ -4354,7 +4518,6 @@ export function CandlestickChart({
               width: dims.boundedWidth,
               height: SUB_PANE_COLLAPSED_HEIGHT,
             }}
-            onDoubleClick={() => openIndicatorSettings(ind.id)}
           >
             {!ind.paneCollapsed && (
               <div
@@ -4364,7 +4527,33 @@ export function CandlestickChart({
               />
             )}
             <div className="lq-chart__pane-header-primary">
-              <span className="lq-chart__pane-header-label">{indicatorLabel(ind)}</span>
+              <button
+                type="button"
+                className="lq-chart__pane-drag-handle"
+                onPointerDown={handlePaneDragHandlePointerDown(ind.id)}
+                onPointerMove={handlePaneDragHandlePointerMove}
+                onPointerUp={handlePaneDragHandlePointerUp}
+                aria-label={`Réordonner ${indicatorLabel(ind)}`}
+                title="Glisser pour réordonner les panneaux"
+              >
+                <GripIcon size={12} />
+              </button>
+              {/* The header itself is pointer-events: none (see .lq-chart__pane-header-label's
+                  own CSS) so double-clicking has to target the label specifically. Collapsed:
+                  expands the pane instead of opening its settings — there's no gear button
+                  visible to double-click toward while collapsed anyway (see below), so this is
+                  the only way to reach it short of the chevron. Expanded: same settings shortcut
+                  as before, matching the indicator legend's own double-click convention. */}
+              <span
+                className="lq-chart__pane-header-label"
+                onDoubleClick={() =>
+                  ind.paneCollapsed
+                    ? commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))
+                    : openIndicatorSettings(ind.id)
+                }
+              >
+                {indicatorLabel(ind)}
+              </span>
               {!ind.paneCollapsed && (
                 <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
                   <button
@@ -4433,11 +4622,25 @@ export function CandlestickChart({
                 {!volumeCollapsed && (
                   <g transform={`translate(0, ${priceHeight})`}>
                     <ChartAxis
-                      scale={volumeScale}
+                      scale={zoomedVolumeScale}
                       orientation="right"
                       transform={`translate(${dims.boundedWidth}, 0)`}
                       ticks={2}
                       tickFormat={(v) => vFmt(Number(v))}
+                    />
+                    {/* Drag (or double-click to reset) the volume pane's own axis to rescale just
+                        this pane vertically — same convention as the price axis's own strip,
+                        independent of it and of every other pane's own rescale. */}
+                    <rect
+                      className="lq-chart__axis-drag lq-chart__axis-drag--y"
+                      x={dims.boundedWidth}
+                      y={0}
+                      width={dims.margin.right}
+                      height={volumeHeight}
+                      onPointerDown={handlePaneYAxisPointerDown("volume", volumeHeight)}
+                      onPointerMove={handlePaneYAxisPointerMove}
+                      onPointerUp={handlePaneYAxisPointerUp}
+                      onDoubleClick={() => resetPaneYAxis("volume")}
                     />
                   </g>
                 )}
@@ -4456,17 +4659,31 @@ export function CandlestickChart({
             )}
 
             {/* Same pair (a few ticks + a divider extension into the price-axis label column) as
-                volume above, once per "own"-pane indicator — ownPaneScales is shared with the
-                canvas draw effect so these ticks always land exactly on what's actually drawn. */}
+                volume above, once per "own"-pane indicator — zoomedOwnPaneScales is shared with
+                the canvas draw effect so these ticks always land exactly on what's actually
+                drawn, manual rescale included. A drag strip over the ticks lets that rescale
+                happen in the first place, same convention as the price/volume axes. */}
             {ownPaneIndicators.map((ind, idx) => {
               const paneTop = priceHeight + volumeHeight + indicatorPaneTops[idx];
-              const scale = ownPaneScales[ind.id];
+              const paneHeight = indicatorPaneHeights[idx];
+              const scale = zoomedOwnPaneScales[ind.id];
               if (!scale) return null;
               return (
                 <g key={ind.id}>
                   {!ind.paneCollapsed && (
                     <g transform={`translate(0, ${paneTop})`}>
                       <ChartAxis scale={scale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} ticks={3} />
+                      <rect
+                        className="lq-chart__axis-drag lq-chart__axis-drag--y"
+                        x={dims.boundedWidth}
+                        y={0}
+                        width={dims.margin.right}
+                        height={paneHeight}
+                        onPointerDown={handlePaneYAxisPointerDown(ind.id, paneHeight)}
+                        onPointerMove={handlePaneYAxisPointerMove}
+                        onPointerUp={handlePaneYAxisPointerUp}
+                        onDoubleClick={() => resetPaneYAxis(ind.id)}
+                      />
                     </g>
                   )}
                   <line
@@ -4553,7 +4770,7 @@ export function CandlestickChart({
                 // they don't move on (never at their data endpoints, which aren't meaningful
                 // drag targets here — the whole line only has one degree of freedom).
                 if (dr.lineType === "horizontal") {
-                  const cy = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+                  const cy = dr.valueAxis === "volume" ? priceHeight + zoomedVolumeScale(dr.y1) : zoomedPriceScale(dr.y1);
                   return (
                     <circle
                       key={dr.id}
@@ -4585,7 +4802,7 @@ export function CandlestickChart({
                 // horizontal/vertical's fixed-fraction handle) since that anchor is itself
                 // meaningful and draggable in both axes.
                 if (dr.lineType === "ray") {
-                  const cy = dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : zoomedPriceScale(dr.y1);
+                  const cy = dr.valueAxis === "volume" ? priceHeight + zoomedVolumeScale(dr.y1) : zoomedPriceScale(dr.y1);
                   return (
                     <circle
                       key={dr.id}
@@ -4732,7 +4949,7 @@ export function CandlestickChart({
             <button type="button" className="lq-chart__axis-value-add" onClick={addVolumeLine} aria-label="Ajouter une ligne de volume horizontale">
               <PlusIcon size={9} />
             </button>
-            <span className="lq-chart__axis-value-text">{vFmt(volumeScale.invert(hoverVolumeY))}</span>
+            <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
           </div>
         )}
         {hovered && (
@@ -4840,7 +5057,7 @@ export function CandlestickChart({
               key={dr.id}
               className="lq-chart__axis-value lq-chart__axis-value--y"
               style={{
-                top: dims.margin.top + (dr.valueAxis === "volume" ? priceHeight + volumeScale(dr.y1) : clampToPriceAxis(zoomedPriceScale(dr.y1))),
+                top: dims.margin.top + (dr.valueAxis === "volume" ? priceHeight + zoomedVolumeScale(dr.y1) : clampToPriceAxis(zoomedPriceScale(dr.y1))),
                 left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
               }}
             >
@@ -5286,6 +5503,59 @@ export function CandlestickChart({
                       ))}
                     </div>
                   ))}
+                </>
+              );
+            })()}
+          </div>
+        </Modal>
+      )}
+
+      {indicatorsManagerOpen && (
+        <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Gérer les indicateurs" footer={null}>
+          <div className="lq-chart__indicators-manager">
+            {(() => {
+              const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
+              const own = ownPaneIndicators;
+              if (overlay.length === 0 && own.length === 0 && !volumeVisible) {
+                return <p className="lq-chart__indicator-picker-empty">Aucun indicateur actif.</p>;
+              }
+              // A row's own two actions mirror exactly what's already reachable from the chart
+              // itself (the legend's roue crantée/corbeille for an overlay, a pane header's for an
+              // "own" one) — this list is a second way to reach the same actions, not a new set of
+              // them, so nothing here can do anything the chart's own hover/pane-header UI can't.
+              const row = (label: string, badge: "overlay" | "pane", onSettings: (() => void) | null, onDelete: () => void, key: string) => (
+                <div className="lq-chart__indicators-manager-row" key={key}>
+                  <span className="lq-chart__indicators-manager-badge" title={badge === "overlay" ? "Superposé au prix" : "Panneau séparé"}>
+                    {badge === "overlay" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
+                  </span>
+                  <span className="lq-chart__indicators-manager-name">{label}</span>
+                  <span className="lq-chart__indicators-manager-actions">
+                    {onSettings && (
+                      <button type="button" className="lq-chart__pane-header-action" onClick={onSettings} aria-label={`Paramètres ${label}`}>
+                        <SettingsIcon size={13} />
+                      </button>
+                    )}
+                    <button type="button" className="lq-chart__pane-header-action" onClick={onDelete} aria-label={`Supprimer ${label}`}>
+                      <TrashIcon size={13} />
+                    </button>
+                  </span>
+                </div>
+              );
+              return (
+                <>
+                  {overlay.length > 0 && (
+                    <div className="lq-chart__indicator-picker-group">
+                      <div className="lq-chart__indicator-picker-group-label">Superposés au prix</div>
+                      {overlay.map((ind) => row(indicatorLabel(ind), "overlay", () => openIndicatorSettings(ind.id), () => removeIndicator(ind.id), ind.id))}
+                    </div>
+                  )}
+                  {(own.length > 0 || volumeVisible) && (
+                    <div className="lq-chart__indicator-picker-group">
+                      <div className="lq-chart__indicator-picker-group-label">En sous-panneau</div>
+                      {volumeVisible && row("Volume", "pane", null, () => setVolumePaneState("hidden"), "volume")}
+                      {own.map((ind) => row(indicatorLabel(ind), "pane", () => openIndicatorSettings(ind.id), () => removeIndicator(ind.id), ind.id))}
+                    </div>
+                  )}
                 </>
               );
             })()}
