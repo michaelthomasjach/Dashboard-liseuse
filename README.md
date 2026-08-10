@@ -8,6 +8,8 @@ Bibliothèque de composants React pour construire des tableaux de bord — domot
 
 Les quatre combinaisons palette × surface sont pilotées par variables CSS ; aucune classe conditionnelle à gérer côté consommateur. Les deux palettes partagent la **même géométrie** — coins carrés partout (`--lq-radius-*` vaut `0px` dans les deux cas), `color` n'est qu'une variante *colorée* du même langage visuel qu'`eink`, pas un style différent. Les couleurs de `color` sont volontairement **pastel/dusty** (désaturées) plutôt que des teintes UI-kit brutes, pour rester cohérentes avec la sobriété d'`eink`.
 
+📖 **[Documentation complète (Storybook)](https://michaelthomasjach.github.io/liseuse-dashboard-kit/)** — catalogue interactif de tous les composants, avec leurs props et variantes.
+
 ## Installation
 
 Le package est publié sur **GitHub Packages**, pas sur npmjs.org. Il faut donc router le scope `@michaelthomasjach` vers le registre GitHub.
