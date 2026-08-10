@@ -205,8 +205,10 @@ export const WithShapesAndMeasure: Story = {
         <strong>ligne fléchée</strong> (une ligne de tendance ordinaire avec une pointe de flèche à son 2ème point).
         Catégorie <strong>Mesure</strong> : 1er clic = départ, 2ème clic = arrivée — affiche une zone
         semi-transparente (verte/rouge selon le sens) plus un encadré à 4 valeurs (%, nombre de barres, nombre de
-        jours, delta de prix en points) ; un 3ème clic démarre directement une nouvelle mesure, Échap ou changer
-        d'outil l'efface (ce n'est pas un dessin persistant comme les autres). Un fin trait sépare la catégorie{" "}
+        jours, delta de prix en points), puis se désélectionne automatiquement (contrairement aux autres outils) —
+        la mesure reste affichée, chacun de ses deux points redevient déplaçable par sa propre poignée pour la
+        repositionner (l'encadré recalcule en direct), recliquer le bouton en démarre une nouvelle, Échap l'efface
+        (ce n'est pas un dessin persistant comme les autres). Un fin trait sépare la catégorie{" "}
         <strong>Formes</strong> de <strong>Mesure</strong> dans la colonne, dont l'outil a désormais une icône de
         règle. Le bouton <strong>aimant</strong>{" "}
         (à droite des catégories) est un interrupteur, pas un outil : une fois activé, tout nouveau point placé

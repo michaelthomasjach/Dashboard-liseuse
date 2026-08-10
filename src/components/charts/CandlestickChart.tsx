@@ -1421,6 +1421,10 @@ export function CandlestickChart({
   // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
   const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
   const dragAxisRef = useRef<{ id: string } | null>(null);
+  // Which of the measure tool's two completed points (not a `drawings` entry, see measurePoints
+  // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
+  // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
+  const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
   const drawingIdRef = useRef(0);
   const indicatorIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1929,7 +1933,11 @@ export function CandlestickChart({
   }
 
   useEffect(() => {
-    if (!activeTool) return;
+    // Also armed while only a completed measurement lingers (activeTool already back to null by
+    // then, see the "measure" branch of handleOverlayClick above) so Escape can still dismiss it —
+    // every other tool only needs this while still active, since none of them outlive their own
+    // deselection the way a finished measurement does.
+    if (!activeTool && !measurePoints) return;
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
@@ -1957,7 +1965,7 @@ export function CandlestickChart({
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange]);
+  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange, measurePoints]);
 
   // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
   // already tracks the one line the user is pointing at, same thing a click-to-select would give
@@ -2092,8 +2100,10 @@ export function CandlestickChart({
       return;
     }
     // Measure doesn't create a `drawings` entry — its result is ephemeral (measurePoints, cleared
-    // on Escape/tool switch). Deliberately doesn't cancelDrawingTool() after the 2nd click, so a
-    // 3rd click starts a fresh measurement immediately instead of needing the tool reselected.
+    // on Escape/tool switch). The tool deselects itself right after the 2nd click (unlike every
+    // other tool, which stays active until Escape/reclick) — the completed measurement then stays
+    // on screen with its own draggable handles (see the measure-handle drag functions below)
+    // instead of disappearing, so re-clicking the tool button is what starts a fresh one.
     if (activeTool === "measure") {
       if (!pendingPoint) {
         setPendingPoint(point);
@@ -2103,6 +2113,7 @@ export function CandlestickChart({
       setMeasurePoints({ p1: pendingPoint, p2: point });
       setPendingPoint(null);
       setPreviewPoint(null);
+      setActiveTool(null);
       return;
     }
     // Same price/volume detection as "horizontal" above, but anchored at the clicked date
@@ -2327,6 +2338,29 @@ export function CandlestickChart({
 
   function handleEndpointPointerUp(e: React.PointerEvent<SVGCircleElement>) {
     dragEndpointRef.current = null;
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  }
+
+  // Redefines one of the measure tool's two completed points by dragging its handle — same
+  // pointer-capture-on-the-handle pattern as a drawing endpoint above, just writing to
+  // measurePoints instead of `drawings` (a measurement was never one to begin with).
+  function handleMeasureHandlePointerDown(point: "p1" | "p2") {
+    return (e: React.PointerEvent<SVGCircleElement>) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragMeasureRef.current = point;
+    };
+  }
+
+  function handleMeasureHandlePointerMove(e: React.PointerEvent<SVGCircleElement>) {
+    const point = dragMeasureRef.current;
+    if (!point) return;
+    const next = toDataPoint(e);
+    setMeasurePoints((mp) => (mp ? { ...mp, [point]: next } : mp));
+  }
+
+  function handleMeasureHandlePointerUp(e: React.PointerEvent<SVGCircleElement>) {
+    dragMeasureRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
@@ -4599,6 +4633,33 @@ export function CandlestickChart({
                   </g>
                 );
               })}
+              {/* The measure tool's own two points, draggable to redefine the measurement after
+                  the tool has already deselected itself (see the "measure" branch of
+                  handleOverlayClick) — always shown while a measurement exists rather than
+                  hover-gated like the drawing handles above, since there's only ever at most one
+                  measurement on screen at a time. */}
+              {measurePoints && (
+                <>
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={zoomedXScale(indexForDate(measurePoints.p1.x) + 0.5)}
+                    cy={zoomedPriceScale(measurePoints.p1.y)}
+                    r={5}
+                    onPointerDown={handleMeasureHandlePointerDown("p1")}
+                    onPointerMove={handleMeasureHandlePointerMove}
+                    onPointerUp={handleMeasureHandlePointerUp}
+                  />
+                  <circle
+                    className="lq-chart__drawing-handle"
+                    cx={zoomedXScale(indexForDate(measurePoints.p2.x) + 0.5)}
+                    cy={zoomedPriceScale(measurePoints.p2.y)}
+                    r={5}
+                    onPointerDown={handleMeasureHandlePointerDown("p2")}
+                    onPointerMove={handleMeasureHandlePointerMove}
+                    onPointerUp={handleMeasureHandlePointerUp}
+                  />
+                </>
+              )}
             </g>
 
             {/* Rendered last, same reasoning as the drawing handles above — needs to sit on top
