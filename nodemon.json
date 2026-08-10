@@ -1,0 +1,6 @@
+{
+  "watch": [".storybook", "package.json"],
+  "ext": "ts,tsx,js,mjs,cjs,json,html",
+  "exec": "node scripts/dev.mjs",
+  "delay": 500
+}
