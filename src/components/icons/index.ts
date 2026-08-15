@@ -83,4 +83,5 @@ export {
   ElbowArrowIcon,
   BrushIcon,
   ArrowLineIcon,
+  ZonesIcon,
 } from "./icons";

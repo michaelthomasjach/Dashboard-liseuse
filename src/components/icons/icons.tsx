@@ -661,3 +661,14 @@ export const ArrowLineIcon = (props: IconProps) => (
     <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+/** A box split into three horizontal bands by two divider lines, "+" in the top one and "−" in
+ *  the bottom one — the positive/neutral/negative zones this tool lays over a price range. */
+export const ZonesIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="3.5" y="3.5" width="17" height="17" rx="1" />
+    <path d="M3.5 9h17M3.5 15h17" />
+    <path d="M12 4.7v2.1M10.95 5.75h2.1" />
+    <path d="M10.95 18.25h2.1" />
+  </IconBase>
+);

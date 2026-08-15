@@ -59,6 +59,7 @@ import {
   LayersIcon,
   OverlayBadgeIcon,
   PaneBadgeIcon,
+  ZonesIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -229,7 +230,8 @@ export interface TrendLineDrawing {
     | "elbowArrow"
     | "brush"
     | "arrowUp"
-    | "arrowDown";
+    | "arrowDown"
+    | "zones";
   /** Which pane's own value scale y is expressed in — "price" (default), "volume", or the id of
    *  an "own"-pane indicator (RSI/CHOP/MACD) to anchor a "horizontal"/"ray" line to that pane
    *  instead — a single click (no pending-point/preview phase to thread pane state through,
@@ -245,6 +247,21 @@ export interface TrendLineDrawing {
    *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
    *  (line 2's own two points — see `lineType` above for how they're derived). Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
+  /** "zones" only: x1/y1 and x2/y2 are still opposite corners like "rectangle", but split the
+   *  price pane into three horizontal bands instead of one filled box — above the higher of the
+   *  two into "positive", below the lower one into "negative", the box itself staying "neutral".
+   *  Its two horizontal boundaries (at y1 and y2) always draw; the rectangle's left/right sides
+   *  only draw when this is true (default false/hidden — the positive/negative bands read as
+   *  unbounded regions, not a box, without them cluttering the two edges that actually matter). */
+  showZoneSides?: boolean;
+  /** "zones" only: independent fill for each of its three bands. Each falls back to a theme
+   *  color living up to its name (`--lq-color-up`/`-down`, muted) when unset, so the tool reads
+   *  as "positive/neutral/negative" correctly without the caller having to touch a color picker
+   *  first. The boundary/side lines themselves still use the regular `color` field, same as
+   *  every other tool. */
+  positiveColor?: string;
+  negativeColor?: string;
+  neutralColor?: string;
 }
 
 /** Standard Fibonacci retracement ratios, 0 (y1) to 1 (y2) — the same default set most trading
@@ -805,7 +822,8 @@ type DrawingToolType =
   | "brush"
   | "arrowUp"
   | "arrowDown"
-  | "arrowLine";
+  | "arrowLine"
+  | "zones";
 
 interface DrawingToolDef {
   type: DrawingToolType;
@@ -854,6 +872,7 @@ const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
     id: "shapes",
     tools: [
       { type: "rectangle", label: "Rectangle", icon: RectangleShapeIcon },
+      { type: "zones", label: "Zones (positif/neutre/négatif)", icon: ZonesIcon },
       { type: "elbowArrow", label: "Flèche coudée", icon: ElbowArrowIcon },
       { type: "brush", label: "Pinceau", icon: BrushIcon },
       { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon },
@@ -2469,10 +2488,10 @@ export function CandlestickChart({
       return;
     }
 
-    // "trendline", "extended", "fibonacci" and "rectangle" all share the same 2-click flow —
-    // they only differ in how they're drawn (see the canvas draw effect) and, for "rectangle",
-    // hit-tested, not in how they're placed. "arrowLine" is the same flow again but stays
-    // lineType-less like a plain trend line, just with arrowRight preset.
+    // "trendline", "extended", "fibonacci", "rectangle" and "zones" all share the same 2-click
+    // flow — they only differ in how they're drawn (see the canvas draw effect) and, for
+    // "rectangle"/"zones", hit-tested, not in how they're placed. "arrowLine" is the same flow
+    // again but stays lineType-less like a plain trend line, just with arrowRight preset.
     if (!pendingPoint) {
       setPendingPoint(point);
       setPreviewPoint(point);
@@ -2484,7 +2503,9 @@ export function CandlestickChart({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
-      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" ? { lineType: activeTool } : {}),
+      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "zones"
+        ? { lineType: activeTool }
+        : {}),
       ...(activeTool === "arrowLine" ? { arrowRight: true } : {}),
     };
     commitDrawings([...drawings, drawing]);
@@ -3016,6 +3037,23 @@ export function CandlestickChart({
             distanceToSegment(mouseX, mouseY, rx2, ry2, rx1, ry2),
             distanceToSegment(mouseX, mouseY, rx1, ry2, rx1, ry1)
           );
+        } else if (dr.lineType === "zones") {
+          // Unlike "rectangle" above (outline-only hit-testing), the three bands together fill
+          // the whole pane height for this x-range — so anywhere inside that column counts as a
+          // direct hit (d = 0), not just near one of the two boundary lines.
+          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const left = Math.min(rx1, rx2);
+          const right = Math.max(rx1, rx2);
+          d =
+            mouseX >= left && mouseX <= right && mouseY >= 0 && mouseY <= priceHeight
+              ? 0
+              : Math.min(
+                  distanceToSegment(mouseX, mouseY, left, 0, right, 0),
+                  distanceToSegment(mouseX, mouseY, left, priceHeight, right, priceHeight),
+                  distanceToSegment(mouseX, mouseY, left, 0, left, priceHeight),
+                  distanceToSegment(mouseX, mouseY, right, 0, right, priceHeight)
+                );
         } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
           d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
         } else if (dr.lineType === "fibonacciExtension") {
@@ -3423,13 +3461,15 @@ export function CandlestickChart({
     // own-pane indicator are drawn within that pane's own clipped section instead, "vertical"
     // ones are drawn full-height further down, outside any clip).
     for (const dr of visibleDrawings) {
-      // "rectangle"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown" have their own geometry entirely
-      // unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras" shape
-      // every other type below shares — drawn in their own dedicated loops further down instead,
-      // same reasoning "vertical" (full-height, outside this clip) already skips this one for.
+      // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown" have their own geometry
+      // entirely unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras"
+      // shape every other type below shares — drawn in their own dedicated loops further down
+      // instead, same reasoning "vertical" (full-height, outside this clip) already skips this
+      // one for.
       if (
         dr.lineType === "vertical" ||
         dr.lineType === "rectangle" ||
+        dr.lineType === "zones" ||
         dr.lineType === "elbowArrow" ||
         dr.lineType === "brush" ||
         dr.lineType === "arrowUp" ||
@@ -3633,6 +3673,57 @@ export function CandlestickChart({
       drawDrawingText(ctx, dr, rx1, ry1, rx2, ry2, lineColor, fontFamily);
     }
 
+    // "zones": x1/y1 and x2/y2 as opposite corners, same as "rectangle", but instead of one
+    // filled box they split the whole price pane into three horizontal bands — above the higher
+    // boundary (positive), the box itself (neutral), below the lower boundary (negative). The
+    // positive/negative bands always extend to the pane's own top/bottom edge (0/priceHeight),
+    // not to the drawing's own data range, since they represent "everything above/below", not a
+    // bounded region. Only the two horizontal boundaries always draw; the box's left/right sides
+    // are opt-in (showZoneSides) since the bands read as open regions without them.
+    for (const dr of visibleDrawings) {
+      if (dr.lineType !== "zones") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const posColor = dr.positiveColor ?? colorUp;
+      const negColor = dr.negativeColor ?? colorDown;
+      const neutColor = dr.neutralColor ?? colorMuted;
+      const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+      const ry1 = zoomedPriceScale(dr.y1);
+      const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+      const ry2 = zoomedPriceScale(dr.y2);
+      const rectX = Math.min(rx1, rx2);
+      const rectW = Math.abs(rx2 - rx1);
+      const topY = Math.min(ry1, ry2);
+      const bottomY = Math.max(ry1, ry2);
+      ctx.save();
+      ctx.globalAlpha = 0.14;
+      ctx.fillStyle = posColor;
+      ctx.fillRect(rectX, 0, rectW, topY);
+      ctx.fillStyle = neutColor;
+      ctx.fillRect(rectX, topY, rectW, bottomY - topY);
+      ctx.fillStyle = negColor;
+      ctx.fillRect(rectX, bottomY, rectW, priceHeight - bottomY);
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      ctx.moveTo(rectX, topY);
+      ctx.lineTo(rectX + rectW, topY);
+      ctx.moveTo(rectX, bottomY);
+      ctx.lineTo(rectX + rectW, bottomY);
+      ctx.stroke();
+      if (dr.showZoneSides) {
+        ctx.beginPath();
+        ctx.moveTo(rectX, topY);
+        ctx.lineTo(rectX, bottomY);
+        ctx.moveTo(rectX + rectW, topY);
+        ctx.lineTo(rectX + rectW, bottomY);
+        ctx.stroke();
+      }
+      ctx.restore();
+      drawDrawingText(ctx, dr, rx1, ry1, rx2, ry2, lineColor, fontFamily);
+    }
+
     // "elbowArrow": an open-ended polyline (x1/y1, x2/y2, then however many extraPoints were
     // clicked before Escape finalized it — see handleOverlayClick/the keydown effect), drawn as
     // a straight segment between each consecutive point, with a single arrowhead at the last one
@@ -3753,7 +3844,7 @@ export function CandlestickChart({
         ctx.moveTo(zoomedXScale(indexForDate(p3.x) + 0.5), zoomedPriceScale(p3.y));
         ctx.lineTo(zoomedXScale(indexForDate(p4.x) + 0.5), zoomedPriceScale(p4.y));
         ctx.stroke();
-      } else if (activeTool === "rectangle") {
+      } else if (activeTool === "rectangle" || activeTool === "zones") {
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
         const y1 = zoomedPriceScale(pendingPoint.y);
         const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
@@ -5507,13 +5598,14 @@ export function CandlestickChart({
                   canvas draw effect), "channel" (line 1's own two points; its second, parallel
                   line is set by the "Décalage" field below instead of its own coordinates),
                   "fibonacci" (its retracement levels are all derived from these same two points,
-                  0% at "Prix début" and 100% at "Prix fin") and "rectangle" (opposite corners)
-                  all share the same two-point editor. */}
+                  0% at "Prix début" and 100% at "Prix fin") and "rectangle"/"zones" (opposite
+                  corners) all share the same two-point editor. */}
               {(!draft.lineType ||
                 draft.lineType === "extended" ||
                 draft.lineType === "channel" ||
                 draft.lineType === "fibonacci" ||
-                draft.lineType === "rectangle") && (
+                draft.lineType === "rectangle" ||
+                draft.lineType === "zones") && (
                 <>
                   <div className="lq-chart__edit-drawing-row">
                     <div className="lq-field">
@@ -5779,6 +5871,44 @@ export function CandlestickChart({
                   <Checkbox checked={draft.arrowLeft ?? false} onChange={(arrowLeft) => setDraft({ ...draft, arrowLeft })} label="Flèche à gauche" />
                   <Checkbox checked={draft.arrowRight ?? false} onChange={(arrowRight) => setDraft({ ...draft, arrowRight })} label="Flèche à droite" />
                 </div>
+              )}
+              {draft.lineType === "zones" && (
+                <>
+                  <Checkbox
+                    checked={draft.showZoneSides ?? false}
+                    onChange={(showZoneSides) => setDraft({ ...draft, showZoneSides })}
+                    label="Afficher les bords verticaux"
+                  />
+                  <div className="lq-chart__edit-drawing-row">
+                    <div className="lq-field">
+                      <label className="lq-field__label">Zone positive</label>
+                      <input
+                        type="color"
+                        className="lq-chart__color-input"
+                        value={draft.positiveColor ?? "#26a69a"}
+                        onChange={(e) => setDraft({ ...draft, positiveColor: e.target.value })}
+                      />
+                    </div>
+                    <div className="lq-field">
+                      <label className="lq-field__label">Zone neutre</label>
+                      <input
+                        type="color"
+                        className="lq-chart__color-input"
+                        value={draft.neutralColor ?? "#9e9e9e"}
+                        onChange={(e) => setDraft({ ...draft, neutralColor: e.target.value })}
+                      />
+                    </div>
+                    <div className="lq-field">
+                      <label className="lq-field__label">Zone négative</label>
+                      <input
+                        type="color"
+                        className="lq-chart__color-input"
+                        value={draft.negativeColor ?? "#ef5350"}
+                        onChange={(e) => setDraft({ ...draft, negativeColor: e.target.value })}
+                      />
+                    </div>
+                  </div>
+                </>
               )}
             </>
           )}
