@@ -353,11 +353,11 @@
 }
 
 /* Value badge pinned to an axis at the hovered position — replaces a floating OHLC tooltip
-   with the same "read the value off the axis" convention trading platforms use. No padding of
-   its own: each child (the text, and the "+" button where present) carries its own padding
-   instead, so the button can span the badge's full height with none of its own — hovering it
-   then reads as a slice of the label itself lighting up, not a separately-padded chip floating
-   inside it. */
+   with the same "read the value off the axis" convention trading platforms use. Pinned flush to
+   the axis boundary (its own `left`, set inline) so its background never bleeds into the chart —
+   any "+" quick-add button for it lives outside as a fully separate .lq-chart__crosshair-add,
+   not as a child here, precisely so this badge can stay confined to the axis width. No padding
+   of its own: the text child carries its own padding instead. */
 .lq-chart__axis-value {
   position: absolute;
   z-index: 6;
@@ -378,32 +378,14 @@
   padding: 2px 6px;
 }
 
-/* Quick-add button for a horizontal price/volume line, englobed by the badge itself (which
-   overlaps the chart by AXIS_VALUE_Y_OVERLAP to make room for it) instead of living outside as
-   a separate element. Transparent at rest so it blends into the badge's own background; only a
-   faint highlight appears right behind it on hover. The badge stays pointer-events:none (it
-   must never intercept hover/drag on the plot underneath) — this button opts back in. */
-.lq-chart__axis-value-add {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 4px;
-  color: inherit;
-  background: none;
-  border: none;
-  cursor: pointer;
-  pointer-events: auto;
-}
-
-.lq-chart__axis-value-add:hover {
-  background-color: color-mix(in srgb, var(--lq-color-accent-contrast) 20%, transparent);
-}
-
-/* Quick-add button for a vertical date line — anchored inside the interactive plot itself (in
-   line with the crosshair), not inside the date badge below the plot: a button living there was
-   unreachable, since moving the pointer off the plot to reach it cleared the hover state (and
-   hid the button) before the click could land. Square, same accent background/text color as the
-   axis-value badges, so it reads as part of the same family despite being a separate element. */
+/* Standalone quick-add button for a crosshair-anchored line — deliberately its own element
+   rather than a child of the axis-value badge it sits beside, so it alone is allowed to overlap
+   the chart while the badge's own background stays confined to the axis. Square, same accent
+   background/text color as the axis-value badges, so it still reads as part of the same family.
+   For the date ("--x") variant this also fixes reachability: a button living inside the date
+   badge below the plot was unreachable, since moving the pointer off the plot to reach it
+   cleared the hover state (and hid the button) before the click could land — anchored inside the
+   interactive plot itself instead, in line with the crosshair. */
 .lq-chart__crosshair-add {
   position: absolute;
   z-index: 999;
@@ -428,6 +410,13 @@
   transform: translateX(-50%);
 }
 
+/* Right edge lands exactly on the axis boundary (its own `left`, set inline, matches the
+   adjoining .lq-chart__axis-value--y badge's) so the two sit flush with no gap and no overlap —
+   only this button pokes left into the chart, the badge itself never does. */
+.lq-chart__crosshair-add--y {
+  transform: translate(-100%, -50%);
+}
+
 /* No fixed width and anchored via `left` (set inline, at the exact axis position) instead of
    `right` + a fixed-width box: it grows away from the plot as needed, so a long price string
    can never overflow back over the candles — it used to (a `left:0; width:margin` box let the
@@ -444,8 +433,8 @@
   transform: translateX(-50%);
 }
 
-/* Countdown to the next candle, right below the live-price badge — same left-anchored/
-   overlapping idea as .lq-chart__axis-value--y, muted instead of colored since it's a
+/* Countdown to the next candle, right below the live-price badge — same left-anchored-to-the-
+   axis-boundary idea as .lq-chart__axis-value--y, muted instead of colored since it's a
    secondary reading, not a price. */
 .lq-chart__live-countdown {
   position: absolute;

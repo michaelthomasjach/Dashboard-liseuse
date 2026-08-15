@@ -1079,9 +1079,6 @@ const HEADER_HEIGHT = 40;
  *  still inside the interactive rect so hovering it never counts as leaving the plot (see
  *  .lq-chart__plot's onPointerLeave). */
 const CROSSHAIR_ADD_INSET = 20;
-/** How far the price/volume value badges' own left edge overlaps the chart, so their background
- *  englobes the "+" button living at its start instead of the button sitting outside it. */
-const AXIS_VALUE_Y_OVERLAP = 20;
 /** Vertical gap between the live-price badge and the countdown badge sitting right below it. */
 const LIVE_COUNTDOWN_OFFSET = 20;
 /** Half the rendered height of a `.lq-chart__axis-value--y` badge — see clampToPriceAxis. */
@@ -5126,30 +5123,48 @@ export function CandlestickChart({
         </svg>
 
         {hoverY !== null && (
-          // Overlaps the chart by AXIS_VALUE_Y_OVERLAP so the badge's own background englobes
-          // the "+" button too, instead of it living outside as a separate element — reachable
-          // either way since onPointerLeave lives on .lq-chart__plot (a real ancestor of both),
-          // not on the interactive rect itself.
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
-          >
-            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
+          // The badge itself is pinned flush to the axis boundary so it never bleeds into the
+          // chart — only the standalone "+" button (own square, own background) is allowed to
+          // overlap, its right edge landing on that same boundary so the two read as one
+          // continuous control despite being separate elements. Reachable as a separate element
+          // since onPointerLeave lives on .lq-chart__plot (a real ancestor of both), not on the
+          // interactive rect itself.
+          <>
+            <button
+              type="button"
+              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
+              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}
+              onClick={addPriceLine}
+              aria-label="Ajouter une ligne de prix horizontale"
+            >
               <PlusIcon size={9} />
             </button>
-            <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
-          </div>
+            <div
+              className="lq-chart__axis-value lq-chart__axis-value--y"
+              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}
+            >
+              <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
+            </div>
+          </>
         )}
         {hoverVolumeY !== null && (
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
-          >
-            <button type="button" className="lq-chart__axis-value-add" onClick={addVolumeLine} aria-label="Ajouter une ligne de volume horizontale">
+          <>
+            <button
+              type="button"
+              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
+              style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
+              onClick={addVolumeLine}
+              aria-label="Ajouter une ligne de volume horizontale"
+            >
               <PlusIcon size={9} />
             </button>
-            <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
-          </div>
+            <div
+              className="lq-chart__axis-value lq-chart__axis-value--y"
+              style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
+            >
+              <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
+            </div>
+          </>
         )}
         {hovered && (
           <>
@@ -5195,7 +5210,7 @@ export function CandlestickChart({
                   className="lq-chart__axis-value lq-chart__axis-value--y"
                   style={{
                     top: y,
-                    left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+                    left: dims.margin.left + dims.boundedWidth,
                     backgroundColor: `var(${up ? "--lq-color-up" : "--lq-color-down"})`,
                   }}
                 >
@@ -5204,7 +5219,7 @@ export function CandlestickChart({
                 {remainingMs !== null && (
                   <div
                     className="lq-chart__live-countdown"
-                    style={{ top: y + LIVE_COUNTDOWN_OFFSET, left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP }}
+                    style={{ top: y + LIVE_COUNTDOWN_OFFSET, left: dims.margin.left + dims.boundedWidth }}
                   >
                     {formatCountdown(remainingMs)}
                   </div>
@@ -5236,7 +5251,7 @@ export function CandlestickChart({
                 className="lq-chart__axis-value lq-chart__axis-value--y"
                 style={{
                   top: dims.margin.top + clampToPriceAxis(zoomedPriceScale(value)),
-                  left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+                  left: dims.margin.left + dims.boundedWidth,
                   backgroundColor: color,
                 }}
               >
@@ -5263,7 +5278,7 @@ export function CandlestickChart({
                 className="lq-chart__axis-value lq-chart__axis-value--y"
                 style={{
                   top: dims.margin.top + y,
-                  left: dims.margin.left + dims.boundedWidth - AXIS_VALUE_Y_OVERLAP,
+                  left: dims.margin.left + dims.boundedWidth,
                 }}
               >
                 <span className="lq-chart__axis-value-text">{isPrice ? pFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
