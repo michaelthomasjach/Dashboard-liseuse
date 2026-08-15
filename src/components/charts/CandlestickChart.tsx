@@ -1453,6 +1453,10 @@ export function CandlestickChart({
   // prop after mount.
   const [yAutoScalingState, setYAutoScalingState] = useState(YAutoScaling);
   const [hiddenEventKinds, setHiddenEventKinds] = useState<Set<string>>(new Set());
+  // Master on/off for every event marker at once, independent of (and layered on top of)
+  // `hiddenEventKinds`'s own per-kind granularity — a toolbar-level "hide everything quickly"
+  // rather than opening the settings modal to uncheck every kind one by one.
+  const [eventsVisible, setEventsVisible] = useState(true);
   // The candle index ("i") of the currently open event stack's popover/modal, plus a frozen
   // snapshot of its events — frozen so panning the marker out of the nearby-visible window (see
   // `visibleEvents`'s own start/end buffer) doesn't empty an already-open modal out from under
@@ -2679,13 +2683,23 @@ export function CandlestickChart({
   }, [events]);
 
   const visibleEvents = useMemo(() => {
-    if (!events || events.length === 0) return [];
+    if (!events || events.length === 0 || !eventsVisible) return [];
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
     return events
       .map((event, idx) => ({ event, idx, i: indexForDate(event.date) }))
       .filter(({ event, i }) => !hiddenEventKinds.has(event.kind) && i >= start && i <= end);
-  }, [events, hiddenEventKinds, visibleRange, data.length, indexForDate]);
+  }, [events, eventsVisible, hiddenEventKinds, visibleRange, data.length, indexForDate]);
+
+  // Toggling all events off should also close whatever's currently anchored to a now-invisible
+  // marker, same as it disappearing would from panning it out of view (see `activeEventStack`'s
+  // own doc comment) — otherwise the tooltip/modal would keep showing content for a marker
+  // that's no longer there to point at.
+  useEffect(() => {
+    if (eventsVisible) return;
+    setActiveEventStack(null);
+    setEventModalOpen(false);
+  }, [eventsVisible]);
 
   // Events sharing the same candle index render as a single "stack" marker instead of fully
   // overlapping circles — grouped from `visibleEvents` (not `events` directly) so this stays
@@ -4314,6 +4328,18 @@ export function CandlestickChart({
               ))}
             </div>
           </Popover>
+          {events && events.length > 0 && (
+            <button
+              type="button"
+              className={["lq-chart__icon-button", !eventsVisible && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setEventsVisible((v) => !v)}
+              aria-label={eventsVisible ? "Masquer les évènements" : "Afficher les évènements"}
+              aria-pressed={!eventsVisible}
+              title="Masquer/afficher tous les évènements"
+            >
+              {eventsVisible ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
+            </button>
+          )}
           {showIndicators && (
             <button
               type="button"

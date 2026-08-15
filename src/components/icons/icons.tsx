@@ -266,11 +266,13 @@ export const OverlayBadgeIcon = (props: IconProps) => (
 );
 
 /** Badge marking an indicator as living in its own sub-panel below price (RSI/MACD/CHOP/Volume)
- *  — two stacked rectangles, reading as "a separate panel of its own" even at badge size. */
+ *  — a tall box over a short one, mirroring the real layout (the price section dwarfing an
+ *  oscillator pane below it) rather than two equal-sized rectangles, which read as ambiguous
+ *  "two things" instead of specifically "a smaller panel of its own underneath". */
 export const PaneBadgeIcon = (props: IconProps) => (
   <IconBase {...props}>
-    <rect x="3.5" y="4" width="17" height="7" rx="1" />
-    <rect x="3.5" y="13" width="17" height="7" rx="1" />
+    <rect x="3.5" y="3" width="17" height="9" rx="1" />
+    <rect x="3.5" y="14.5" width="17" height="6.5" rx="1" />
   </IconBase>
 );
 

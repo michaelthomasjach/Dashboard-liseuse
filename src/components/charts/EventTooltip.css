@@ -24,7 +24,8 @@
    naturally means outside the chart component entirely, which the shared outside-pointerdown
    listener (see EventTooltip.tsx) already closes on regardless of mode. */
 .lq-chart-event-tooltip--modal {
-  inset: 0;
+  /* 100% - 20px on both axes, not edge-to-edge: a 10px gap all round instead of `inset: 0`. */
+  inset: 10px;
   z-index: 1002;
 }
 
