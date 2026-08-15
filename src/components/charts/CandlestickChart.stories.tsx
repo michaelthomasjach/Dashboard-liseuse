@@ -24,6 +24,16 @@ type Story = StoryObj<typeof CandlestickChart>;
 // a real app would memoize its own data the same way rather than regenerate it per render.
 const MEDIUM_DATASET = generateCandles(2_500, 180, 44);
 const ALL_FEATURES_DATASET = generateCandles(600, 180, 66);
+const ALL_FEATURES_EVENTS: ChartEvent[] = [
+  { date: ALL_FEATURES_DATASET[80].date, kind: "earnings", label: "Résultats T1 : BPA 1.42$ (attendu 1.35$)" },
+  { date: ALL_FEATURES_DATASET[180].date, kind: "earnings", label: "Résultats T2 : BPA 1.51$ (attendu 1.48$)" },
+  // Same date as the T2 earnings above, on purpose — two events sharing a candle index render as
+  // a single "stack" marker instead of overlapping (see WithSymbolAndEvents for details).
+  { date: ALL_FEATURES_DATASET[180].date, kind: "news", label: "Annonce d'un partenariat stratégique" },
+  { date: ALL_FEATURES_DATASET[280].date, kind: "dividend", label: "Dividende détaché : 0.62$/action" },
+  { date: ALL_FEATURES_DATASET[420].date, kind: "earnings", label: "Résultats T3 : BPA 1.58$ (attendu 1.50$)" },
+  { date: ALL_FEATURES_DATASET[520].date, kind: "update", label: "Lancement de la nouvelle gamme de produits" },
+];
 
 // Taller than the `height` prop's own default (380) — a more realistic size for these demos,
 // which otherwise felt cramped compared to how the chart gets used in a real dashboard.
@@ -82,11 +92,14 @@ export const AllFeatures: Story = {
           Tout combiné : outils de dessin (`drawingTools`), indicateurs techniques (`showIndicators` — bouton dans
           l'en-tête, liste des indicateurs actifs en haut à gauche du graphe), plein écran (`fullscreenToggle`),
           sélecteur d'intervalle (`timeframes`), recherche de symbole (`symbolSearch` — <strong>double-clic</strong>{" "}
-          sur "MSFT" ouvre la modale) et zoom/pan (`zoomable`).
+          sur "MSFT" ouvre la modale), zoom/pan (`zoomable`) et évènements (`events` — bulles en bas du tracé des
+          prix, deux d'entre elles partageant une même date pour montrer la bulle "stack" ; les <strong>cliquer</strong>{" "}
+          ouvre une tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup).
         </p>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
           symbol={currentSymbol}
+          events={ALL_FEATURES_EVENTS}
           drawingTools
           showIndicators
           fullscreenToggle
