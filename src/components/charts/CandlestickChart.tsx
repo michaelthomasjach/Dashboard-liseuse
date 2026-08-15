@@ -6,6 +6,11 @@ import { useAxisDragRescale } from "./internal/useAxisDragRescale";
 import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { renderCandlestickChart } from "./candlestick/render/renderChart";
+import { useSymbolSearchState } from "./candlestick/hooks/useSymbolSearchState";
+import { useChartEvents } from "./candlestick/hooks/useChartEvents";
+import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
+import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
+import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
 import { ChartAxis } from "./ChartAxis";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
@@ -107,15 +112,8 @@ import {
   defaultIndicatorColor,
   computeIndicatorValues,
 } from "./candlestick/indicators";
-import { defaultEventColor, EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "./candlestick/eventsCatalog";
-import {
-  computeHeikinAshiCandles,
-  computeRenkoBrickSize,
-  computeRenkoBricks,
-  computeLineBreakBricks,
-  computeTPOProfile,
-  CHART_DISPLAY_MODES,
-} from "./candlestick/chartModes";
+import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "./candlestick/eventsCatalog";
+import { CHART_DISPLAY_MODES } from "./candlestick/chartModes";
 import { SYMBOL_SEARCH_CATEGORIES, defaultSymbolLogoColor } from "./candlestick/symbolSearchCatalog";
 import { isTimeframeGroup, findTimeframeLabel } from "./candlestick/timeframes";
 import {
@@ -133,9 +131,6 @@ import {
   EMPTY_DRAWINGS,
   MAX_EMPTY_FRACTION,
   SUB_PANE_COLLAPSED_HEIGHT,
-  DEFAULT_PANE_HEIGHT_FRACTION,
-  MIN_PANE_HEIGHT_FRACTION,
-  MAX_PANE_HEIGHT_FRACTION,
 } from "./candlestick/constants";
 import { contrastingTextColor, formatCountdown, formatPercentFromReference, toDateInputValue, fromDateInputValue } from "./candlestick/formatting";
 
@@ -246,77 +241,36 @@ export function CandlestickChart({
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
   const [tfOpen, setTfOpen] = useState(false);
-  const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>(defaultChartDisplayMode ?? "candle");
-  const [displayModeOpen, setDisplayModeOpen] = useState(false);
-  const displayModeAnchorRef = useRef<HTMLButtonElement>(null);
-  const [settingsOpen, setSettingsOpen] = useState(false);
-  // Per-chart color overrides for up/down bars — `undefined` (the default) means "use the
-  // theme's own --lq-color-up/--lq-color-down", same as before this modal existed.
-  const [upColorOverride, setUpColorOverride] = useState<string | undefined>(undefined);
-  const [downColorOverride, setDownColorOverride] = useState<string | undefined>(undefined);
-  // Same idea, scoped to the volume pane's own bars instead of the candles — `undefined` means
-  // "mirror whichever of colorUp/colorDown above is currently in effect" (theme or its own
-  // override), same as volume bars have always done, just now overridable independently.
-  const [volumeUpColorOverride, setVolumeUpColorOverride] = useState<string | undefined>(undefined);
-  const [volumeDownColorOverride, setVolumeDownColorOverride] = useState<string | undefined>(undefined);
-  const [volumeSettingsOpen, setVolumeSettingsOpen] = useState(false);
-  // Seeded from the `YAutoScaling` prop, then owned locally once the settings-modal checkbox can
-  // change it — same uncontrolled pattern as `drawings`/`indicators`, not a live mirror of the
-  // prop after mount.
-  const [yAutoScalingState, setYAutoScalingState] = useState(YAutoScaling);
-  const [hiddenEventKinds, setHiddenEventKinds] = useState<Set<string>>(new Set());
-  // Master on/off for every event marker at once, independent of (and layered on top of)
-  // `hiddenEventKinds`'s own per-kind granularity — a toolbar-level "hide everything quickly"
-  // rather than opening the settings modal to uncheck every kind one by one.
-  const [eventsVisible, setEventsVisible] = useState(true);
-  // The candle index ("i") of the currently open event stack's popover/modal, plus a frozen
-  // snapshot of its events — frozen so panning the marker out of the nearby-visible window (see
-  // `visibleEvents`'s own start/end buffer) doesn't empty an already-open modal out from under
-  // the user. The popover's own *position* still tracks the live index every render (its
-  // left/bottom are computed from `activeEventStack.i`, not stored), so it stays anchored to the
-  // marker as the chart pans/zooms.
-  const [activeEventStack, setActiveEventStack] = useState<{ i: number; events: ChartEvent[] } | null>(null);
-  const [eventModalOpen, setEventModalOpen] = useState(false);
-  const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  const {
+    settingsOpen,
+    setSettingsOpen,
+    upColorOverride,
+    setUpColorOverride,
+    downColorOverride,
+    setDownColorOverride,
+    volumeUpColorOverride,
+    setVolumeUpColorOverride,
+    volumeDownColorOverride,
+    setVolumeDownColorOverride,
+    volumeSettingsOpen,
+    setVolumeSettingsOpen,
+    yAutoScalingState,
+    setYAutoScalingState,
+    now,
+  } = useChartAppearance({ YAutoScaling, livePrice });
   // Swaps the whole chart body for SeasonalityView (see the `seasonality` prop's own doc
   // comment) — deliberately its own top-level flag, not folded into `chartDisplayMode`, since a
   // seasonal path isn't another way to draw the same price/date axes the way candle/line/Renko
   // are; it has its own x-axis (position within a reference year) that drawings/indicators/
   // volume/events have no meaningful relationship to.
   const [seasonalityOpen, setSeasonalityOpen] = useState(false);
-  const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
-  const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
-  const [favoriteSymbolIds, setFavoriteSymbolIds] = useState<string[]>(defaultFavoriteSymbolIds ?? []);
+  const { symbolSearchOpen, setSymbolSearchOpen, symbolSearchQuery, setSymbolSearchQuery, symbolSearchCategory, setSymbolSearchCategory, favoriteSymbolIds, toggleFavoriteSymbol } =
+    useSymbolSearchState({ defaultFavoriteSymbolIds, onFavoriteSymbolIdsChange, onSymbolSearchChange });
   // Tickers whose "+" is currently awaiting onAddSymbolOverlay — a Set (not one at a time) since
   // there's no reason comparing against AAPL should block also comparing against GOOGL while its
   // own fetch is still in flight. Purely for each row's own spinner; not read anywhere that
   // affects the chart itself.
   const [addingOverlaySymbols, setAddingOverlaySymbols] = useState<Set<string>>(new Set());
-  // Ticks once a second, only while `livePrice` is on — its only job is giving the countdown
-  // badge (a plain DOM element, not part of the canvas draw effect) a reason to re-render each
-  // second; the dashed line/price badge themselves only depend on `data` and don't need this.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!livePrice) return;
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, [livePrice]);
-  const [indicators, setIndicators] = useState<Indicator[]>(defaultIndicators ?? []);
-  const [indicatorPickerOpen, setIndicatorPickerOpen] = useState(false);
-  const [indicatorSearchQuery, setIndicatorSearchQuery] = useState("");
-  const [editingIndicatorId, setEditingIndicatorId] = useState<string | null>(null);
-  const [indicatorDraft, setIndicatorDraft] = useState<Indicator | null>(null);
-  const [hoveredIndicatorId, setHoveredIndicatorId] = useState<string | null>(null);
-  // The tools-rail "manage indicators" modal (a flat list grouped by overlay/own-pane, not tied
-  // to hovering any one legend/pane entry) — separate from editingIndicatorId above, which is
-  // "which indicator's settings modal is open" and can be triggered *from* a row in this list.
-  const [indicatorsManagerOpen, setIndicatorsManagerOpen] = useState(false);
-  // Ctrl/Cmd+C over a legend item copies it here (a ref, not state — it's never read during
-  // render, so there's no reason to pay for a re-render just to remember it); Ctrl/Cmd+V pastes
-  // a fresh copy (new id) appended to `indicators` from wherever this last got set. Deliberately
-  // chart-local (not the real OS clipboard) — copying between two *different* chart instances on
-  // the same page isn't a scenario this was built for.
-  const copiedIndicatorRef = useRef<Indicator | null>(null);
   // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
   const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
   const dragAxisRef = useRef<{ id: string } | null>(null);
@@ -324,20 +278,7 @@ export function CandlestickChart({
   // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
   // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
   const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
-  // Which "own"-pane indicator is currently being dragged by its header's grip handle, for
-  // reordering (see the effect below) — also doubles as the dragged pane's own "currently
-  // dragging" visual cue, since without any feedback at all a drag that hasn't yet crossed into
-  // a neighboring pane's own midpoint looks and feels completely inert.
-  const [draggingPaneId, setDraggingPaneId] = useState<string | null>(null);
-  // Where Volume sits among the "own"-pane indicators — an index into that filtered sequence
-  // (0 = before all of them, the historical fixed position; indicators.length = after all of
-  // them), not a stored id-based position, so it never goes stale as indicators are themselves
-  // added/removed/reordered around it. Volume used to be pinned here permanently; now it's just
-  // this array's own starting position, changed by dragging its header's grip handle same as any
-  // indicator's.
-  const [volumePaneOrder, setVolumePaneOrder] = useState(0);
   const drawingIdRef = useRef(0);
-  const indicatorIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
   // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than
@@ -352,68 +293,6 @@ export function CandlestickChart({
     return linesMenuAnchorRef;
   }
   const [themeTick, setThemeTick] = useState(0);
-  // Local view state for the volume pane's own header (name/collapse/remove), layered on top of
-  // the `showVolume` prop rather than replacing it: `showVolume` is the caller's own on/off
-  // switch, this is the user's in-session view preference once it's on. Not lifted to a prop —
-  // no request for the app to control or persist it, same as the other UI-only toggles here
-  // (tool menu open, timeframe menu open…).
-  const [volumePaneState, setVolumePaneState] = useState<"expanded" | "collapsed" | "hidden">("expanded");
-  // Manually-resized sub-pane heights (volume, or an "own"-pane indicator, keyed by "volume" or
-  // the indicator's own id), as a fraction of the plot's own bounded height — set by dragging a
-  // pane's own top divider (see startPaneResize). Missing entries fall back to
-  // DEFAULT_PANE_HEIGHT_FRACTION, same as before per-pane resize existed at all.
-  const [paneHeightFractions, setPaneHeightFractions] = useState<Record<string, number>>({});
-  // Manual vertical rescale for a sub-pane's own value axis (volume, or an "own"-pane
-  // indicator's, keyed the same way as paneHeightFractions above) — dragging that pane's own Y
-  // axis strip (see handlePaneYAxisPointerDown) sets a d3.ZoomTransform here, the same
-  // scale+translate representation `yTransform` already uses for the price axis, applied via the
-  // same `.rescaleY(baseScale)` call. Missing entries mean "not manually adjusted" (d3.zoomIdentity).
-  const [paneYTransform, setPaneYTransform] = useState<Record<string, d3.ZoomTransform>>({});
-  const paneYAxisDragRef = useRef<{ paneId: string; startPos: number; startTransform: d3.ZoomTransform; size: number } | null>(null);
-
-  function getPaneYTransform(paneId: string): d3.ZoomTransform {
-    return paneYTransform[paneId] ?? d3.zoomIdentity;
-  }
-
-  // Same drag-to-rescale math as useAxisDragRescale (dragging up zooms in, scales around the
-  // strip's own midpoint) — reimplemented rather than reused because that hook calls useRef
-  // itself, and the number of sub-panes needing this varies at runtime (one per indicator plus
-  // volume), which the rules of hooks don't allow calling a hook a variable number of times for.
-  // A single shared ref keyed by paneId, mirroring how dragEndpointRef/dragMeasureRef above
-  // already handle "one of several possible targets" without a hook each, does the same job.
-  function handlePaneYAxisPointerDown(paneId: string, size: number) {
-    return (e: React.PointerEvent) => {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      paneYAxisDragRef.current = { paneId, startPos: e.clientY, startTransform: getPaneYTransform(paneId), size };
-    };
-  }
-
-  function handlePaneYAxisPointerMove(e: React.PointerEvent) {
-    const drag = paneYAxisDragRef.current;
-    if (!drag) return;
-    const delta = e.clientY - drag.startPos;
-    const factor = Math.exp(-delta * 0.008);
-    const k0 = drag.startTransform.k;
-    const k1 = Math.min(20, Math.max(1, k0 * factor));
-    const center = drag.size / 2;
-    const t0 = drag.startTransform.y;
-    const t1 = center - (center - t0) * (k1 / k0);
-    setPaneYTransform((prev) => ({ ...prev, [drag.paneId]: d3.zoomIdentity.scale(k1).translate(0, t1 / k1) }));
-  }
-
-  function handlePaneYAxisPointerUp(e: React.PointerEvent) {
-    paneYAxisDragRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }
-
-  function resetPaneYAxis(paneId: string) {
-    setPaneYTransform((prev) => {
-      if (!(paneId in prev)) return prev;
-      const next = { ...prev };
-      delete next[paneId];
-      return next;
-    });
-  }
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
   // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
@@ -435,19 +314,6 @@ export function CandlestickChart({
   function commitDrawings(next: TrendLineDrawing[]) {
     setDrawings(next);
     onDrawingsChange?.(next);
-  }
-
-  function commitIndicators(next: Indicator[]) {
-    setIndicators(next);
-    onIndicatorsChange?.(next);
-  }
-
-  function toggleFavoriteSymbol(id: string) {
-    setFavoriteSymbolIds((prev) => {
-      const next = prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id];
-      onFavoriteSymbolIdsChange?.(next);
-      return next;
-    });
   }
 
   function removeSymbolOverlay(ticker: string) {
@@ -513,51 +379,6 @@ export function CandlestickChart({
     onSymbolSearchChangeRef.current?.(symbolSearchQuery, symbolSearchCategory);
   }, [symbolSearchOpen, symbolSearchQuery, symbolSearchCategory]);
 
-  function addIndicator(entry: IndicatorCatalogEntry) {
-    commitIndicators([
-      ...indicators,
-      {
-        id: `indicator-${indicatorIdRef.current++}`,
-        kind: entry.kind,
-        period: entry.defaultPeriod,
-        stdDev: entry.hasStdDev ? 2 : undefined,
-        ...(entry.kind === "macd" ? { fastPeriod: 12, slowPeriod: 26, signalPeriod: 9 } : {}),
-      },
-    ]);
-  }
-
-  function openIndicatorSettings(id: string) {
-    const indicator = indicators.find((i) => i.id === id);
-    if (!indicator) return;
-    setEditingIndicatorId(id);
-    setIndicatorDraft(indicator);
-  }
-
-  function closeIndicatorSettings() {
-    setEditingIndicatorId(null);
-    setIndicatorDraft(null);
-  }
-
-  function saveIndicatorSettings() {
-    if (!editingIndicatorId || !indicatorDraft) return;
-    commitIndicators(indicators.map((i) => (i.id === editingIndicatorId ? indicatorDraft : i)));
-    closeIndicatorSettings();
-  }
-
-  function deleteEditingIndicator() {
-    if (!editingIndicatorId) return;
-    commitIndicators(indicators.filter((i) => i.id !== editingIndicatorId));
-    closeIndicatorSettings();
-  }
-
-  function toggleIndicatorHidden(id: string) {
-    commitIndicators(indicators.map((i) => (i.id === id ? { ...i, hidden: !i.hidden } : i)));
-  }
-
-  function removeIndicator(id: string) {
-    commitIndicators(indicators.filter((i) => i.id !== id));
-  }
-
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
@@ -586,121 +407,49 @@ export function CandlestickChart({
     return () => observer.disconnect();
   }, [ref]);
 
-  const volumeVisible = showVolume && volumePaneState !== "hidden";
-  const volumeCollapsed = volumeVisible && volumePaneState === "collapsed";
-
-  function paneHeightFraction(key: string): number {
-    return paneHeightFractions[key] ?? DEFAULT_PANE_HEIGHT_FRACTION;
-  }
-
-  // Drag-to-resize a sub-pane via its own top divider: grow/shrink that one pane's height
-  // fraction directly, same window-pointermove-listener pattern the plot's own 2D-pan-Y drag
-  // uses (see handleOverlayPointerDown) rather than a second setPointerCapture on top of
-  // whatever's already attached to this element.
-  function startPaneResize(paneKey: string, e: React.PointerEvent) {
-    e.preventDefault();
-    e.stopPropagation();
-    const startClientY = e.clientY;
-    const startFraction = paneHeightFraction(paneKey);
-    const onMove = (ev: PointerEvent) => {
-      if (plotBoundedHeight <= 0) return;
-      const deltaFraction = (ev.clientY - startClientY) / plotBoundedHeight;
-      const next = Math.min(MAX_PANE_HEIGHT_FRACTION, Math.max(MIN_PANE_HEIGHT_FRACTION, startFraction - deltaFraction));
-      setPaneHeightFractions((prev) => ({ ...prev, [paneKey]: next }));
-    };
-    const onUp = () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-  }
-
-  // Reorders the "own"-pane indicators (RSI/CHOP/MACD) among themselves, leaving every
-  // price-overlay indicator (SMA/EMA/…) exactly where it already sat in `indicators` — dragging a
-  // pane never needs a separate order field of its own since ownPaneIndicators' displayed order
-  // already *is* just indicators.filter(pane === "own"), so reordering the panes means splicing
-  // that subsequence back into the full array in its new order. Volume isn't part of `indicators`
-  // at all (see `volumePaneOrder`/`reorderPanes` below for how it still participates in the same
-  // drag). Defensive against `newOwnOrder` being built from a snapshot that's gone slightly stale
-  // by the time this runs (pointermove can fire faster than React re-renders during a fast drag,
-  // so a queued call can still be working off the *previous* render's ownPaneIndicators) —
-  // rather than a bare `.find()!` that would throw and corrupt `indicators` with an `undefined`
-  // entry the moment an id doesn't resolve, unmatched ids are just dropped and any own-pane
-  // indicator this pass doesn't have a replacement for keeps its current spot.
-  function reorderOwnPaneIndicators(newOwnOrder: string[]) {
-    const byId = new Map(indicators.map((ind) => [ind.id, ind]));
-    const reordered = newOwnOrder.map((id) => byId.get(id)).filter((ind): ind is Indicator => ind !== undefined);
-    let cursor = 0;
-    const next = indicators.map((ind) => (indicatorCatalogEntry(ind.kind).pane === "own" ? (reordered[cursor++] ?? ind) : ind));
-    commitIndicators(next);
-  }
-  // The pane-drag effect below works over one unified order ("volume" plus every own-pane
-  // indicator's id, interleaved) since either kind of pane can now be dragged anywhere among the
-  // rest — this splits that unified order back into the two separate mechanisms actually driving
-  // it: `volumePaneOrder` (a plain index) for volume, `reorderOwnPaneIndicators` (unchanged, above)
-  // for the indicators' own relative order. `newOrder.indexOf("volume")` already equals "how many
-  // indicators precede it", exactly `volumePaneOrder`'s own definition, since nothing else but
-  // volume and indicator ids ever appears in this array.
-  function reorderPanes(newOrder: string[]) {
-    const volumeIndex = newOrder.indexOf("volume");
-    if (volumeIndex !== -1) setVolumePaneOrder(volumeIndex);
-    reorderOwnPaneIndicators(newOrder.filter((id) => id !== "volume"));
-  }
-  // A plain (non-memoized) function closing over `indicators`, so the pane-reorder effect below
-  // — which shouldn't resubscribe its window listeners on literally every render just because
-  // this particular closure is a new reference each time — reads it through a ref kept in sync
-  // during render instead of depending on the function value itself.
-  const reorderPanesRef = useRef(reorderPanes);
-  reorderPanesRef.current = reorderPanes;
-
-  // No breathing room between the price section and the volume section below it: the divider
-  // line itself is the only separation, flush against both (same "the border delimits the
-  // content" rule applied to the tools rail and the header above). Collapsed reduces the pane to
-  // its own fixed-height header strip instead of the usual proportional split.
-  const volumeHeight = !volumeVisible ? 0 : volumeCollapsed ? SUB_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * paneHeightFraction("volume"));
-
-  // "own"-pane indicators (RSI/CHOP/MACD) stack below price, in the order they were added,
-  // interleaved with volume wherever `volumePaneOrder` currently places it — each sized/collapsed
-  // the same way, just keyed by the indicator's own id instead of the fixed "volume" key.
-  // `indicatorPaneTops` already reserves room for volume's own height wherever it falls (so every
-  // other call site just adds `priceHeight`, never `priceHeight + volumeHeight` — that extra term
-  // is now folded in here, at the one place that actually knows where volume sits), `volumeTop`
-  // is the mirror image for volume's own top, and `allPanesOrder` is every pane's id (volume
-  // included) in on-screen order top to bottom, the shape the drag-reorder effect below needs.
-  // Memoized (not just plain derived consts) so the canvas draw effect below can depend on
-  // these directly instead of their own wider, less-stable sources (indicators,
-  // paneHeightFractions) — without this they'd be a fresh array/reference every render, which
-  // would make an "only these deps" dependency array pointless (always "changed").
-  const { ownPaneIndicators, indicatorPaneHeights, indicatorPaneTops, volumeTop, allPanesOrder } = useMemo(() => {
-    const owned = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "own");
-    const heights = owned.map((ind) =>
-      ind.paneCollapsed ? SUB_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * (paneHeightFractions[ind.id] ?? DEFAULT_PANE_HEIGHT_FRACTION))
-    );
-    const insertAt = Math.min(Math.max(0, volumePaneOrder), owned.length);
-    let cursor = 0; // relative to right after price
-    let vTop = 0;
-    const tops: number[] = [];
-    const order: string[] = [];
-    for (let i = 0; i < heights.length; i++) {
-      if (volumeVisible && i === insertAt) {
-        vTop = cursor;
-        cursor += volumeHeight;
-        order.push("volume");
-      }
-      tops.push(cursor);
-      order.push(owned[i].id);
-      cursor += heights[i];
-    }
-    if (volumeVisible && insertAt === heights.length) {
-      vTop = cursor;
-      order.push("volume");
-    }
-    return { ownPaneIndicators: owned, indicatorPaneHeights: heights, indicatorPaneTops: tops, volumeTop: vTop, allPanesOrder: order };
-  }, [indicators, paneHeightFractions, plotBoundedHeight, volumeVisible, volumeHeight, volumePaneOrder]);
-  const indicatorPanesTotalHeight = indicatorPaneHeights.reduce((sum, h) => sum + h, 0);
-
-  const priceHeight = Math.max(0, plotBoundedHeight - volumeHeight - indicatorPanesTotalHeight);
+  const {
+    indicators,
+    indicatorPickerOpen,
+    setIndicatorPickerOpen,
+    indicatorSearchQuery,
+    setIndicatorSearchQuery,
+    editingIndicatorId,
+    indicatorDraft,
+    setIndicatorDraft,
+    hoveredIndicatorId,
+    setHoveredIndicatorId,
+    indicatorsManagerOpen,
+    setIndicatorsManagerOpen,
+    copiedIndicatorRef,
+    indicatorIdRef,
+    draggingPaneId,
+    setDraggingPaneId,
+    setVolumePaneState,
+    paneYTransform,
+    handlePaneYAxisPointerDown,
+    handlePaneYAxisPointerMove,
+    handlePaneYAxisPointerUp,
+    resetPaneYAxis,
+    commitIndicators,
+    addIndicator,
+    openIndicatorSettings,
+    closeIndicatorSettings,
+    saveIndicatorSettings,
+    deleteEditingIndicator,
+    toggleIndicatorHidden,
+    removeIndicator,
+    volumeVisible,
+    volumeCollapsed,
+    startPaneResize,
+    reorderPanesRef,
+    ownPaneIndicators,
+    indicatorPaneHeights,
+    indicatorPaneTops,
+    volumeTop,
+    allPanesOrder,
+    volumeHeight,
+    priceHeight,
+  } = usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolume, plotBoundedHeight });
 
   // Positions candles by INDEX, not by literal calendar time — each candle i occupies the slot
   // [i, i+1], centered at i+0.5. A real d3.scaleTime() (mapping actual elapsed time to pixels)
@@ -982,7 +731,19 @@ export function CandlestickChart({
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
     };
-  }, [draggingPaneId, allPanesOrder, ownPaneIndicators, indicatorPaneTops, indicatorPaneHeights, volumeTop, volumeHeight, priceHeight, zoomRef]);
+  }, [
+    draggingPaneId,
+    allPanesOrder,
+    ownPaneIndicators,
+    indicatorPaneTops,
+    indicatorPaneHeights,
+    volumeTop,
+    volumeHeight,
+    priceHeight,
+    zoomRef,
+    reorderPanesRef,
+    setDraggingPaneId,
+  ]);
 
   // Applied once, the first time the plot has a real measured width (and the zoom behavior
   // above is attached) — not on every resize, which would otherwise keep yanking the user back
@@ -1211,12 +972,11 @@ export function CandlestickChart({
       if (!copiedIndicatorRef.current) return;
       e.preventDefault();
       const next = [...indicators, { ...copiedIndicatorRef.current, id: `indicator-${indicatorIdRef.current++}` }];
-      setIndicators(next);
-      onIndicatorsChange?.(next);
+      commitIndicators(next);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [hoveredIndicatorId, indicators, onIndicatorsChange]);
+  }, [hoveredIndicatorId, indicators, commitIndicators, copiedIndicatorRef, indicatorIdRef]);
 
   // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
   // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
@@ -1628,88 +1388,11 @@ export function CandlestickChart({
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
 
-  // Each entry carries its absolute index in `data` (not just its position within this slice)
-  // — that's what positions it on the index-based `zoomedXScale` (as `i + 0.5`, the slot center).
-  const visible = useMemo(() => {
-    if (data.length === 0) return [];
-    const start = Math.max(0, visibleRange.start - 2);
-    const end = Math.min(data.length, visibleRange.end + 2);
-    return data.slice(start, end).map((d, k) => ({ d, i: start + k }));
-  }, [data, visibleRange]);
+  const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoProfile } =
+    useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
 
-  // Gated on the active mode (not just `data`) so the other two never do their O(n) pass while
-  // unused — cheap to flip back and forth since switching modes just recomputes the one that's
-  // now active instead of paying for all three on every data change.
-  const heikinAshiCandles = useMemo(
-    () => (chartDisplayMode === "heikinAshi" ? computeHeikinAshiCandles(data) : null),
-    [data, chartDisplayMode]
-  );
-  const renkoBricks = useMemo(() => {
-    if (chartDisplayMode !== "renko") return [];
-    const brickSize = computeRenkoBrickSize(data, Math.max(1, Math.round(renkoAtrPeriod)));
-    return computeRenkoBricks(data, brickSize);
-  }, [data, chartDisplayMode, renkoAtrPeriod]);
-  const lineBreakBricks = useMemo(
-    () => (chartDisplayMode === "lineBreak" ? computeLineBreakBricks(data, 3) : []),
-    [data, chartDisplayMode]
-  );
-  // Recomputed on pan/zoom (not just `data`), same as `YAutoScaling` above — the profile
-  // describes whatever's currently on screen, not the whole dataset.
-  const tpoProfile = useMemo(() => {
-    if (chartDisplayMode !== "tpo") return null;
-    const start = Math.max(0, visibleRange.start);
-    const end = Math.min(data.length, visibleRange.end);
-    if (end <= start) return null;
-    return computeTPOProfile(data.slice(start, end), 24);
-  }, [data, visibleRange, chartDisplayMode]);
-
-  // First-seen order (not alphabetical) so the settings modal's checkbox list matches whatever
-  // order the caller's own `events` array introduces each kind in.
-  const eventKinds = useMemo(() => {
-    const kinds: string[] = [];
-    for (const e of events ?? []) if (!kinds.includes(e.kind)) kinds.push(e.kind);
-    return kinds;
-  }, [events]);
-
-  const visibleEvents = useMemo(() => {
-    if (!events || events.length === 0 || !eventsVisible) return [];
-    const start = Math.max(0, visibleRange.start - 2);
-    const end = Math.min(data.length, visibleRange.end + 2);
-    return events
-      .map((event, idx) => ({ event, idx, i: indexForDate(event.date) }))
-      .filter(({ event, i }) => !hiddenEventKinds.has(event.kind) && i >= start && i <= end);
-  }, [events, eventsVisible, hiddenEventKinds, visibleRange, data.length, indexForDate]);
-
-  // Toggling all events off should also close whatever's currently anchored to a now-invisible
-  // marker, same as it disappearing would from panning it out of view (see `activeEventStack`'s
-  // own doc comment) — otherwise the tooltip/modal would keep showing content for a marker
-  // that's no longer there to point at.
-  useEffect(() => {
-    if (eventsVisible) return;
-    setActiveEventStack(null);
-    setEventModalOpen(false);
-  }, [eventsVisible]);
-
-  // Events sharing the same candle index render as a single "stack" marker instead of fully
-  // overlapping circles — grouped from `visibleEvents` (not `events` directly) so this stays
-  // scoped to whatever's currently near the visible window, same as the markers themselves.
-  const eventStacks = useMemo(() => {
-    const map = new Map<number, ChartEvent[]>();
-    for (const { event, i } of visibleEvents) {
-      const bucket = map.get(i);
-      if (bucket) bucket.push(event);
-      else map.set(i, [event]);
-    }
-    return Array.from(map.entries()).map(([i, stackEvents]) => ({
-      i,
-      // Every event's `color` is resolved here (once), not left for the marker/tooltip to each
-      // fall back on separately — both then just read `event.color` directly and always agree.
-      events: stackEvents.map((event) => {
-        const kindIndex = eventKinds.indexOf(event.kind);
-        return { ...event, color: event.color ?? defaultEventColor(kindIndex < 0 ? 0 : kindIndex) };
-      }),
-    }));
-  }, [visibleEvents, eventKinds]);
+  const { hiddenEventKinds, setHiddenEventKinds, eventsVisible, setEventsVisible, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
+    useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
 
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
   // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
