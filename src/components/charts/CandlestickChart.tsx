@@ -87,6 +87,33 @@ export interface ChartEvent {
   color?: string;
 }
 
+/** One reported period's worth of fundamentals — see `CandlestickChartProps.fundamentals`. Every
+ *  metric is optional since not every caller has every figure for every period (a data source
+ *  might report revenue quarterly but P/E only where it has trailing EPS, for instance); a metric
+ *  missing at a given `date` just leaves that stretch of its own indicator pane unrendered (same
+ *  "null until ready" convention as an indicator's own warm-up period) until the next report that
+ *  does have it. Values persist (step function, not interpolated) from one `date` to the next
+ *  since that's how a reported-quarterly-or-annually figure actually reads on a daily chart — flat
+ *  until the next report changes it, not a smooth curve between two points that were never
+ *  actually measured in between. */
+export interface FundamentalDataPoint {
+  date: Date;
+  /** Free cash flow, in the instrument's own currency (not shares/percent). */
+  freeCashFlow?: number;
+  netIncome?: number;
+  totalRevenue?: number;
+  /** Net income ÷ revenue, as a percentage (e.g. 21.5 for 21.5%), not a 0-1 fraction. */
+  netMargin?: number;
+  /** Gross profit ÷ revenue, same percentage convention as `netMargin`. */
+  grossMargin?: number;
+  /** Price/earnings ratio — a plain number (e.g. 24.3), not a percentage. */
+  peRatio?: number;
+  /** Earnings per share, in the instrument's own currency. */
+  eps?: number;
+  /** Total debt ÷ total equity — a plain ratio (e.g. 0.8), not a percentage. */
+  debtToEquity?: number;
+}
+
 /** One pill in the symbol-search modal's category filter row — "all" and "favorites" are
  *  never a result's own `category` (they're just filter views over the same results), every
  *  other value can be. */
@@ -309,7 +336,81 @@ interface DataPoint {
   y: number;
 }
 
-export type IndicatorKind = "sma" | "ema" | "wma" | "vwap" | "bollinger" | "rsi" | "chop" | "macd";
+export type IndicatorKind =
+  | "sma"
+  | "ema"
+  | "wma"
+  | "vwap"
+  | "bollinger"
+  | "rsi"
+  | "chop"
+  | "macd"
+  | "freeCashFlow"
+  | "netIncome"
+  | "totalRevenue"
+  | "netMargin"
+  | "grossMargin"
+  | "peRatio"
+  | "eps"
+  | "debtToEquity";
+
+/** The eight fundamental `IndicatorKind`s, in one place — `computeIndicatorValues` reads
+ *  `fundamentals` through this, the picker/axis/hover-readout use it to pick a formatter (see
+ *  `formatFundamentalValue`). Kept as its own array (rather than checking `kind` against each
+ *  catalog entry's `category` at every call site) since two of these call sites run on every
+ *  frame of a pan/zoom and a plain array membership check is cheaper than re-deriving it from
+ *  the catalog each time. */
+const FUNDAMENTAL_INDICATOR_KINDS: IndicatorKind[] = [
+  "freeCashFlow",
+  "netIncome",
+  "totalRevenue",
+  "netMargin",
+  "grossMargin",
+  "peRatio",
+  "eps",
+  "debtToEquity",
+];
+
+function isFundamentalKind(kind: IndicatorKind): boolean {
+  return FUNDAMENTAL_INDICATOR_KINDS.includes(kind);
+}
+
+/** How a fundamental indicator's own value reads — money (compact, e.g. "$1.2B"), a percentage
+ *  (one decimal, e.g. "21.5%"), or a plain ratio (two decimals, e.g. "24.30" for a P/E). RSI/CHOP/
+ *  MACD keep their own existing plain `.toFixed(2)` wherever they're formatted — this is only
+ *  reached for the eight kinds above. */
+function formatFundamentalValue(kind: IndicatorKind, value: number): string {
+  switch (kind) {
+    case "freeCashFlow":
+    case "netIncome":
+    case "totalRevenue":
+      return `$${d3.format(".2s")(value)}`;
+    case "netMargin":
+    case "grossMargin":
+      return `${value.toFixed(1)}%`;
+    case "eps":
+      return `$${value.toFixed(2)}`;
+    default:
+      return value.toFixed(2);
+  }
+}
+
+/** A fundamental's own value at each candle — forward-filled (step function) from the most recent
+ *  `FundamentalDataPoint` whose `date` is on or before that candle's own date, `null` before the
+ *  first report exists yet, same "null until ready" convention as an indicator's own warm-up
+ *  period. `fundamentals` doesn't need to be pre-sorted — sorted once here, not by the caller. */
+function computeFundamentalValues(data: Candle[], fundamentals: FundamentalDataPoint[] | undefined, kind: IndicatorKind): (number | null)[] {
+  if (!fundamentals || fundamentals.length === 0) return data.map(() => null);
+  const sorted = [...fundamentals].sort((a, b) => a.date.getTime() - b.date.getTime());
+  let cursor = 0;
+  return data.map((d) => {
+    while (cursor + 1 < sorted.length && sorted[cursor + 1].date.getTime() <= d.date.getTime()) cursor++;
+    const point = sorted[cursor];
+    if (point.date.getTime() > d.date.getTime()) return null;
+    const value = point[kind as keyof Omit<FundamentalDataPoint, "date">];
+    return typeof value === "number" ? value : null;
+  });
+}
 
 /** A 3-line band value (Bollinger) instead of a single line's value — the draw effect tells the
  *  two apart with a plain `typeof value === "number"` check. */
@@ -366,7 +467,7 @@ interface IndicatorCatalogEntry {
   pane: "price" | "own";
   /** Grouping shown in the picker modal — purely a display grouping, doesn't affect anything
    *  about how the indicator itself behaves. */
-  category: "Moyennes mobiles" | "Volatilité" | "Momentum";
+  category: "Moyennes mobiles" | "Volatilité" | "Momentum" | "Fondamentaux";
 }
 
 const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
@@ -441,6 +542,89 @@ const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     category: "Volatilité",
   },
   { kind: "macd", label: "MACD", shortLabel: "MACD", defaultPeriod: 0, hasPeriod: false, hasStdDev: false, pane: "own", category: "Momentum" },
+  // Fundamentals: reported-period figures (see `FundamentalDataPoint`), not computed from `data`
+  // at all — `hasPeriod`/`hasStdDev` both false, same as VWAP/MACD, since there's no rolling
+  // window to configure on a raw reported number.
+  {
+    kind: "freeCashFlow",
+    label: "Free Cash Flow",
+    shortLabel: "FCF",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "netIncome",
+    label: "Net Income",
+    shortLabel: "Net Income",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "totalRevenue",
+    label: "Total Revenue",
+    shortLabel: "Revenue",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "netMargin",
+    label: "Net Margin",
+    shortLabel: "Net Margin",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "grossMargin",
+    label: "Gross Margin",
+    shortLabel: "Gross Margin",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "peRatio",
+    label: "Price/Earnings (PER)",
+    shortLabel: "P/E",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "eps",
+    label: "Earnings Per Share (EPS)",
+    shortLabel: "EPS",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
+  {
+    kind: "debtToEquity",
+    label: "Debt/Equity",
+    shortLabel: "D/E",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "own",
+    category: "Fondamentaux",
+  },
 ];
 
 function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntry {
@@ -586,8 +770,13 @@ function computeMACDValues(data: Candle[], fastPeriod: number, slowPeriod: numbe
   return result.concat(values.map((v) => ({ macd: v.MACD ?? 0, signal: v.signal ?? null, histogram: v.histogram ?? null })));
 }
 
-function computeIndicatorValues(data: Candle[], indicator: Indicator): (number | IndicatorBand | IndicatorMACD | null)[] {
+function computeIndicatorValues(
+  data: Candle[],
+  indicator: Indicator,
+  fundamentals: FundamentalDataPoint[] | undefined
+): (number | IndicatorBand | IndicatorMACD | null)[] {
   const period = Math.max(1, Math.round(indicator.period));
+  if (isFundamentalKind(indicator.kind)) return computeFundamentalValues(data, fundamentals, indicator.kind);
   switch (indicator.kind) {
     case "ema":
       return computeEMAValues(data, period);
@@ -1049,6 +1238,12 @@ export interface CandlestickChartProps {
    *  presentational: positions are derived from `date` via the same index-based X scale
    *  everything else uses, so they pan/zoom with the candles. */
   events?: ChartEvent[];
+  /** Reported-period fundamentals (free cash flow, net income, margins, P/E…) — see
+   *  `FundamentalDataPoint`. Each metric present here shows up as its own entry (category
+   *  "Fondamentaux") in the "Ajouter un indicateur" picker, rendering in its own pane exactly
+   *  like RSI/CHOP/MACD once added. The library doesn't fetch or compute any of this itself
+   *  (same stance as `timeframes`/`symbolSearchResults`) — it's the app's own data, just plotted. */
+  fundamentals?: FundamentalDataPoint[];
   /** Makes `symbol` its own hoverable/clickable zone (background on hover, separate from the
    *  chart-type label right next to it) — clicking it opens a "Symbol search" modal (search
    *  field + category filter pills + a results list you provide). Default false — with
@@ -1376,6 +1571,7 @@ export function CandlestickChart({
   renkoAtrPeriod = 14,
   symbol,
   events,
+  fundamentals,
   symbolSearch = false,
   symbolSearchResults,
   onSymbolSearchChange,
@@ -2830,8 +3026,8 @@ export function CandlestickChart({
   // Expensive (O(data.length) per indicator) — recomputed only when the data or the indicator
   // list itself changes, never on pan/zoom (which would otherwise redo this every frame).
   const indicatorValues = useMemo(
-    () => indicators.map((indicator) => ({ indicator, values: computeIndicatorValues(data, indicator) })),
-    [data, indicators]
+    () => indicators.map((indicator) => ({ indicator, values: computeIndicatorValues(data, indicator, fundamentals) })),
+    [data, indicators, fundamentals]
   );
 
   // Cheap: slices the precomputed arrays down to the same padded visible window `visible` uses,
@@ -2851,14 +3047,17 @@ export function CandlestickChart({
 
   // One Y-scale per "own"-pane indicator, shared between the canvas draw effect and the SVG axis
   // ticks below it (computed once here instead of duplicated in both places, which would risk
-  // the two drifting out of sync). RSI/CHOP are always 0-100 by definition; MACD auto-fits to
-  // whatever's currently visible (macd/signal/histogram together), same spirit as YAutoScaling
-  // for price.
+  // the two drifting out of sync). RSI/CHOP are always 0-100 by definition; MACD and every
+  // fundamental indicator auto-fit to whatever's currently visible, same spirit as YAutoScaling
+  // for price — a fundamental's own unit varies wildly by metric (revenue in the billions, a P/E
+  // ratio in the tens) and by company, so no fixed domain could ever make sense for it.
   const ownPaneScales = useMemo(() => {
     const scales: Record<string, d3.ScaleLinear<number, number>> = {};
     ownPaneIndicators.forEach((ind, idx) => {
       const height = indicatorPaneHeights[idx];
-      if (ind.kind === "macd") {
+      if (ind.kind === "rsi" || ind.kind === "chop") {
+        scales[ind.id] = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+      } else if (ind.kind === "macd") {
         const points = (visibleIndicators.find((v) => v.indicator.id === ind.id)?.points ?? []) as { i: number; value: IndicatorMACD }[];
         let lo = 0;
         let hi = 0;
@@ -2869,7 +3068,19 @@ export function CandlestickChart({
         const pad = (hi - lo) * 0.1 || 1;
         scales[ind.id] = d3.scaleLinear().domain([lo - pad, hi + pad]).range([height, 0]);
       } else {
-        scales[ind.id] = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+        const points = (visibleIndicators.find((v) => v.indicator.id === ind.id)?.points ?? []) as { i: number; value: number }[];
+        let lo = Infinity;
+        let hi = -Infinity;
+        for (const p of points) {
+          lo = Math.min(lo, p.value);
+          hi = Math.max(hi, p.value);
+        }
+        if (!isFinite(lo) || !isFinite(hi)) {
+          lo = 0;
+          hi = 1;
+        }
+        const pad = (hi - lo) * 0.1 || 1;
+        scales[ind.id] = d3.scaleLinear().domain([lo - pad, hi + pad]).range([height, 0]);
       }
     });
     return scales;
@@ -4243,6 +4454,22 @@ export function CandlestickChart({
           }
         }
         ctx.stroke();
+      } else {
+        // Fundamental indicators (Free Cash Flow, Net Income, P/E…): a plain line, no fixed
+        // reference levels — unlike RSI/CHOP there's no universal "overbought/oversold"-style
+        // threshold that would mean anything across arbitrary metrics/companies.
+        const numericPoints = points as { i: number; value: number }[];
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        numericPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
       }
 
       // Same "horizontal"/"ray" rendering as the volume section above, scoped to lines anchored
@@ -5013,7 +5240,9 @@ export function CandlestickChart({
                   return (
                     <span className="lq-chart__symbol-info-ohlc">
                       {typeof value === "number"
-                        ? value.toFixed(2)
+                        ? isFundamentalKind(ind.kind)
+                          ? formatFundamentalValue(ind.kind, value)
+                          : value.toFixed(2)
                         : "macd" in value
                           ? `MACD ${value.macd.toFixed(2)} · Signal ${value.signal !== null ? value.signal.toFixed(2) : "–"} · Hist ${
                               value.histogram !== null ? value.histogram.toFixed(2) : "–"
@@ -5120,7 +5349,13 @@ export function CandlestickChart({
                 <g key={ind.id}>
                   {!ind.paneCollapsed && (
                     <g transform={`translate(0, ${paneTop})`}>
-                      <ChartAxis scale={scale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} ticks={3} />
+                      <ChartAxis
+                        scale={scale}
+                        orientation="right"
+                        transform={`translate(${dims.boundedWidth}, 0)`}
+                        ticks={3}
+                        tickFormat={isFundamentalKind(ind.kind) ? (v) => formatFundamentalValue(ind.kind, Number(v)) : undefined}
+                      />
                       <rect
                         className="lq-chart__axis-drag lq-chart__axis-drag--y"
                         x={dims.boundedWidth}

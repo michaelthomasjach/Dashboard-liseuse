@@ -1,6 +1,14 @@
 import { useEffect, useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { CandlestickChart, type TimeframeEntry, type Indicator, type ChartEvent, type SymbolSearchResult, type Candle } from "./CandlestickChart";
+import {
+  CandlestickChart,
+  type TimeframeEntry,
+  type Indicator,
+  type ChartEvent,
+  type FundamentalDataPoint,
+  type SymbolSearchResult,
+  type Candle,
+} from "./CandlestickChart";
 import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
@@ -412,6 +420,85 @@ export const WithSymbolAndEvents: Story = {
         tooltip en dessous.
       </p>
       <CandlestickChart data={SYMBOL_DATASET} symbol="ACME" events={SYMBOL_EVENTS} showIndicators height={STORY_HEIGHT} />
+    </div>
+  ),
+};
+
+// Four quarterly reports spread across SYMBOL_DATASET's own date range — sparse on purpose (real
+// fundamentals are reported quarterly/annually, never daily like `data` itself).
+const FUNDAMENTALS_DATASET: FundamentalDataPoint[] = [
+  {
+    date: SYMBOL_DATASET[0].date,
+    totalRevenue: 4_200_000_000,
+    netIncome: 620_000_000,
+    freeCashFlow: 540_000_000,
+    netMargin: 14.8,
+    grossMargin: 41.2,
+    peRatio: 22.4,
+    eps: 1.18,
+    debtToEquity: 0.62,
+  },
+  {
+    date: SYMBOL_DATASET[65].date,
+    totalRevenue: 4_450_000_000,
+    netIncome: 690_000_000,
+    freeCashFlow: 610_000_000,
+    netMargin: 15.5,
+    grossMargin: 42.0,
+    peRatio: 21.1,
+    eps: 1.29,
+    debtToEquity: 0.58,
+  },
+  {
+    date: SYMBOL_DATASET[130].date,
+    totalRevenue: 4_680_000_000,
+    netIncome: 705_000_000,
+    freeCashFlow: 590_000_000,
+    netMargin: 15.1,
+    grossMargin: 41.6,
+    peRatio: 23.8,
+    eps: 1.32,
+    debtToEquity: 0.55,
+  },
+  {
+    date: SYMBOL_DATASET[195].date,
+    totalRevenue: 4_920_000_000,
+    netIncome: 760_000_000,
+    freeCashFlow: 655_000_000,
+    netMargin: 15.4,
+    grossMargin: 42.5,
+    peRatio: 24.6,
+    eps: 1.41,
+    debtToEquity: 0.51,
+  },
+];
+
+export const WithFundamentals: Story = {
+  name: "Indicateurs fondamentaux",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        `fundamentals: FundamentalDataPoint[]` — Free Cash Flow, Net Income, Total Revenue, Net Margin, Gross
+        Margin, P/E (`peRatio`), EPS et Debt/Equity : huit métriques de santé financière, chacune de type "pane"
+        (sa propre catégorie "Fondamentaux" dans la modale "Ajouter un indicateur", son propre sous-panneau une
+        fois ajoutée — mêmes réordonnancement/redimensionnement/rescale d'axe/repli que RSI/CHOP/MACD/Volume, sans
+        code dédié en plus). Les valeurs sont des rapports ponctuels (trimestriels ici) et non une série
+        quotidienne comme `data` — le graphe les <strong>tient constantes</strong> (fonction en escalier) entre
+        deux rapports plutôt que de les interpoler, jusqu'au rapport suivant. Chaque métrique choisit son propre
+        format d'affichage (axe et survol) selon sa nature — montant compact avec `$` pour FCF/Net Income/Revenue,
+        pourcentage à une décimale pour les marges, ratio à deux décimales pour P/E et Debt/Equity, `$` à deux
+        décimales pour l'EPS — pas de niveaux de référence fixes comme RSI/CHOP (rien d'universel ne fait sens
+        d'une métrique/entreprise à l'autre), son échelle se recadre en continu sur ce qui est visible comme MACD.
+        Free Cash Flow est pré-ajouté ci-dessous ; ouvre "Ajouter un indicateur" pour les sept autres.
+      </p>
+      <CandlestickChart
+        data={SYMBOL_DATASET}
+        symbol="ACME"
+        showIndicators
+        fundamentals={FUNDAMENTALS_DATASET}
+        defaultIndicators={[{ id: "story-fcf", kind: "freeCashFlow", period: 0 }]}
+        height={STORY_HEIGHT}
+      />
     </div>
   ),
 };

@@ -12,6 +12,7 @@ export type {
   Indicator,
   IndicatorKind,
   ChartEvent,
+  FundamentalDataPoint,
   TimeframeOption,
   TimeframeGroup,
   TimeframeEntry,
