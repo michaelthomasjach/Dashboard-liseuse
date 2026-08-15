@@ -12,40 +12,28 @@ import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
+import { ChartHeader } from "./candlestick/components/ChartHeader";
+import { DrawingEditModal } from "./candlestick/components/DrawingEditModal";
+import { IndicatorModals } from "./candlestick/components/IndicatorModals";
+import { ChartSettingsModals } from "./candlestick/components/ChartSettingsModals";
+import { SymbolSearchModal } from "./candlestick/components/SymbolSearchModal";
 import { ChartAxis } from "./ChartAxis";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
 import { Popover } from "../forms/Popover";
-import { TextField } from "../forms/TextField";
-import { NumberField } from "../forms/NumberField";
-import { Checkbox } from "../forms/Checkbox";
-import { Select } from "../forms/Select";
-import { Modal } from "../primitives/Modal";
-import { Tabs } from "../primitives/Tabs";
 import {
-  MaximizeIcon,
-  MinimizeIcon,
-  SearchIcon,
   ChevronDownIcon,
   ChevronUpIcon,
   ChevronLeftIcon,
   PlusIcon,
-  ActivityIcon,
   SettingsIcon,
   EyeIcon,
   EyeOffIcon,
   TrashIcon,
   MagnetIcon,
-  StarIcon,
-  CloseIcon,
   LockIcon,
   GripIcon,
   LayersIcon,
-  OverlayBadgeIcon,
-  PaneBadgeIcon,
-  CheckIcon,
-  RefreshIcon,
-  CalendarIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -55,7 +43,6 @@ import type { FundamentalDataPoint } from "./candlestick/interfaces/FundamentalD
 import type { SymbolSearchCategory } from "./candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "./candlestick/interfaces/SymbolSearchResult.interface";
 import type { TrendLineDrawing } from "./candlestick/interfaces/TrendLineDrawing.interface";
-import type { DataPoint } from "./candlestick/interfaces/DataPoint.interface";
 import type { IndicatorKind } from "./candlestick/interfaces/IndicatorKind.interface";
 import type { IndicatorBand } from "./candlestick/interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./candlestick/interfaces/IndicatorMACD.interface";
@@ -64,7 +51,6 @@ import type { ChartDisplayMode } from "./candlestick/interfaces/ChartDisplayMode
 import type { TimeframeOption } from "./candlestick/interfaces/TimeframeOption.interface";
 import type { TimeframeGroup } from "./candlestick/interfaces/TimeframeGroup.interface";
 import type { TimeframeEntry } from "./candlestick/interfaces/TimeframeEntry.interface";
-import type { DrawingToolType } from "./candlestick/interfaces/DrawingToolType.interface";
 import type { CandlestickChartProps } from "./candlestick/interfaces/CandlestickChartProps.interface";
 
 export type {
@@ -85,21 +71,12 @@ export type {
   CandlestickChartProps,
 };
 
-import { MULTI_POINT_TOOLS, DRAWING_TOOL_CATEGORIES, drawingToolMeta, drawingLabel } from "./candlestick/drawingCatalog";
-import { allPointsOf, snapPixel, round4, effectiveExtendOf } from "./candlestick/drawingGeometry";
-import {
-  isFundamentalKind,
-  formatFundamentalValue,
-  type IndicatorCatalogEntry,
-  INDICATOR_CATALOG,
-  indicatorCatalogEntry,
-  indicatorLabel,
-  defaultIndicatorColor,
-} from "./candlestick/indicators";
+import { DRAWING_TOOL_CATEGORIES, drawingLabel } from "./candlestick/drawingCatalog";
+import { allPointsOf, snapPixel } from "./candlestick/drawingGeometry";
+import { isFundamentalKind, formatFundamentalValue, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "./candlestick/indicators";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "./candlestick/eventsCatalog";
 import { CHART_DISPLAY_MODES } from "./candlestick/chartModes";
-import { SYMBOL_SEARCH_CATEGORIES, defaultSymbolLogoColor } from "./candlestick/symbolSearchCatalog";
-import { isTimeframeGroup, findTimeframeLabel } from "./candlestick/timeframes";
+import { findTimeframeLabel } from "./candlestick/timeframes";
 import {
   DEFAULT_MARGIN,
   TOOLS_RAIL_WIDTH,
@@ -109,10 +86,9 @@ import {
   AXIS_HANDLE_FRACTION_X,
   AXIS_HANDLE_FRACTION_Y,
   MAX_DATE_TICKS,
-  DEFAULT_DRAWING_COLOR,
   SUB_PANE_COLLAPSED_HEIGHT,
 } from "./candlestick/constants";
-import { contrastingTextColor, formatCountdown, formatPercentFromReference, toDateInputValue, fromDateInputValue } from "./candlestick/formatting";
+import { formatCountdown, formatPercentFromReference } from "./candlestick/formatting";
 
 export function CandlestickChart({
   data,
@@ -192,7 +168,6 @@ export function CandlestickChart({
     setHoverY,
     hoverVolumeY,
     setHoverVolumeY,
-    editingId,
     setEditingId,
     draft,
     setDraft,
@@ -797,142 +772,37 @@ export function CandlestickChart({
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
       {showHeader && !seasonalityOpen && (
-        <div className="lq-chart__header" style={{ width: dims.width }}>
-          {timeframes && timeframes.length > 0 && (
-            <>
-              <button ref={tfAnchorRef} type="button" className="lq-chart__timeframe-trigger" onClick={() => setTfOpen((o) => !o)}>
-                {currentTimeframeLabel ?? "Intervalle"}
-                <ChevronDownIcon size={12} />
-              </button>
-              <Popover open={tfOpen} onClose={() => setTfOpen(false)} anchorRef={tfAnchorRef} placement="bottom">
-                <div className="lq-chart__timeframe-menu">
-                  {timeframes.map((entry) =>
-                    isTimeframeGroup(entry) ? (
-                      <div key={entry.group} className="lq-chart__timeframe-group">
-                        <div className="lq-chart__timeframe-group-label">{entry.group}</div>
-                        {entry.options.map((opt) => (
-                          <button
-                            key={opt.value}
-                            type="button"
-                            className={["lq-chart__timeframe-option", opt.value === timeframe && "lq-chart__timeframe-option--selected"]
-                              .filter(Boolean)
-                              .join(" ")}
-                            onClick={() => {
-                              onTimeframeChange?.(opt.value);
-                              setTfOpen(false);
-                            }}
-                          >
-                            {opt.label}
-                          </button>
-                        ))}
-                      </div>
-                    ) : (
-                      <button
-                        key={entry.value}
-                        type="button"
-                        className={["lq-chart__timeframe-option", entry.value === timeframe && "lq-chart__timeframe-option--selected"]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => {
-                          onTimeframeChange?.(entry.value);
-                          setTfOpen(false);
-                        }}
-                      >
-                        {entry.label}
-                      </button>
-                    )
-                  )}
-                </div>
-              </Popover>
-            </>
-          )}
-          {/* No dedicated prop gates this (unlike `showIndicators`/`drawingTools`) — it rides on
-              `showHeader` same as zoomable/fullscreenToggle, so it's on by default and only
-              disappears in the edge case where a caller has already opted out of every other
-              header feature too. */}
-          <button
-            ref={displayModeAnchorRef}
-            type="button"
-            className="lq-chart__icon-button"
-            onClick={() => setDisplayModeOpen((o) => !o)}
-            aria-label="Mode d'affichage"
-            title="Mode d'affichage"
-          >
-            <currentModeEntry.icon size={14} />
-          </button>
-          <Popover open={displayModeOpen} onClose={() => setDisplayModeOpen(false)} anchorRef={displayModeAnchorRef} placement="bottom">
-            <div className="lq-chart__display-mode-menu">
-              {CHART_DISPLAY_MODES.map((entry) => (
-                <button
-                  key={entry.mode}
-                  type="button"
-                  className={["lq-chart__display-mode-option", entry.mode === chartDisplayMode && "lq-chart__display-mode-option--selected"]
-                    .filter(Boolean)
-                    .join(" ")}
-                  onClick={() => {
-                    setChartDisplayMode(entry.mode);
-                    onChartDisplayModeChange?.(entry.mode);
-                    setDisplayModeOpen(false);
-                  }}
-                >
-                  <entry.icon size={15} />
-                  {entry.label}
-                </button>
-              ))}
-            </div>
-          </Popover>
-          {events && events.length > 0 && (
-            <button
-              type="button"
-              className={["lq-chart__icon-button", !eventsVisible && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-              onClick={() => setEventsVisible((v) => !v)}
-              aria-label={eventsVisible ? "Masquer les évènements" : "Afficher les évènements"}
-              aria-pressed={!eventsVisible}
-              title="Masquer/afficher tous les évènements"
-            >
-              {eventsVisible ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
-            </button>
-          )}
-          {showIndicators && (
-            <button
-              type="button"
-              className="lq-chart__icon-button"
-              onClick={() => {
-                setIndicatorSearchQuery("");
-                setIndicatorPickerOpen(true);
-              }}
-              aria-label="Ajouter un indicateur"
-            >
-              <ActivityIcon size={14} />
-            </button>
-          )}
-          {zoomable && isZoomed && (
-            <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
-              Réinitialiser le zoom
-            </button>
-          )}
-          {seasonality && (
-            <button
-              type="button"
-              className="lq-chart__icon-button"
-              onClick={() => setSeasonalityOpen(true)}
-              aria-label="Saisonnalité"
-              title="Saisonnalité : performance moyenne par période, agrégée sur l'historique"
-            >
-              <CalendarIcon size={14} />
-            </button>
-          )}
-          {fullscreenToggle && (
-            <button
-              type="button"
-              className="lq-chart__icon-button"
-              onClick={toggleFullscreen}
-              aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
-            >
-              {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
-            </button>
-          )}
-        </div>
+        <ChartHeader
+          dims={dims}
+          timeframes={timeframes}
+          timeframe={timeframe}
+          onTimeframeChange={onTimeframeChange}
+          tfOpen={tfOpen}
+          setTfOpen={setTfOpen}
+          tfAnchorRef={tfAnchorRef}
+          currentTimeframeLabel={currentTimeframeLabel}
+          displayModeAnchorRef={displayModeAnchorRef}
+          displayModeOpen={displayModeOpen}
+          setDisplayModeOpen={setDisplayModeOpen}
+          currentModeEntry={currentModeEntry}
+          chartDisplayMode={chartDisplayMode}
+          setChartDisplayMode={setChartDisplayMode}
+          onChartDisplayModeChange={onChartDisplayModeChange}
+          events={events}
+          eventsVisible={eventsVisible}
+          setEventsVisible={setEventsVisible}
+          showIndicators={showIndicators}
+          setIndicatorSearchQuery={setIndicatorSearchQuery}
+          setIndicatorPickerOpen={setIndicatorPickerOpen}
+          zoomable={zoomable}
+          isZoomed={isZoomed}
+          resetZoom={resetZoom}
+          seasonality={seasonality}
+          setSeasonalityOpen={setSeasonalityOpen}
+          fullscreenToggle={fullscreenToggle}
+          toggleFullscreen={toggleFullscreen}
+          isFullscreen={isFullscreen}
+        />
       )}
 
       {/* Deliberately its own small header rather than trying to keep the regular one's
@@ -2119,892 +1989,85 @@ export function CandlestickChart({
         />
       )}
 
-      {editingId && draft && (
-        <Modal
-          open
-          onClose={closeEditModal}
-          title={draft.lineType === "symbolOverlay" ? `Paramètres — ${drawingLabel(draft)}` : "Modifier la ligne"}
-          footer={
-            <div className="lq-chart__edit-drawing-footer">
-              <button type="button" className="lq-chart__reset-button" onClick={deleteEditingDrawing}>
-                Supprimer
-              </button>
-              <button type="button" className="lq-chart__confirm-button" onClick={saveEditModal}>
-                Enregistrer
-              </button>
-            </div>
-          }
-        >
-          {/* Coordonnées/Texte don't apply to a symbolOverlay — x1/y1/x2/y2 aren't real
-              coordinates for it (see the lineType's own doc comment) and there's no text label to
-              speak of, only Style (thickness/color/line style, plus its own "Visible" toggle)
-              does anything — so it skips the tab bar entirely rather than showing two tabs with
-              nothing in them. */}
-          {draft.lineType !== "symbolOverlay" && (
-            <Tabs
-              items={[
-                { id: "coords", label: "Coordonnées" },
-                { id: "text", label: "Texte" },
-                { id: "style", label: "Style" },
-              ]}
-              value={editModalTab}
-              onChange={(id) => setEditModalTab(id as "coords" | "text" | "style")}
-              className="lq-chart__edit-drawing-tabs"
-            />
-          )}
+      <DrawingEditModal
+        draft={draft}
+        setDraft={setDraft}
+        editModalTab={editModalTab}
+        setEditModalTab={setEditModalTab}
+        closeEditModal={closeEditModal}
+        saveEditModal={saveEditModal}
+        deleteEditingDrawing={deleteEditingDrawing}
+        valueAxisLabel={valueAxisLabel}
+      />
 
-          {editModalTab === "coords" && draft.lineType !== "symbolOverlay" && (
-            <>
-              {/* A horizontal/vertical line only has one degree of freedom (see the single drag
-                  handle above) — editing its two endpoints independently here would let them
-                  drift apart and break that invariant, so it gets one field instead of the usual
-                  two. */}
-              {draft.lineType === "horizontal" && (
-                <NumberField
-                  label={valueAxisLabel(draft.valueAxis)}
-                  step={0.01}
-                  value={draft.y1}
-                  onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v), y2: v === "" ? draft.y2 : round4(v) })}
-                />
-              )}
-              {draft.lineType === "vertical" && (
-                <div className="lq-field">
-                  <label className="lq-field__label">Date</label>
-                  <input
-                    type="date"
-                    className="lq-chart__date-input"
-                    value={toDateInputValue(draft.x1)}
-                    onChange={(e) => {
-                      const next = fromDateInputValue(e.target.value, draft.x1);
-                      setDraft({ ...draft, x1: next, x2: next });
-                    }}
-                  />
-                </div>
-              )}
-              {/* A ray keeps both its degrees of freedom (unlike horizontal/vertical), so it gets
-                  both fields — still just one of each, since x2/y2 always mirror x1/y1. Arrow
-                  markers share this same one-point editor (never a volume value — they're always
-                  price-anchored). */}
-              {(draft.lineType === "ray" || draft.lineType === "arrowUp" || draft.lineType === "arrowDown") && (
-                <div className="lq-chart__edit-drawing-row">
-                  <div className="lq-field">
-                    <label className="lq-field__label">Date</label>
-                    <input
-                      type="date"
-                      className="lq-chart__date-input"
-                      value={toDateInputValue(draft.x1)}
-                      onChange={(e) => {
-                        const next = fromDateInputValue(e.target.value, draft.x1);
-                        setDraft({ ...draft, x1: next, x2: next });
-                      }}
-                    />
-                  </div>
-                  <NumberField
-                    label={valueAxisLabel(draft.valueAxis)}
-                    step={0.01}
-                    value={draft.y1}
-                    onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v), y2: v === "" ? draft.y2 : round4(v) })}
-                  />
-                </div>
-              )}
-              {/* Regular trend line, "extended" (same two points, just drawn further — see the
-                  canvas draw effect), "channel" (line 1's own two points; its second, parallel
-                  line is set by the "Décalage" field below instead of its own coordinates),
-                  "fibonacci" (its retracement levels are all derived from these same two points,
-                  0% at "Prix début" and 100% at "Prix fin") and "rectangle"/"zones" (opposite
-                  corners) all share the same two-point editor. */}
-              {(!draft.lineType ||
-                draft.lineType === "extended" ||
-                draft.lineType === "channel" ||
-                draft.lineType === "fibonacci" ||
-                draft.lineType === "rectangle" ||
-                draft.lineType === "zones") && (
-                <>
-                  <div className="lq-chart__edit-drawing-row">
-                    <div className="lq-field">
-                      <label className="lq-field__label">Début</label>
-                      <input
-                        type="date"
-                        className="lq-chart__date-input"
-                        value={toDateInputValue(draft.x1)}
-                        onChange={(e) => setDraft({ ...draft, x1: fromDateInputValue(e.target.value, draft.x1) })}
-                      />
-                    </div>
-                    <NumberField
-                      label="Prix début"
-                      step={0.01}
-                      value={draft.y1}
-                      onChange={(v) => setDraft({ ...draft, y1: v === "" ? draft.y1 : round4(v) })}
-                    />
-                  </div>
-                  <div className="lq-chart__edit-drawing-row">
-                    <div className="lq-field">
-                      <label className="lq-field__label">Fin</label>
-                      <input
-                        type="date"
-                        className="lq-chart__date-input"
-                        value={toDateInputValue(draft.x2)}
-                        onChange={(e) => setDraft({ ...draft, x2: fromDateInputValue(e.target.value, draft.x2) })}
-                      />
-                    </div>
-                    <NumberField
-                      label="Prix fin"
-                      step={0.01}
-                      value={draft.y2}
-                      onChange={(v) => setDraft({ ...draft, y2: v === "" ? draft.y2 : round4(v) })}
-                    />
-                  </div>
-                </>
-              )}
-              {draft.lineType === "channel" && (
-                <NumberField
-                  label="Décalage (ligne 2)"
-                  step={0.01}
-                  value={draft.channelOffset ?? 0}
-                  onChange={(v) => setDraft({ ...draft, channelOffset: v === "" ? draft.channelOffset : round4(v) })}
-                />
-              )}
-              {/* "disjointChannel"/"fibonacciExtension"/"elliottCorrection"/"elliottImpulse" — a
-                  date+price row per point (x1/y1, x2/y2, then extraPoints), generic over however
-                  many that tool needs instead of a fixed "Début"/"Fin" pair. */}
-              {draft.lineType &&
-                MULTI_POINT_TOOLS[draft.lineType as DrawingToolType]?.labels.map((label, i) => {
-                  const point = i === 0 ? { x: draft.x1, y: draft.y1 } : i === 1 ? { x: draft.x2, y: draft.y2 } : draft.extraPoints?.[i - 2];
-                  if (!point) return null;
-                  const setPointField = (next: Partial<DataPoint>) => {
-                    if (i === 0) {
-                      setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
-                    } else if (i === 1) {
-                      setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
-                    } else {
-                      const extra = [...(draft.extraPoints ?? [])];
-                      extra[i - 2] = { ...extra[i - 2], ...next };
-                      setDraft({ ...draft, extraPoints: extra });
-                    }
-                  };
-                  return (
-                    <div className="lq-chart__edit-drawing-row" key={i}>
-                      <div className="lq-field">
-                        <label className="lq-field__label">{label}</label>
-                        <input
-                          type="date"
-                          className="lq-chart__date-input"
-                          value={toDateInputValue(point.x)}
-                          onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
-                        />
-                      </div>
-                      <NumberField
-                        label={`Prix (${label})`}
-                        step={0.01}
-                        value={point.y}
-                        onChange={(v) => v !== "" && setPointField({ y: round4(v) })}
-                      />
-                    </div>
-                  );
-                })}
-              {/* "elbowArrow" — same date+price-row-per-point idea as the generic multi-point
-                  block above, but over allPointsOf directly (numbered "Point N") instead of
-                  MULTI_POINT_TOOLS' fixed labels array, since it can have any number of points
-                  depending on how many clicks it took before Escape finalized it. */}
-              {draft.lineType === "elbowArrow" &&
-                allPointsOf(draft).map((point, i) => {
-                  const setPointField = (next: Partial<DataPoint>) => {
-                    if (i === 0) {
-                      setDraft({ ...draft, x1: next.x ?? draft.x1, y1: next.y ?? draft.y1 });
-                    } else if (i === 1) {
-                      setDraft({ ...draft, x2: next.x ?? draft.x2, y2: next.y ?? draft.y2 });
-                    } else {
-                      const extra = [...(draft.extraPoints ?? [])];
-                      extra[i - 2] = { ...extra[i - 2], ...next };
-                      setDraft({ ...draft, extraPoints: extra });
-                    }
-                  };
-                  const label = `Point ${i + 1}`;
-                  return (
-                    <div className="lq-chart__edit-drawing-row" key={i}>
-                      <div className="lq-field">
-                        <label className="lq-field__label">{label}</label>
-                        <input
-                          type="date"
-                          className="lq-chart__date-input"
-                          value={toDateInputValue(point.x)}
-                          onChange={(e) => setPointField({ x: fromDateInputValue(e.target.value, point.x) })}
-                        />
-                      </div>
-                      <NumberField
-                        label={`Prix (${label})`}
-                        step={0.01}
-                        value={point.y}
-                        onChange={(v) => v !== "" && setPointField({ y: round4(v) })}
-                      />
-                    </div>
-                  );
-                })}
-            </>
-          )}
+      <IndicatorModals
+        indicatorPickerOpen={indicatorPickerOpen}
+        setIndicatorPickerOpen={setIndicatorPickerOpen}
+        indicatorSearchQuery={indicatorSearchQuery}
+        setIndicatorSearchQuery={setIndicatorSearchQuery}
+        showVolume={showVolume}
+        setVolumePaneState={setVolumePaneState}
+        addIndicator={addIndicator}
+        indicatorsManagerOpen={indicatorsManagerOpen}
+        setIndicatorsManagerOpen={setIndicatorsManagerOpen}
+        indicators={indicators}
+        ownPaneIndicators={ownPaneIndicators}
+        volumeVisible={volumeVisible}
+        visibleDrawings={visibleDrawings}
+        setEditingId={setEditingId}
+        setDraft={setDraft}
+        setEditModalTab={setEditModalTab}
+        commitDrawings={commitDrawings}
+        drawings={drawings}
+        openIndicatorSettings={openIndicatorSettings}
+        removeIndicator={removeIndicator}
+        setVolumeSettingsOpen={setVolumeSettingsOpen}
+        editingIndicatorId={editingIndicatorId}
+        indicatorDraft={indicatorDraft}
+        setIndicatorDraft={setIndicatorDraft}
+        closeIndicatorSettings={closeIndicatorSettings}
+        deleteEditingIndicator={deleteEditingIndicator}
+        saveIndicatorSettings={saveIndicatorSettings}
+      />
 
-          {editModalTab === "text" && draft.lineType !== "symbolOverlay" && (
-            <>
-              <TextField
-                label="Texte"
-                placeholder="Étiquette (optionnel)"
-                value={draft.text ?? ""}
-                onChange={(e) => setDraft({ ...draft, text: e.target.value })}
-              />
-              <Checkbox
-                checked={draft.textAlignWithLine ?? false}
-                onChange={(textAlignWithLine) => setDraft({ ...draft, textAlignWithLine })}
-                label="Aligner le texte avec la ligne"
-              />
-              <div className="lq-chart__edit-drawing-row">
-                <NumberField
-                  label="Taille du texte"
-                  min={8}
-                  max={48}
-                  step={1}
-                  value={draft.textSize ?? 11}
-                  onChange={(v) => setDraft({ ...draft, textSize: v === "" ? 11 : v })}
-                />
-                <div className="lq-field">
-                  <label className="lq-field__label">Couleur du texte</label>
-                  <input
-                    type="color"
-                    className="lq-chart__color-input"
-                    value={draft.textColor ?? draft.color ?? DEFAULT_DRAWING_COLOR}
-                    onChange={(e) => setDraft({ ...draft, textColor: e.target.value })}
-                  />
-                </div>
-              </div>
-              <div className="lq-field">
-                <label className="lq-field__label">Couleur de fond</label>
-                <input
-                  type="color"
-                  className="lq-chart__color-input"
-                  value={draft.textBackgroundColor ?? "#000000"}
-                  // Auto-picks a contrasting text color every time the background changes, so the
-                  // label never accidentally lands on an unreadable pairing — still overridable by
-                  // hand afterward via "Couleur du texte" above, which this doesn't touch again
-                  // unless the background itself changes once more.
-                  onChange={(e) => setDraft({ ...draft, textBackgroundColor: e.target.value, textColor: contrastingTextColor(e.target.value) })}
-                />
-              </div>
-              {draft.textBackgroundColor && (
-                <button
-                  type="button"
-                  className="lq-chart__text-bg-clear"
-                  onClick={() => setDraft({ ...draft, textBackgroundColor: undefined })}
-                >
-                  Retirer la couleur de fond
-                </button>
-              )}
-              <div className="lq-chart__edit-drawing-row">
-                <Checkbox checked={draft.textBold ?? true} onChange={(textBold) => setDraft({ ...draft, textBold })} label="Gras" />
-                <Checkbox checked={draft.textItalic ?? false} onChange={(textItalic) => setDraft({ ...draft, textItalic })} label="Italique" />
-              </div>
-              <div className="lq-chart__edit-drawing-row">
-                <Select
-                  label="Alignement vertical"
-                  value={draft.textVerticalAlign ?? "top"}
-                  onChange={(v) => setDraft({ ...draft, textVerticalAlign: v })}
-                  options={[
-                    { value: "top", label: "Haut" },
-                    { value: "center", label: "Centre" },
-                    { value: "bottom", label: "Bas" },
-                  ]}
-                />
-                <Select
-                  label="Alignement horizontal"
-                  value={draft.textHorizontalAlign ?? "center"}
-                  onChange={(v) => setDraft({ ...draft, textHorizontalAlign: v })}
-                  options={[
-                    { value: "left", label: "Gauche" },
-                    { value: "center", label: "Centre" },
-                    { value: "right", label: "Droite" },
-                  ]}
-                />
-              </div>
-            </>
-          )}
+      <ChartSettingsModals
+        settingsOpen={settingsOpen}
+        setSettingsOpen={setSettingsOpen}
+        upColorOverride={upColorOverride}
+        setUpColorOverride={setUpColorOverride}
+        downColorOverride={downColorOverride}
+        setDownColorOverride={setDownColorOverride}
+        yAutoScalingState={yAutoScalingState}
+        setYAutoScalingState={setYAutoScalingState}
+        onYAutoScalingChange={onYAutoScalingChange}
+        eventKinds={eventKinds}
+        hiddenEventKinds={hiddenEventKinds}
+        setHiddenEventKinds={setHiddenEventKinds}
+        volumeSettingsOpen={volumeSettingsOpen}
+        setVolumeSettingsOpen={setVolumeSettingsOpen}
+        volumeUpColorOverride={volumeUpColorOverride}
+        setVolumeUpColorOverride={setVolumeUpColorOverride}
+        volumeDownColorOverride={volumeDownColorOverride}
+        setVolumeDownColorOverride={setVolumeDownColorOverride}
+      />
 
-          {editModalTab === "style" && (
-            <>
-              <div className="lq-chart__edit-drawing-row">
-                <NumberField
-                  label="Épaisseur"
-                  min={1}
-                  max={8}
-                  step={0.5}
-                  value={draft.strokeWidth ?? 1.5}
-                  onChange={(v) => setDraft({ ...draft, strokeWidth: v === "" ? 1.5 : v })}
-                />
-                <div className="lq-field">
-                  <label className="lq-field__label">Couleur</label>
-                  <input
-                    type="color"
-                    className="lq-chart__color-input"
-                    value={draft.color ?? DEFAULT_DRAWING_COLOR}
-                    onChange={(e) => setDraft({ ...draft, color: e.target.value })}
-                  />
-                </div>
-              </div>
-              <Select
-                label="Style de trait"
-                value={draft.lineStyle ?? (draft.dashed ? "dashed" : "solid")}
-                onChange={(v) => setDraft({ ...draft, lineStyle: v, dashed: undefined })}
-                options={[
-                  { value: "solid", label: "Continu" },
-                  { value: "dashed", label: "Tirets" },
-                  { value: "dotted", label: "Pointillés" },
-                  { value: "dashdot", label: "Tiret-point" },
-                ]}
-              />
-              {/* "extend" only applies to a plain 2-point line — the other line types (channel,
-                  fibonacci, elliott, disjoint channel, horizontal/ray/vertical) each draw
-                  themselves with their own fixed geometry and don't read this field (see the
-                  canvas draw effect's per-lineType branches vs. its generic fallback). */}
-              {(!draft.lineType || draft.lineType === "extended") && (
-                <Select
-                  label="Extension"
-                  value={effectiveExtendOf(draft)}
-                  onChange={(v) => setDraft({ ...draft, extend: v, lineType: draft.lineType === "extended" ? undefined : draft.lineType })}
-                  options={[
-                    { value: "none", label: "Ne pas étendre" },
-                    { value: "right", label: "Étendre à droite" },
-                    { value: "left", label: "Étendre à gauche" },
-                    { value: "both", label: "Étendre des deux côtés" },
-                  ]}
-                />
-              )}
-              {/* Arrowheads only make sense on a line that actually stops somewhere — offered
-                  only once "Extension" above is set to "Ne pas étendre" (an infinitely-extended
-                  end has nothing to put an arrowhead on). "Gauche"/"Droite" are screen positions
-                  (see arrowLeft/arrowRight's own doc), not tied to which point is x1 vs x2. */}
-              {(!draft.lineType || draft.lineType === "extended") && effectiveExtendOf(draft) === "none" && (
-                <div className="lq-chart__edit-drawing-row">
-                  <Checkbox checked={draft.arrowLeft ?? false} onChange={(arrowLeft) => setDraft({ ...draft, arrowLeft })} label="Flèche à gauche" />
-                  <Checkbox checked={draft.arrowRight ?? false} onChange={(arrowRight) => setDraft({ ...draft, arrowRight })} label="Flèche à droite" />
-                </div>
-              )}
-              {draft.lineType === "zones" && (
-                <>
-                  <Checkbox
-                    checked={draft.showZoneSides ?? false}
-                    onChange={(showZoneSides) => setDraft({ ...draft, showZoneSides })}
-                    label="Afficher les bords verticaux"
-                  />
-                  <div className="lq-chart__edit-drawing-row">
-                    <div className="lq-field">
-                      <label className="lq-field__label">Zone positive</label>
-                      <input
-                        type="color"
-                        className="lq-chart__color-input"
-                        value={draft.positiveColor ?? "#26a69a"}
-                        onChange={(e) => setDraft({ ...draft, positiveColor: e.target.value })}
-                      />
-                    </div>
-                    <div className="lq-field">
-                      <label className="lq-field__label">Zone neutre</label>
-                      <input
-                        type="color"
-                        className="lq-chart__color-input"
-                        value={draft.neutralColor ?? "#9e9e9e"}
-                        onChange={(e) => setDraft({ ...draft, neutralColor: e.target.value })}
-                      />
-                    </div>
-                    <div className="lq-field">
-                      <label className="lq-field__label">Zone négative</label>
-                      <input
-                        type="color"
-                        className="lq-chart__color-input"
-                        value={draft.negativeColor ?? "#ef5350"}
-                        onChange={(e) => setDraft({ ...draft, negativeColor: e.target.value })}
-                      />
-                    </div>
-                  </div>
-                </>
-              )}
-              {draft.lineType === "symbolOverlay" && (
-                <Checkbox
-                  checked={!draft.hidden}
-                  onChange={(visible) => setDraft({ ...draft, hidden: !visible })}
-                  label="Visible"
-                />
-              )}
-            </>
-          )}
-        </Modal>
-      )}
-
-      {indicatorPickerOpen && (
-        <Modal open onClose={() => setIndicatorPickerOpen(false)} title="Ajouter un indicateur">
-          <TextField
-            placeholder="Rechercher un indicateur…"
-            value={indicatorSearchQuery}
-            onChange={(e) => setIndicatorSearchQuery(e.target.value)}
-            leadingIcon={<SearchIcon size={14} />}
-            autoFocus
-          />
-          <div className="lq-chart__indicator-picker">
-            {(() => {
-              const query = indicatorSearchQuery.trim().toLowerCase();
-              const showVolumeOption = showVolume && "volume".includes(query);
-              const matches = INDICATOR_CATALOG.filter(
-                (entry) => entry.label.toLowerCase().includes(query) || entry.shortLabel.toLowerCase().includes(query)
-              );
-              const groups: { category: string; entries: IndicatorCatalogEntry[] }[] = [];
-              for (const entry of matches) {
-                const group = groups.find((g) => g.category === entry.category);
-                if (group) group.entries.push(entry);
-                else groups.push({ category: entry.category, entries: [entry] });
-              }
-              if (!showVolumeOption && groups.length === 0) {
-                return <p className="lq-chart__indicator-picker-empty">Aucun indicateur ne correspond à « {indicatorSearchQuery} ».</p>;
-              }
-              return (
-                <>
-                  {/* Volume isn't part of INDICATOR_CATALOG — it's the caller's own data (not
-                      something computed), driven by `showVolume`/the volume pane's own header
-                      rather than an `Indicator` entry — but it's still just as valid an "add a
-                      pane" choice as RSI/CHOP/MACD, so it gets a slot here too, re-showing the
-                      pane if it was previously collapsed or removed. */}
-                  {showVolumeOption && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">Volume</div>
-                      <button
-                        type="button"
-                        className="lq-chart__indicator-picker-option"
-                        onClick={() => setVolumePaneState("expanded")}
-                      >
-                        <span className="lq-chart__indicator-picker-name">Volume</span>
-                        <span className="lq-chart__indicators-manager-badge" title="Panneau séparé">
-                          <PaneBadgeIcon size={13} />
-                        </span>
-                      </button>
-                    </div>
-                  )}
-                  {groups.map((group) => (
-                    <div className="lq-chart__indicator-picker-group" key={group.category}>
-                      <div className="lq-chart__indicator-picker-group-label">{group.category}</div>
-                      {group.entries.map((entry) => (
-                        <button
-                          key={entry.kind}
-                          type="button"
-                          className="lq-chart__indicator-picker-option"
-                          onClick={() => addIndicator(entry)}
-                        >
-                          <span className="lq-chart__indicator-picker-name">{entry.label}</span>
-                          <span
-                            className="lq-chart__indicators-manager-badge"
-                            title={entry.pane === "price" ? "Superposé au prix" : "Panneau séparé"}
-                          >
-                            {entry.pane === "price" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  ))}
-                </>
-              );
-            })()}
-          </div>
-        </Modal>
-      )}
-
-      {indicatorsManagerOpen && (
-        <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Dessins et indicateurs" footer={null}>
-          <div className="lq-chart__indicators-manager">
-            {(() => {
-              const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
-              const own = ownPaneIndicators;
-              if (overlay.length === 0 && own.length === 0 && !volumeVisible && visibleDrawings.length === 0) {
-                return <p className="lq-chart__indicator-picker-empty">Rien à gérer pour l'instant — aucun dessin ni indicateur actif.</p>;
-              }
-              // A row's own two actions mirror exactly what's already reachable from the chart
-              // itself (the legend's roue crantée/corbeille for an overlay, a pane header's for an
-              // "own" one, Suppr/double-clic for a drawing) — this list is a second way to reach
-              // the same actions, not a new set of them, so nothing here can do anything the
-              // chart's own hover/pane-header UI can't.
-              const row = (label: string, badge: React.ReactNode, badgeTitle: string, onSettings: (() => void) | null, onDelete: () => void, key: string) => (
-                <div className="lq-chart__indicators-manager-row" key={key}>
-                  <span className="lq-chart__indicators-manager-badge" title={badgeTitle}>
-                    {badge}
-                  </span>
-                  <span className="lq-chart__indicators-manager-name">{label}</span>
-                  <span className="lq-chart__indicators-manager-actions">
-                    {onSettings && (
-                      <button type="button" className="lq-chart__pane-header-action" onClick={onSettings} aria-label={`Paramètres ${label}`}>
-                        <SettingsIcon size={13} />
-                      </button>
-                    )}
-                    <button type="button" className="lq-chart__pane-header-action" onClick={onDelete} aria-label={`Supprimer ${label}`}>
-                      <TrashIcon size={13} />
-                    </button>
-                  </span>
-                </div>
-              );
-              return (
-                <>
-                  {visibleDrawings.length > 0 && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">Dessins</div>
-                      {visibleDrawings.map((dr) => {
-                        const ToolIcon = drawingToolMeta(dr).icon;
-                        return row(
-                          drawingLabel(dr),
-                          <ToolIcon size={13} />,
-                          drawingToolMeta(dr).label,
-                          () => {
-                            setEditingId(dr.id);
-                            setDraft(dr);
-                            setEditModalTab("coords");
-                          },
-                          () => commitDrawings(drawings.filter((d) => d.id !== dr.id)),
-                          dr.id
-                        );
-                      })}
-                    </div>
-                  )}
-                  {overlay.length > 0 && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">Superposés au prix</div>
-                      {overlay.map((ind) =>
-                        row(
-                          indicatorLabel(ind),
-                          <OverlayBadgeIcon size={13} />,
-                          "Superposé au prix",
-                          () => openIndicatorSettings(ind.id),
-                          () => removeIndicator(ind.id),
-                          ind.id
-                        )
-                      )}
-                    </div>
-                  )}
-                  {(own.length > 0 || volumeVisible) && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">En sous-panneau</div>
-                      {volumeVisible &&
-                        row("Volume", <PaneBadgeIcon size={13} />, "Panneau séparé", () => setVolumeSettingsOpen(true), () => setVolumePaneState("hidden"), "volume")}
-                      {own.map((ind) =>
-                        row(
-                          indicatorLabel(ind),
-                          <PaneBadgeIcon size={13} />,
-                          "Panneau séparé",
-                          () => openIndicatorSettings(ind.id),
-                          () => removeIndicator(ind.id),
-                          ind.id
-                        )
-                      )}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
-        </Modal>
-      )}
-
-      {editingIndicatorId && indicatorDraft && (
-        <Modal
-          open
-          onClose={closeIndicatorSettings}
-          title={`Paramètres — ${indicatorLabel(indicatorDraft)}`}
-          footer={
-            <div className="lq-chart__edit-drawing-footer">
-              <button type="button" className="lq-chart__reset-button" onClick={deleteEditingIndicator}>
-                Supprimer
-              </button>
-              <button type="button" className="lq-chart__confirm-button" onClick={saveIndicatorSettings}>
-                Enregistrer
-              </button>
-            </div>
-          }
-        >
-          {indicatorCatalogEntry(indicatorDraft.kind).hasPeriod && (
-            <NumberField
-              label="Période"
-              min={1}
-              max={500}
-              step={1}
-              value={indicatorDraft.period}
-              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, period: v === "" ? indicatorDraft.period : v })}
-            />
-          )}
-          {indicatorCatalogEntry(indicatorDraft.kind).hasStdDev && (
-            <NumberField
-              label="Écart-type (bandes)"
-              min={0.5}
-              max={5}
-              step={0.1}
-              value={indicatorDraft.stdDev ?? 2}
-              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, stdDev: v === "" ? indicatorDraft.stdDev : v })}
-            />
-          )}
-          {indicatorDraft.kind === "macd" && (
-            <div className="lq-chart__edit-drawing-row">
-              <NumberField
-                label="Rapide"
-                min={1}
-                max={200}
-                step={1}
-                value={indicatorDraft.fastPeriod ?? 12}
-                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, fastPeriod: v === "" ? indicatorDraft.fastPeriod : v })}
-              />
-              <NumberField
-                label="Lent"
-                min={1}
-                max={400}
-                step={1}
-                value={indicatorDraft.slowPeriod ?? 26}
-                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, slowPeriod: v === "" ? indicatorDraft.slowPeriod : v })}
-              />
-              <NumberField
-                label="Signal"
-                min={1}
-                max={200}
-                step={1}
-                value={indicatorDraft.signalPeriod ?? 9}
-                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, signalPeriod: v === "" ? indicatorDraft.signalPeriod : v })}
-              />
-            </div>
-          )}
-          <div className="lq-field">
-            <label className="lq-field__label">Couleur</label>
-            <input
-              type="color"
-              className="lq-chart__color-input"
-              value={indicatorDraft.color ?? defaultIndicatorColor(indicators.findIndex((i) => i.id === indicatorDraft.id))}
-              onChange={(e) => setIndicatorDraft({ ...indicatorDraft, color: e.target.value })}
-            />
-          </div>
-        </Modal>
-      )}
-
-      {settingsOpen && (
-        <Modal open onClose={() => setSettingsOpen(false)} title="Paramètres du graphique">
-          <div className="lq-chart__edit-drawing-row">
-            <div className="lq-field">
-              <label className="lq-field__label">Bougies haussières</label>
-              <input
-                type="color"
-                className="lq-chart__color-input"
-                value={upColorOverride ?? "#26a69a"}
-                onChange={(e) => setUpColorOverride(e.target.value)}
-              />
-            </div>
-            <div className="lq-field">
-              <label className="lq-field__label">Bougies baissières</label>
-              <input
-                type="color"
-                className="lq-chart__color-input"
-                value={downColorOverride ?? "#ef5350"}
-                onChange={(e) => setDownColorOverride(e.target.value)}
-              />
-            </div>
-          </div>
-          {(upColorOverride || downColorOverride) && (
-            <button
-              type="button"
-              className="lq-chart__inline-reset"
-              onClick={() => {
-                setUpColorOverride(undefined);
-                setDownColorOverride(undefined);
-              }}
-            >
-              Réinitialiser aux couleurs du thème
-            </button>
-          )}
-          <Checkbox
-            checked={yAutoScalingState}
-            onChange={(checked) => {
-              setYAutoScalingState(checked);
-              onYAutoScalingChange?.(checked);
-            }}
-            label="Rescale automatique de l'axe des prix au zoom"
-          />
-          {eventKinds.length > 0 && (
-            <div className="lq-chart__settings-events">
-              <span className="lq-field__label">Événements</span>
-              {eventKinds.map((kind) => (
-                <Checkbox
-                  key={kind}
-                  checked={!hiddenEventKinds.has(kind)}
-                  onChange={() =>
-                    setHiddenEventKinds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(kind)) next.delete(kind);
-                      else next.add(kind);
-                      return next;
-                    })
-                  }
-                  label={kind}
-                />
-              ))}
-            </div>
-          )}
-        </Modal>
-      )}
-
-      {volumeSettingsOpen && (
-        <Modal open onClose={() => setVolumeSettingsOpen(false)} title="Paramètres du panneau Volume" footer={null}>
-          <div className="lq-chart__edit-drawing-row">
-            <div className="lq-field">
-              <label className="lq-field__label">Barres haussières</label>
-              <input
-                type="color"
-                className="lq-chart__color-input"
-                value={volumeUpColorOverride ?? upColorOverride ?? "#26a69a"}
-                onChange={(e) => setVolumeUpColorOverride(e.target.value)}
-              />
-            </div>
-            <div className="lq-field">
-              <label className="lq-field__label">Barres baissières</label>
-              <input
-                type="color"
-                className="lq-chart__color-input"
-                value={volumeDownColorOverride ?? downColorOverride ?? "#ef5350"}
-                onChange={(e) => setVolumeDownColorOverride(e.target.value)}
-              />
-            </div>
-          </div>
-          {(volumeUpColorOverride || volumeDownColorOverride) && (
-            <button
-              type="button"
-              className="lq-chart__inline-reset"
-              onClick={() => {
-                setVolumeUpColorOverride(undefined);
-                setVolumeDownColorOverride(undefined);
-              }}
-            >
-              Réinitialiser aux couleurs des bougies
-            </button>
-          )}
-        </Modal>
-      )}
-
-      {symbolSearchOpen && (
-        <Modal open onClose={() => setSymbolSearchOpen(false)} title="Symbol search" footer={null}>
-          <TextField
-            placeholder="Rechercher un symbole…"
-            value={symbolSearchQuery}
-            onChange={(e) => setSymbolSearchQuery(e.target.value)}
-            leadingIcon={<SearchIcon size={14} />}
-            trailingIcon={
-              symbolSearchQuery ? (
-                <button
-                  type="button"
-                  className="lq-chart__symbol-search-clear"
-                  onClick={() => setSymbolSearchQuery("")}
-                  aria-label="Effacer la recherche"
-                >
-                  <CloseIcon size={12} />
-                </button>
-              ) : undefined
-            }
-            autoFocus
-          />
-          {/* Single-select pills, not checkboxes (CheckboxButton) — only one category filters
-              the results at a time, same "active" visual convention as the timeframe/
-              display-mode menus above. */}
-          <div className="lq-chart__symbol-search-categories">
-            {SYMBOL_SEARCH_CATEGORIES.map((cat) => (
-              <button
-                key={cat.value}
-                type="button"
-                className={[
-                  "lq-chart__symbol-search-category",
-                  cat.value === symbolSearchCategory && "lq-chart__symbol-search-category--active",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => setSymbolSearchCategory(cat.value)}
-                aria-pressed={cat.value === symbolSearchCategory}
-              >
-                {cat.label}
-              </button>
-            ))}
-          </div>
-          <div className="lq-chart__symbol-search-results">
-            {(symbolSearchResults ?? []).length === 0 ? (
-              <p className="lq-chart__symbol-search-empty">Aucun résultat.</p>
-            ) : (
-              (symbolSearchResults ?? []).map((result, i) => {
-                const isFavorite = favoriteSymbolIds.includes(result.id);
-                const isOverlayActive = symbolOverlays.some((d) => d.overlaySymbol === result.ticker);
-                const isOverlayLoading = addingOverlaySymbols.has(result.ticker);
-                return (
-                  <div className="lq-chart__symbol-search-row" key={result.id}>
-                    <button
-                      type="button"
-                      className="lq-chart__symbol-search-row-main"
-                      onClick={() => {
-                        onSymbolSelect?.(result);
-                        setSymbolSearchOpen(false);
-                      }}
-                    >
-                      <span
-                        className="lq-chart__symbol-search-logo"
-                        style={result.logoUrl ? undefined : { backgroundColor: result.logoColor ?? defaultSymbolLogoColor(i) }}
-                      >
-                        {result.logoUrl ? <img src={result.logoUrl} alt="" /> : result.ticker.slice(0, 2).toUpperCase()}
-                      </span>
-                      <span className="lq-chart__symbol-search-ticker">{result.ticker}</span>
-                      <span className="lq-chart__symbol-search-name">{result.name}</span>
-                      <span className="lq-chart__symbol-search-source">{result.source}</span>
-                    </button>
-                    {/* Compare against the main symbol — hover-revealed like the favorite star,
-                        but stays visible once active too, same reasoning. Turns into a checkmark
-                        (click removes it) once that symbol is already an overlay, and a spinner
-                        while onAddSymbolOverlay's own promise is in flight — a plain one-way "add"
-                        button couldn't reflect either without the caller tracking that state
-                        itself, which returning the data instead lets the chart do here. Only
-                        rendered when the caller actually supports it (onAddSymbolOverlay set) —
-                        a "+" that silently did nothing would be worse than no button at all. */}
-                    {onAddSymbolOverlay && (
-                      <button
-                        type="button"
-                        className={[
-                          "lq-chart__symbol-search-overlay",
-                          isOverlayActive && "lq-chart__symbol-search-overlay--active",
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => (isOverlayActive ? removeSymbolOverlay(result.ticker) : handleAddSymbolOverlay(result))}
-                        disabled={isOverlayLoading}
-                        aria-label={isOverlayActive ? `Retirer ${result.ticker} de la comparaison` : `Comparer avec ${result.ticker}`}
-                        title={isOverlayActive ? `Retirer ${result.ticker} de la comparaison` : `Comparer avec ${result.ticker}`}
-                      >
-                        {isOverlayLoading ? (
-                          <RefreshIcon size={14} className="lq-chart__symbol-search-overlay-spinner" />
-                        ) : isOverlayActive ? (
-                          <CheckIcon size={14} />
-                        ) : (
-                          <PlusIcon size={14} />
-                        )}
-                      </button>
-                    )}
-                    {/* Invisible until the row is hovered/focused (see charts-shared.css) — unless
-                        already favorited, in which case it stays visible so favorited results
-                        can actually be told apart from a glance, not just while hovering. */}
-                    <button
-                      type="button"
-                      className={[
-                        "lq-chart__symbol-search-favorite",
-                        isFavorite && "lq-chart__symbol-search-favorite--active",
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => toggleFavoriteSymbol(result.id)}
-                      aria-label={isFavorite ? `Retirer ${result.ticker} des favoris` : `Ajouter ${result.ticker} aux favoris`}
-                    >
-                      <StarIcon size={14} fill={isFavorite ? "currentColor" : "none"} />
-                    </button>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </Modal>
-      )}
+      <SymbolSearchModal
+        symbolSearchOpen={symbolSearchOpen}
+        setSymbolSearchOpen={setSymbolSearchOpen}
+        symbolSearchQuery={symbolSearchQuery}
+        setSymbolSearchQuery={setSymbolSearchQuery}
+        symbolSearchCategory={symbolSearchCategory}
+        setSymbolSearchCategory={setSymbolSearchCategory}
+        symbolSearchResults={symbolSearchResults}
+        favoriteSymbolIds={favoriteSymbolIds}
+        toggleFavoriteSymbol={toggleFavoriteSymbol}
+        onSymbolSelect={onSymbolSelect}
+        onAddSymbolOverlay={onAddSymbolOverlay}
+        symbolOverlays={symbolOverlays}
+        addingOverlaySymbols={addingOverlaySymbols}
+        handleAddSymbolOverlay={handleAddSymbolOverlay}
+        removeSymbolOverlay={removeSymbolOverlay}
+      />
     </div>
   );
 }
