@@ -1065,7 +1065,7 @@ export interface CandlestickChartProps {
   className?: string;
 }
 
-const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 56, bottom: 24, left: 0 };
+const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 72, bottom: 24, left: 0 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 const DRAWING_HIT_DISTANCE = 8;
 /** Width of the drawing-tools rail. Added to the left margin so the plot/axes never draw
@@ -5125,46 +5125,36 @@ export function CandlestickChart({
         {hoverY !== null && (
           // The badge itself is pinned flush to the axis boundary so it never bleeds into the
           // chart — only the standalone "+" button (own square, own background) is allowed to
-          // overlap, its right edge landing on that same boundary so the two read as one
-          // continuous control despite being separate elements. Reachable as a separate element
-          // since onPointerLeave lives on .lq-chart__plot (a real ancestor of both), not on the
-          // interactive rect itself.
-          <>
-            <button
-              type="button"
-              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
-              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}
-              onClick={addPriceLine}
-              aria-label="Ajouter une ligne de prix horizontale"
-            >
+          // Flush to the axis boundary and at least as wide as the axis gutter itself (min-width,
+          // not width — a long price string must still be able to grow further right rather than
+          // clip, exactly as before) so the badge reads as filling the axis, not a narrower chip
+          // floating inside it. The "+" button lives inside this same flex row (stretched to its
+          // full height via align-items: stretch, no border-radius/height of its own) so it reads
+          // as one integrated piece — never a separate element overlapping the chart.
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--y"
+            style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }}
+          >
+            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
               <PlusIcon size={9} />
             </button>
-            <div
-              className="lq-chart__axis-value lq-chart__axis-value--y"
-              style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth }}
-            >
-              <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
-            </div>
-          </>
+            <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
+          </div>
         )}
         {hoverVolumeY !== null && (
-          <>
-            <button
-              type="button"
-              className="lq-chart__crosshair-add lq-chart__crosshair-add--y"
-              style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
-              onClick={addVolumeLine}
-              aria-label="Ajouter une ligne de volume horizontale"
-            >
+          <div
+            className="lq-chart__axis-value lq-chart__axis-value--y"
+            style={{
+              top: dims.margin.top + priceHeight + hoverVolumeY,
+              left: dims.margin.left + dims.boundedWidth,
+              minWidth: dims.margin.right,
+            }}
+          >
+            <button type="button" className="lq-chart__axis-value-add" onClick={addVolumeLine} aria-label="Ajouter une ligne de volume horizontale">
               <PlusIcon size={9} />
             </button>
-            <div
-              className="lq-chart__axis-value lq-chart__axis-value--y"
-              style={{ top: dims.margin.top + priceHeight + hoverVolumeY, left: dims.margin.left + dims.boundedWidth }}
-            >
-              <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
-            </div>
-          </>
+            <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
+          </div>
         )}
         {hovered && (
           <>
@@ -5211,6 +5201,7 @@ export function CandlestickChart({
                   style={{
                     top: y,
                     left: dims.margin.left + dims.boundedWidth,
+                    minWidth: dims.margin.right,
                     backgroundColor: `var(${up ? "--lq-color-up" : "--lq-color-down"})`,
                   }}
                 >
@@ -5252,6 +5243,7 @@ export function CandlestickChart({
                 style={{
                   top: dims.margin.top + clampToPriceAxis(zoomedPriceScale(value)),
                   left: dims.margin.left + dims.boundedWidth,
+                  minWidth: dims.margin.right,
                   backgroundColor: color,
                 }}
               >
@@ -5279,6 +5271,7 @@ export function CandlestickChart({
                 style={{
                   top: dims.margin.top + y,
                   left: dims.margin.left + dims.boundedWidth,
+                  minWidth: dims.margin.right,
                 }}
               >
                 <span className="lq-chart__axis-value-text">{isPrice ? pFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
