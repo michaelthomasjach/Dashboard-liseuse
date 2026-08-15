@@ -1,0 +1,114 @@
+.lq-chart-event-tooltip {
+  position: absolute;
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  box-shadow: var(--lq-shadow-modal);
+  color: var(--lq-color-text);
+  font-size: 0.8rem;
+}
+
+/* Anchored via `left`/`bottom` (set inline by the chart, in its own plot-pixel space) instead of
+   `top` — growing upward from a fixed bottom edge means its height (content-driven, capped by
+   .lq-chart-event-tooltip__body's own max-height) never has to be measured/known up front just
+   to keep its bottom edge pinned 15px above the event marker. */
+.lq-chart-event-tooltip--popover {
+  max-width: calc(100% - 8px);
+}
+
+/* Fills the chart's own box edge to edge (its positioned ancestor is .lq-chart itself, not the
+   plot) rather than a smaller centered card over a dimmed backdrop — "outside the modal" then
+   naturally means outside the chart component entirely, which the shared outside-pointerdown
+   listener (see EventTooltip.tsx) already closes on regardless of mode. */
+.lq-chart-event-tooltip--modal {
+  inset: 0;
+  z-index: 1002;
+}
+
+.lq-chart-event-tooltip__toolbar {
+  display: flex;
+  justify-content: flex-end;
+  flex-shrink: 0;
+  padding: 4px;
+}
+
+.lq-chart-event-tooltip__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  gap: 8px;
+  padding: 10px 8px 10px 14px;
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-chart-event-tooltip__header-title {
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-chart-event-tooltip__icon-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart-event-tooltip__icon-button:hover {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
+}
+
+/* The popover's own cap — 350px, per the fixed spec, with a scrollbar past that rather than
+   growing the box indefinitely. The modal has no cap of its own: it fills whatever's left of
+   .lq-chart-event-tooltip--modal below the header (flex: 1), scrolling only if that's not
+   enough — min-height: 0 is the standard flex-child fix that lets a flex item actually shrink
+   (and thus scroll) instead of growing its parent past its own bounds, its default min-height
+   being auto (= its content's height) otherwise. */
+.lq-chart-event-tooltip__body {
+  max-height: 350px;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.lq-chart-event-tooltip__body--modal {
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+}
+
+.lq-chart-event-tooltip__list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.lq-chart-event-tooltip__card {
+  padding: 8px 10px;
+  background-color: var(--lq-color-bg);
+  border-inline-start: 3px solid var(--lq-color-accent);
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-chart-event-tooltip__title {
+  margin: 0 0 4px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.lq-chart-event-tooltip__date {
+  color: var(--lq-color-text-muted);
+  font-variant-numeric: tabular-nums;
+}

@@ -374,6 +374,9 @@ const SYMBOL_DATASET = generateCandles(260, 180, 99);
 const SYMBOL_EVENTS: ChartEvent[] = [
   { date: SYMBOL_DATASET[40].date, kind: "earnings", label: "Résultats T1 : BPA 1.24€ (attendu 1.10€)" },
   { date: SYMBOL_DATASET[95].date, kind: "earnings", label: "Résultats T2 : BPA 1.31€ (attendu 1.28€)" },
+  // Same date as the T2 earnings above, on purpose — two events sharing a candle index render as
+  // a single "stack" marker (see WithSymbolAndEvents' own description) instead of overlapping.
+  { date: SYMBOL_DATASET[95].date, kind: "news", label: "Rumeur de rachat d'un concurrent régional" },
   { date: SYMBOL_DATASET[60].date, kind: "dividend", label: "Dividende détaché : 0.42€/action" },
   { date: SYMBOL_DATASET[150].date, kind: "dividend", label: "Dividende détaché : 0.45€/action" },
   { date: SYMBOL_DATASET[200].date, kind: "update", label: "Mise à jour produit : lancement de la gamme X200" },
@@ -392,7 +395,14 @@ export const WithSymbolAndEvents: Story = {
         calculée par rapport à la clôture de la bougie précédente. En bas du tracé des prix, une petite bulle par
         évènement (`events: ChartEvent[]` — `kind` libre définie par l'app, ex. "earnings"/"dividend"/"update", pas
         une énumération fixée par le composant) avec un connecteur pointillé vers l'axe ; survoler une bulle affiche
-        sa date et son libellé en infobulle.
+        sa date et son libellé en infobulle native, la <strong>cliquer</strong> ouvre une tooltip détaillée
+        (`ChartEventTooltip`, exportée séparément pour qui veut la réutiliser ailleurs) centrée sur la bulle,
+        glissée à gauche/droite selon la place disponible, plafonnée à 350px de haut avec son propre ascenseur
+        au-delà. Plusieurs évènements à la même date (les deux du 95ème jour ci-dessous) partagent une seule bulle
+        "stack" (le nombre au lieu d'une lettre) listant tout dans la même tooltip. Une icône en haut à droite de la
+        tooltip l'agrandit en modale occupant tout le graphe (en-tête, outils compris) ; cliquer en dehors de la
+        tooltip/modale, ou sa croix pour la modale, la referme — refermer la modale ne fait pas réapparaître la
+        tooltip en dessous.
       </p>
       <CandlestickChart data={SYMBOL_DATASET} symbol="ACME" events={SYMBOL_EVENTS} showIndicators height={STORY_HEIGHT} />
     </div>

@@ -7,6 +7,7 @@ import { useAxisDragRescale } from "./internal/useAxisDragRescale";
 import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
+import { ChartEventTooltip } from "./EventTooltip";
 import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
@@ -1093,6 +1094,14 @@ const AXIS_HANDLE_FRACTION_Y = 0.25;
  *  visible candle, so the row doesn't jump around while panning/zooming. */
 const EVENT_MARKER_OFFSET = 14;
 const EVENT_MARKER_RADIUS = 8;
+/** Fixed width (px) of the event-stack popover — fixed, not measured, so its horizontal
+ *  clamp-to-bounds position can be computed synchronously in the same render as the click that
+ *  opens it, no post-mount measurement pass (and the flash-of-unpositioned-content that would
+ *  come with one) needed. */
+const EVENT_TOOLTIP_WIDTH = 320;
+/** Gap (px) between the popover's own bottom edge and the top of the event marker it's anchored
+ *  to (see `EVENT_MARKER_RADIUS`). */
+const EVENT_TOOLTIP_GAP = 15;
 /** Upper bound on how many date labels the bottom axis shows at once, regardless of how many
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 const MAX_DATE_TICKS = 12;
@@ -1444,6 +1453,14 @@ export function CandlestickChart({
   // prop after mount.
   const [yAutoScalingState, setYAutoScalingState] = useState(YAutoScaling);
   const [hiddenEventKinds, setHiddenEventKinds] = useState<Set<string>>(new Set());
+  // The candle index ("i") of the currently open event stack's popover/modal, plus a frozen
+  // snapshot of its events — frozen so panning the marker out of the nearby-visible window (see
+  // `visibleEvents`'s own start/end buffer) doesn't empty an already-open modal out from under
+  // the user. The popover's own *position* still tracks the live index every render (its
+  // left/bottom are computed from `activeEventStack.i`, not stored), so it stays anchored to the
+  // marker as the chart pans/zooms.
+  const [activeEventStack, setActiveEventStack] = useState<{ i: number; events: ChartEvent[] } | null>(null);
+  const [eventModalOpen, setEventModalOpen] = useState(false);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
   const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
   const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
@@ -2669,6 +2686,27 @@ export function CandlestickChart({
       .map((event, idx) => ({ event, idx, i: indexForDate(event.date) }))
       .filter(({ event, i }) => !hiddenEventKinds.has(event.kind) && i >= start && i <= end);
   }, [events, hiddenEventKinds, visibleRange, data.length, indexForDate]);
+
+  // Events sharing the same candle index render as a single "stack" marker instead of fully
+  // overlapping circles — grouped from `visibleEvents` (not `events` directly) so this stays
+  // scoped to whatever's currently near the visible window, same as the markers themselves.
+  const eventStacks = useMemo(() => {
+    const map = new Map<number, ChartEvent[]>();
+    for (const { event, i } of visibleEvents) {
+      const bucket = map.get(i);
+      if (bucket) bucket.push(event);
+      else map.set(i, [event]);
+    }
+    return Array.from(map.entries()).map(([i, stackEvents]) => ({
+      i,
+      // Every event's `color` is resolved here (once), not left for the marker/tooltip to each
+      // fall back on separately — both then just read `event.color` directly and always agree.
+      events: stackEvents.map((event) => {
+        const kindIndex = eventKinds.indexOf(event.kind);
+        return { ...event, color: event.color ?? defaultEventColor(kindIndex < 0 ? 0 : kindIndex) };
+      }),
+    }));
+  }, [visibleEvents, eventKinds]);
 
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
   // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
@@ -5096,19 +5134,35 @@ export function CandlestickChart({
 
             {/* Rendered last, same reasoning as the drawing handles above — needs to sit on top
                 of the pan/zoom overlay to receive the pointer events its own <title> tooltip
-                depends on. Anchored to the price/volume divider (not the tallest/shortest
-                visible candle) so the row stays put while panning/zooming. */}
-            {visibleEvents.length > 0 && (
+                (and, now, its click) depends on. Anchored to the price/volume divider (not the
+                tallest/shortest visible candle) so the row stays put while panning/zooming. One
+                marker per `eventStacks` entry, not per raw event — several events sharing a
+                candle index render as a single "stack" marker (count as its glyph, neutral
+                accent color instead of any one event's own) rather than fully overlapping,
+                indistinguishable circles. */}
+            {eventStacks.length > 0 && (
               <g className="lq-chart__events">
-                {visibleEvents.map(({ event, idx, i }) => {
-                  const cx = zoomedXScale(i + 0.5);
+                {eventStacks.map((stack) => {
+                  const cx = zoomedXScale(stack.i + 0.5);
                   const cy = priceHeight - EVENT_MARKER_OFFSET;
-                  const kindIndex = eventKinds.indexOf(event.kind);
-                  const color = event.color ?? defaultEventColor(kindIndex < 0 ? 0 : kindIndex);
-                  const glyph = (event.symbol ?? event.kind.charAt(0)).slice(0, 2).toUpperCase();
+                  const stacked = stack.events.length > 1;
+                  const color = stacked ? "var(--lq-color-accent)" : stack.events[0].color;
+                  const glyph = stacked ? String(stack.events.length) : (stack.events[0].symbol ?? stack.events[0].kind.charAt(0)).slice(0, 2).toUpperCase();
+                  const title = stacked
+                    ? `${stack.events.length} évènements — cliquer pour les afficher`
+                    : `${dFmt(stack.events[0].date)} — ${stack.events[0].label}`;
                   return (
-                    <g key={idx} className="lq-chart__event-marker" transform={`translate(${cx}, ${cy})`}>
-                      <title>{`${dFmt(event.date)} — ${event.label}`}</title>
+                    <g
+                      key={stack.i}
+                      className="lq-chart__event-marker"
+                      transform={`translate(${cx}, ${cy})`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEventModalOpen(false);
+                        setActiveEventStack({ i: stack.i, events: stack.events });
+                      }}
+                    >
+                      <title>{title}</title>
                       <line x1={0} x2={0} y1={EVENT_MARKER_RADIUS} y2={priceHeight - cy} stroke={color} strokeDasharray="2,2" />
                       <circle r={EVENT_MARKER_RADIUS} fill={color} />
                       <text textAnchor="middle" dominantBaseline="central">
@@ -5293,7 +5347,54 @@ export function CandlestickChart({
               <span className="lq-chart__axis-value-text">{dFmt(dr.x1)}</span>
             </div>
           ))}
+
+        {/* Anchored via left/bottom (not top) so its own content-driven height — capped at
+            350px, see EventTooltip.css — never needs measuring just to keep its bottom edge
+            pinned EVENT_TOOLTIP_GAP above the marker; see the component's own doc comment. Hidden
+            (not unmounted-with-different-props) once the modal takes over, same as any other
+            "expand" hand-off in this file. */}
+        {activeEventStack &&
+          !eventModalOpen &&
+          (() => {
+            const anchorX = dims.margin.left + zoomedXScale(activeEventStack.i + 0.5);
+            const anchorY = dims.margin.top + (priceHeight - EVENT_MARKER_OFFSET);
+            const tooltipWidth = Math.min(EVENT_TOOLTIP_WIDTH, dims.width);
+            let left = anchorX - tooltipWidth / 2;
+            left = Math.min(left, dims.width - tooltipWidth);
+            left = Math.max(left, 0);
+            const bottom = plotHeight - (anchorY - EVENT_MARKER_RADIUS - EVENT_TOOLTIP_GAP);
+            return (
+              <ChartEventTooltip
+                events={activeEventStack.events}
+                mode="popover"
+                left={left}
+                bottom={bottom}
+                width={tooltipWidth}
+                formatDate={dFmt}
+                onExpand={() => setEventModalOpen(true)}
+                onClose={() => setActiveEventStack(null)}
+              />
+            );
+          })()}
       </div>
+
+      {/* Own positioned ancestor is the root .lq-chart (this sits outside .lq-chart__plot, which
+          would otherwise become the nearer positioned ancestor and confine it to the plot area
+          alone) — "fills the whole chart" is meant to include the header/toolbar too, same
+          footprint as the native fullscreen overlay. Closing it also clears activeEventStack
+          (not just eventModalOpen) so the popover never reappears underneath once the modal that
+          replaced it is dismissed. */}
+      {eventModalOpen && activeEventStack && (
+        <ChartEventTooltip
+          events={activeEventStack.events}
+          mode="modal"
+          formatDate={dFmt}
+          onClose={() => {
+            setEventModalOpen(false);
+            setActiveEventStack(null);
+          }}
+        />
+      )}
 
       {editingId && draft && (
         <Modal

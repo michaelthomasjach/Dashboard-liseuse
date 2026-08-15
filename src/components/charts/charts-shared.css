@@ -335,7 +335,7 @@
 }
 
 .lq-chart__event-marker {
-  cursor: default;
+  cursor: pointer;
 }
 
 .lq-chart__event-marker circle {

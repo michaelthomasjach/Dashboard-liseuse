@@ -11,10 +11,14 @@ export type {
   TrendLineDrawing,
   Indicator,
   IndicatorKind,
+  ChartEvent,
   TimeframeOption,
   TimeframeGroup,
   TimeframeEntry,
 } from "./CandlestickChart";
+
+export { ChartEventTooltip } from "./EventTooltip";
+export type { ChartEventTooltipProps } from "./EventTooltip";
 
 export { GaugeChart } from "./GaugeChart";
 export type { GaugeChartProps, GaugeThreshold } from "./GaugeChart";
