@@ -10,6 +10,8 @@ import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
 import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
+import { useDrawingState } from "./candlestick/hooks/useDrawingState";
+import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
 import { ChartAxis } from "./ChartAxis";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
@@ -83,24 +85,8 @@ export type {
   CandlestickChartProps,
 };
 
-import {
-  MULTI_POINT_TOOLS,
-  DRAWING_TOOL_CATEGORIES,
-  categoryOfTool,
-  drawingToolMeta,
-  drawingLabel,
-  FIBONACCI_LEVELS,
-  FIBONACCI_EXTENSION_LEVELS,
-} from "./candlestick/drawingCatalog";
-import {
-  allPointsOf,
-  snapPixel,
-  distanceToSegment,
-  round4,
-  extendSegmentToEdges,
-  effectiveExtendOf,
-  channelOffsetFromClick,
-} from "./candlestick/drawingGeometry";
+import { MULTI_POINT_TOOLS, DRAWING_TOOL_CATEGORIES, drawingToolMeta, drawingLabel } from "./candlestick/drawingCatalog";
+import { allPointsOf, snapPixel, round4, effectiveExtendOf } from "./candlestick/drawingGeometry";
 import {
   isFundamentalKind,
   formatFundamentalValue,
@@ -116,7 +102,6 @@ import { SYMBOL_SEARCH_CATEGORIES, defaultSymbolLogoColor } from "./candlestick/
 import { isTimeframeGroup, findTimeframeLabel } from "./candlestick/timeframes";
 import {
   DEFAULT_MARGIN,
-  DRAWING_HIT_DISTANCE,
   TOOLS_RAIL_WIDTH,
   HEADER_HEIGHT,
   CROSSHAIR_ADD_INSET,
@@ -125,7 +110,6 @@ import {
   AXIS_HANDLE_FRACTION_Y,
   MAX_DATE_TICKS,
   DEFAULT_DRAWING_COLOR,
-  EMPTY_DRAWINGS,
   SUB_PANE_COLLAPSED_HEIGHT,
 } from "./candlestick/constants";
 import { contrastingTextColor, formatCountdown, formatPercentFromReference, toDateInputValue, fromDateInputValue } from "./candlestick/formatting";
@@ -172,64 +156,69 @@ export function CandlestickChart({
 }: CandlestickChartProps) {
   const clipId = useId();
   const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
 
-  const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
-  const [activeTool, setActiveTool] = useState<DrawingToolType | null>(null);
-  // Which tool each category's own rail button currently represents — stays selected across
-  // draws, independent of whether drawing is actually active right now, and independent of the
-  // other categories' own selection. Changed via that category's own flyout menu, which (unlike
-  // the button itself) also activates the tool immediately — see handleSelectToolType.
-  const [selectedToolByCategory, setSelectedToolByCategory] = useState<Record<string, DrawingToolType>>(() =>
-    Object.fromEntries(DRAWING_TOOL_CATEGORIES.map((c) => [c.id, c.tools[0].type]))
-  );
-  // Which category's dropdown is open, if any — at most one at a time.
-  const [openToolMenu, setOpenToolMenu] = useState<string | null>(null);
-  const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
-  const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
-  // "channel"'s second point (fixing line 1), set between the tool's 2nd and 3rd clicks — plain
-  // pendingPoint/previewPoint alone are enough for every 2-point tool's flow, channel needs a
-  // 3rd click. Every *other* multi-point tool (fibonacciExtension/elliottCorrection/
-  // elliottImpulse) also passes through this same 2nd-point stage before collecting the rest
-  // into pendingExtraPoints below — they don't diverge from channel until after it.
-  const [pendingSecondPoint, setPendingSecondPoint] = useState<DataPoint | null>(null);
-  // 3rd point onward for tools needing more than two (see MULTI_POINT_TOOLS) — irrelevant to
-  // channel, which computes channelOffset from its 3rd click directly instead of collecting it
-  // here.
-  const [pendingExtraPoints, setPendingExtraPoints] = useState<DataPoint[]>([]);
-  // When on, every new point placed by any drawing tool (via toDataPoint) snaps to whichever of
-  // the nearest candle's open/high/low/close is closest — a persistent modifier rather than a
-  // tool of its own, so it stays on across tool switches until toggled off again.
-  const [magnetActive, setMagnetActive] = useState(false);
-  // Hides every drawing (canvas render, hover/hit-testing, handles, axis badges) without
-  // touching `drawings` itself — toggling it back off brings everything back exactly as it
-  // was, unlike deleting. See `visibleDrawings` below, the single point every drawing-reading
-  // codepath was switched to read from instead of `drawings` directly.
-  const [drawingsHidden, setDrawingsHidden] = useState(false);
-  // Blocks *starting* a body/endpoint/axis-handle drag (handleOverlayPointerDown/
-  // handleEndpointPointerDown/handleAxisHandlePointerDown all bail out early while this is on)
-  // — hover, the delete key, and double-click-to-edit are all untouched, so a locked drawing
-  // stays selectable/deletable/editable, just not draggable.
-  const [drawingsLocked, setDrawingsLocked] = useState(false);
-  // Every codepath that reads drawn shapes for rendering, hit-testing, or handles reads this
-  // instead of `drawings` directly — hiding never mutates `drawings` itself (toggling back on
-  // restores everything exactly as it was), it just makes that read empty in the meantime.
-  const visibleDrawings = drawingsHidden ? EMPTY_DRAWINGS : drawings;
-  // The measure tool's own last completed 2-click measurement (not a `drawings` entry — it's
-  // ephemeral, cleared on Escape/tool switch instead of persisted). `pendingPoint`/`previewPoint`
-  // still drive its live 1st-click-to-cursor preview, same as every other 2-point tool.
-  const [measurePoints, setMeasurePoints] = useState<{ p1: DataPoint; p2: DataPoint } | null>(null);
-  // The brush tool's current in-progress stroke, for live preview only — the committed drawing
-  // (on pointer up) is built from brushPointsRef below, not from this state, so a stroke can be
-  // sampled at pointermove speed without every sample racing a stale closure over React state.
-  const [brushPreview, setBrushPreview] = useState<DataPoint[] | null>(null);
-  const brushPointsRef = useRef<DataPoint[]>([]);
-  const brushDrawingRef = useRef(false);
-  const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
-  const [hoverY, setHoverY] = useState<number | null>(null);
-  const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
-  const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
+  const {
+    drawings,
+    activeTool,
+    setActiveTool,
+    selectedToolByCategory,
+    openToolMenu,
+    setOpenToolMenu,
+    pendingPoint,
+    setPendingPoint,
+    previewPoint,
+    setPreviewPoint,
+    pendingSecondPoint,
+    setPendingSecondPoint,
+    pendingExtraPoints,
+    setPendingExtraPoints,
+    magnetActive,
+    setMagnetActive,
+    drawingsHidden,
+    setDrawingsHidden,
+    drawingsLocked,
+    setDrawingsLocked,
+    visibleDrawings,
+    measurePoints,
+    setMeasurePoints,
+    brushPreview,
+    setBrushPreview,
+    brushPointsRef,
+    brushDrawingRef,
+    hoveredDrawingId,
+    setHoveredDrawingId,
+    hoverY,
+    setHoverY,
+    hoverVolumeY,
+    setHoverVolumeY,
+    editingId,
+    setEditingId,
+    draft,
+    setDraft,
+    editModalTab,
+    setEditModalTab,
+    addingOverlaySymbols,
+    dragEndpointRef,
+    dragAxisRef,
+    dragMeasureRef,
+    drawingIdRef,
+    hoveredDrawingIdRef,
+    updateHoveredDrawingId,
+    dragLineRef,
+    isPanningYRef,
+    commitDrawings,
+    removeSymbolOverlay,
+    handleAddSymbolOverlay,
+    cancelDrawingTool,
+    handleToolClick,
+    handleSelectToolType,
+    magnetSnapPrice,
+    closeEditModal,
+    saveEditModal,
+    deleteEditingDrawing,
+  } = useDrawingState({ data, defaultDrawings, onDrawingsChange, onAddSymbolOverlay });
+
   const [tfOpen, setTfOpen] = useState(false);
   const {
     settingsOpen,
@@ -260,15 +249,6 @@ export function CandlestickChart({
   // there's no reason comparing against AAPL should block also comparing against GOOGL while its
   // own fetch is still in flight. Purely for each row's own spinner; not read anywhere that
   // affects the chart itself.
-  const [addingOverlaySymbols, setAddingOverlaySymbols] = useState<Set<string>>(new Set());
-  // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
-  const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
-  const dragAxisRef = useRef<{ id: string } | null>(null);
-  // Which of the measure tool's two completed points (not a `drawings` entry, see measurePoints
-  // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
-  // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
-  const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
-  const drawingIdRef = useRef(0);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
   // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than
@@ -284,90 +264,6 @@ export function CandlestickChart({
   }
   const [themeTick, setThemeTick] = useState(0);
 
-  // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
-  // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
-  // every hover change.
-  const hoveredDrawingIdRef = useRef<string | null>(null);
-  function updateHoveredDrawingId(id: string | null) {
-    hoveredDrawingIdRef.current = id;
-    setHoveredDrawingId(id);
-  }
-
-  // Set while dragging a whole drawing (pointer down directly on its body, not an endpoint).
-  const dragLineRef = useRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>(null);
-
-  // True while dragging the plot body to pan the price axis vertically, independent of
-  // d3-zoom's own horizontal pan (see handleOverlayPointerDown) — only used to have
-  // handlePointerMove skip its hover-detection work while this drag is live.
-  const isPanningYRef = useRef(false);
-
-  function commitDrawings(next: TrendLineDrawing[]) {
-    setDrawings(next);
-    onDrawingsChange?.(next);
-  }
-
-  function removeSymbolOverlay(ticker: string) {
-    commitDrawings(drawings.filter((d) => !(d.lineType === "symbolOverlay" && d.overlaySymbol === ticker)));
-  }
-
-  // Awaits `onAddSymbolOverlay` (a plain return is fine too — Promise.resolve passes it straight
-  // through) rather than expecting the caller to push a new drawing in themselves: `drawings` has
-  // no controlled counterpart to `defaultDrawings` (same as every other collection in this file),
-  // so an async fetch has no way to land its result other than the chart committing it once the
-  // promise settles. `addingOverlaySymbols` exists purely for each row's own spinner — never read
-  // for anything that affects rendering the overlay itself.
-  async function handleAddSymbolOverlay(result: SymbolSearchResult) {
-    if (!onAddSymbolOverlay || addingOverlaySymbols.has(result.ticker)) return;
-    setAddingOverlaySymbols((prev) => new Set(prev).add(result.ticker));
-    try {
-      const overlayData = await onAddSymbolOverlay(result);
-      if (!overlayData || overlayData.length === 0) return;
-      const sorted = [...overlayData].sort((a, b) => a.date.getTime() - b.date.getTime());
-      const first = sorted[0];
-      const last = sorted[sorted.length - 1];
-      commitDrawings([
-        ...drawings,
-        {
-          id: `drawing-${drawingIdRef.current++}`,
-          // Unused for this lineType (see its own doc comment) — just needs *some* value.
-          x1: first.date,
-          y1: first.value,
-          x2: last.date,
-          y2: last.value,
-          lineType: "symbolOverlay",
-          overlaySymbol: result.ticker,
-          overlaySymbolName: result.name,
-          overlayData: sorted,
-          color: defaultIndicatorColor(drawings.filter((d) => d.lineType === "symbolOverlay").length),
-        },
-      ]);
-    } finally {
-      setAddingOverlaySymbols((prev) => {
-        const next = new Set(prev);
-        next.delete(result.ticker);
-        return next;
-      });
-    }
-  }
-
-  // `onSymbolSearchChange` deliberately isn't a dependency below — a typical caller passes an
-  // inline (non-memoized) handler, which is a fresh function identity on every one of *its own*
-  // renders; if this effect re-ran every time that identity changed, and that handler calls back
-  // into state (e.g. setResults after searching, exactly what the story demonstrating this does),
-  // the resulting re-render would produce yet another fresh identity — an infinite loop. A ref
-  // always holding the latest callback sidesteps this while still calling the current version.
-  const onSymbolSearchChangeRef = useRef(onSymbolSearchChange);
-  useEffect(() => {
-    onSymbolSearchChangeRef.current = onSymbolSearchChange;
-  });
-
-  // Fires once right when the modal opens (query/category at their defaults) and again on every
-  // later change — searching/filtering itself (including resolving "favorites") is entirely the
-  // caller's job, this just reports what the modal's own controls are currently asking for.
-  useEffect(() => {
-    if (!symbolSearchOpen) return;
-    onSymbolSearchChangeRef.current?.(symbolSearchQuery, symbolSearchCategory);
-  }, [symbolSearchOpen, symbolSearchQuery, symbolSearchCategory]);
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
@@ -556,138 +452,6 @@ export function CandlestickChart({
     setDraggingPaneId,
   ]);
 
-
-  // All three span the dataset's own (unzoomed) extent rather than the currently visible one,
-  // so they still reach edge to edge after the user zooms/pans away from where they were added
-  // — a price alert or a session marker shouldn't disappear just because the view moved. Marked
-  // with `lineType` so they drag along one axis only (see handlePointerMove/handleAxisHandle*)
-  // and render full-span instead of between their stored x1/x2 (see the canvas draw effect).
-  function addPriceLine() {
-    if (hoverY === null) return;
-    const price = zoomedPriceScale.invert(hoverY);
-    commitDrawings([
-      ...drawings,
-      { id: `drawing-${drawingIdRef.current++}`, x1: data[0].date, y1: price, x2: data[data.length - 1].date, y2: price, lineType: "horizontal" },
-    ]);
-  }
-
-  function addVolumeLine() {
-    if (hoverVolumeY === null) return;
-    const volume = zoomedVolumeScale.invert(hoverVolumeY);
-    commitDrawings([
-      ...drawings,
-      {
-        id: `drawing-${drawingIdRef.current++}`,
-        x1: data[0].date,
-        y1: volume,
-        x2: data[data.length - 1].date,
-        y2: volume,
-        lineType: "horizontal",
-        valueAxis: "volume",
-      },
-    ]);
-  }
-
-  function addDateLine() {
-    if (!hovered) return;
-    const [p0, p1] = priceScale.domain() as [number, number];
-    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1, lineType: "vertical" }]);
-  }
-
-  function cancelDrawingTool() {
-    setActiveTool(null);
-    setPendingPoint(null);
-    setPreviewPoint(null);
-    setPendingSecondPoint(null);
-    setPendingExtraPoints([]);
-    setMeasurePoints(null);
-  }
-
-  function handleToolClick(tool: DrawingToolType) {
-    if (activeTool === tool) {
-      cancelDrawingTool();
-    } else {
-      setActiveTool(tool);
-      setPendingPoint(null);
-      setPreviewPoint(null);
-      setPendingSecondPoint(null);
-      setPendingExtraPoints([]);
-      setMeasurePoints(null);
-    }
-  }
-
-  // Picking a tool from a category's flyout menu both changes what that category's own rail
-  // button represents *and* activates it immediately, ready to draw — unlike clicking the
-  // button itself to toggle the already-represented tool on/off, there's no extra confirmation
-  // click needed here since picking a specific tool from the menu is already a deliberate choice.
-  function handleSelectToolType(type: DrawingToolType) {
-    setSelectedToolByCategory((prev) => ({ ...prev, [categoryOfTool(type).id]: type }));
-    setOpenToolMenu(null);
-    setActiveTool(type);
-    setPendingPoint(null);
-    setPreviewPoint(null);
-    setPendingSecondPoint(null);
-    setPendingExtraPoints([]);
-    setMeasurePoints(null);
-  }
-
-  useEffect(() => {
-    // Also armed while only a completed measurement lingers (activeTool already back to null by
-    // then, see the "measure" branch of handleOverlayClick above) so Escape can still dismiss it —
-    // every other tool only needs this while still active, since none of them outlive their own
-    // deselection the way a finished measurement does.
-    if (!activeTool && !measurePoints) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
-      // point count to reach on its own (see handleOverlayClick), so Escape is the only way it
-      // ever completes. Needs at least 2 points to be a line at all; fewer and there's nothing
-      // to commit, same as cancelling any other half-placed tool.
-      if (activeTool === "elbowArrow" && pendingPoint && pendingExtraPoints.length >= 1) {
-        const points = [pendingPoint, ...pendingExtraPoints];
-        const next: TrendLineDrawing[] = [
-          ...drawings,
-          {
-            id: `drawing-${drawingIdRef.current++}`,
-            x1: points[0].x,
-            y1: points[0].y,
-            x2: points[1].x,
-            y2: points[1].y,
-            lineType: "elbowArrow",
-            extraPoints: points.slice(2),
-          },
-        ];
-        setDrawings(next);
-        onDrawingsChange?.(next);
-      }
-      cancelDrawingTool();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange, measurePoints]);
-
-  // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
-  // already tracks the one line the user is pointing at, same thing a click-to-select would give
-  // here) when Delete/Backspace is pressed — skipped while the edit modal is open (its own
-  // "Supprimer" button is the deliberate action there) or while a text input has focus (typing a
-  // label in the Texte tab shouldn't delete the drawing out from under it).
-  useEffect(() => {
-    if (!hoveredDrawingId || editingId) return;
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
-      const active = document.activeElement;
-      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
-      if (isEditableFocused) return;
-      e.preventDefault();
-      const next = drawings.filter((d) => d.id !== hoveredDrawingId);
-      setDrawings(next);
-      onDrawingsChange?.(next);
-      setHoveredDrawingId(null);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [hoveredDrawingId, editingId, drawings, onDrawingsChange]);
-
   // Ctrl/Cmd+C over a hovered legend item copies that indicator (copiedIndicatorRef); Ctrl/Cmd+V
   // pastes a duplicate of whatever was last copied (new id, everything else — kind/period/
   // color/etc. — unchanged) appended to the list. Mirrors the browser's own shortcuts rather than
@@ -715,416 +479,6 @@ export function CandlestickChart({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hoveredIndicatorId, indicators, commitIndicators, copiedIndicatorRef, indicatorIdRef]);
-
-  // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
-  // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
-  // No-op when the magnet is off, so every call site stays correct without its own branch.
-  function magnetSnapPrice(rawIndex: number, rawY: number): number {
-    if (!magnetActive || data.length === 0) return rawY;
-    const idx = Math.min(data.length - 1, Math.max(0, Math.round(rawIndex - 0.5)));
-    const candle = data[idx];
-    const candidates = [candle.open, candle.high, candle.low, candle.close];
-    return candidates.reduce((closest, v) => (Math.abs(v - rawY) < Math.abs(closest - rawY) ? v : closest), candidates[0]);
-  }
-
-  function toDataPoint(e: { clientX: number; clientY: number }): DataPoint {
-    const rect = zoomRef.current!.getBoundingClientRect();
-    const rawIndex = zoomedXScale.invert(e.clientX - rect.left);
-    const rawY = zoomedPriceScale.invert(e.clientY - rect.top);
-    return { x: dateForIndex(rawIndex), y: round4(magnetSnapPrice(rawIndex, rawY)) };
-  }
-
-  function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
-    if (!activeTool) return;
-    const point = toDataPoint(e);
-
-    // Axis-constrained lines only have one degree of freedom, so a single click places them —
-    // no pending/preview step like the free trend line below.
-    if (activeTool === "horizontal") {
-      const rect = zoomRef.current!.getBoundingClientRect();
-      const mouseY = e.clientY - rect.top;
-      const d0 = data[0].date;
-      const d1 = data[data.length - 1].date;
-      // Any pane the click landed in — price, volume, or an own-pane indicator (see
-      // resolveValueAxisAtY/paneScaleAndOffset and TrendLineDrawing.valueAxis). Price alone
-      // keeps going through `point` (already magnet-snapped by toDataPoint above) instead of a
-      // fresh invert() here — magnet-snapping to the nearest OHLC only makes sense against price.
-      const valueAxis = resolveValueAxisAtY(mouseY);
-      const pane = paneScaleAndOffset(valueAxis);
-      const value = valueAxis === "price" ? point.y : round4(pane.scale.invert(mouseY - pane.offset));
-      const drawing: TrendLineDrawing = {
-        id: `drawing-${drawingIdRef.current++}`,
-        x1: d0,
-        y1: value,
-        x2: d1,
-        y2: value,
-        lineType: "horizontal",
-        ...(valueAxis !== "price" ? { valueAxis } : {}),
-      };
-      commitDrawings([...drawings, drawing]);
-      cancelDrawingTool();
-      return;
-    }
-    if (activeTool === "vertical") {
-      const [p0, p1] = priceScale.domain() as [number, number];
-      commitDrawings([
-        ...drawings,
-        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: p0, x2: point.x, y2: p1, lineType: "vertical" },
-      ]);
-      cancelDrawingTool();
-      return;
-    }
-    // Arrow markers are single-point, like horizontal/vertical — x2/y2 just mirrors x1/y1 (kept
-    // in sync by both the generic whole-body drag and a dedicated single-handle case, see
-    // handleEndpointPointerMove) so there's nothing meaningful a second point could add.
-    if (activeTool === "arrowUp" || activeTool === "arrowDown") {
-      commitDrawings([
-        ...drawings,
-        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: activeTool },
-      ]);
-      cancelDrawingTool();
-      return;
-    }
-    // "elbowArrow" is an open-ended polyline: every click appends another point (1st into
-    // pendingPoint, everything after into pendingExtraPoints) and the tool stays active — unlike
-    // every other multi-point tool, there's no fixed point count to reach, so nothing here ever
-    // commits or calls cancelDrawingTool(). Escape is what finalizes it (see the keydown effect
-    // below), using however many points have been placed by then.
-    if (activeTool === "elbowArrow") {
-      if (!pendingPoint) {
-        setPendingPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      setPendingExtraPoints((prev) => [...prev, point]);
-      setPreviewPoint(point);
-      return;
-    }
-    // Measure doesn't create a `drawings` entry — its result is ephemeral (measurePoints, cleared
-    // on Escape/tool switch). The tool deselects itself right after the 2nd click (unlike every
-    // other tool, which stays active until Escape/reclick) — the completed measurement then stays
-    // on screen with its own draggable handles (see the measure-handle drag functions below)
-    // instead of disappearing, so re-clicking the tool button is what starts a fresh one.
-    if (activeTool === "measure") {
-      if (!pendingPoint) {
-        setPendingPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      setMeasurePoints({ p1: pendingPoint, p2: point });
-      setPendingPoint(null);
-      setPreviewPoint(null);
-      setActiveTool(null);
-      return;
-    }
-    // Same price/volume detection as "horizontal" above, but anchored at the clicked date
-    // instead of the dataset's own start (see the "ray" rendering/hit-testing below, which draws
-    // from that anchor to the plot's right edge only).
-    if (activeTool === "ray") {
-      const rect = zoomRef.current!.getBoundingClientRect();
-      const mouseY = e.clientY - rect.top;
-      const valueAxis = resolveValueAxisAtY(mouseY);
-      const pane = paneScaleAndOffset(valueAxis);
-      const value = valueAxis === "price" ? point.y : round4(pane.scale.invert(mouseY - pane.offset));
-      const drawing: TrendLineDrawing = {
-        id: `drawing-${drawingIdRef.current++}`,
-        x1: point.x,
-        y1: value,
-        x2: point.x,
-        y2: value,
-        lineType: "ray",
-        ...(valueAxis !== "price" ? { valueAxis } : {}),
-      };
-      commitDrawings([...drawings, drawing]);
-      cancelDrawingTool();
-      return;
-    }
-
-    // "channel" needs a 3rd click (the tool's whole point): the first two fix line 1 exactly
-    // like a regular trend line, the third sets a constant price offset for a second line
-    // parallel to it — measured as the clicked point's own vertical distance from line 1 at
-    // that same date, not a true perpendicular distance (same simplification most trading
-    // platforms use for this tool).
-    if (activeTool === "channel") {
-      if (!pendingPoint) {
-        setPendingPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      if (!pendingSecondPoint) {
-        setPendingSecondPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      commitDrawings([
-        ...drawings,
-        {
-          id: `drawing-${drawingIdRef.current++}`,
-          x1: pendingPoint.x,
-          y1: pendingPoint.y,
-          x2: pendingSecondPoint.x,
-          y2: pendingSecondPoint.y,
-          lineType: "channel",
-          channelOffset: round4(channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate)),
-        },
-      ]);
-      cancelDrawingTool();
-      return;
-    }
-
-    // "disjointChannel": same first three clicks as "channel" (line 1's two points, then a 3rd
-    // that sets a price offset the same way) — but instead of applying that offset as a constant
-    // shift to a *parallel* line 2, it computes two independent points: extraPoints[0] (lined up
-    // with x2/y2, "point 3") sits at the offset exactly like channel's line 2 would, and
-    // extraPoints[1] (lined up with x1/y1, "point 4") is that same offset applied to point1's
-    // price *mirrored* across point2's price level — 2*y2 - y1 + offset instead of plain y1 +
-    // offset — so line 2 slopes the opposite way from line 1 instead of running parallel to it.
-    // Both points are then ordinary, independently draggable ones (handled generically by
-    // allPointsOf/the endpoint-drag system) for reshaping the angle by hand afterward.
-    if (activeTool === "disjointChannel") {
-      if (!pendingPoint) {
-        setPendingPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      if (!pendingSecondPoint) {
-        setPendingSecondPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      const offset = round4(channelOffsetFromClick(pendingPoint, pendingSecondPoint, point, indexForDate));
-      commitDrawings([
-        ...drawings,
-        {
-          id: `drawing-${drawingIdRef.current++}`,
-          x1: pendingPoint.x,
-          y1: pendingPoint.y,
-          x2: pendingSecondPoint.x,
-          y2: pendingSecondPoint.y,
-          lineType: "disjointChannel",
-          extraPoints: [
-            { x: pendingSecondPoint.x, y: round4(pendingSecondPoint.y + offset) },
-            { x: pendingPoint.x, y: round4(2 * pendingSecondPoint.y - pendingPoint.y + offset) },
-          ],
-        },
-      ]);
-      cancelDrawingTool();
-      return;
-    }
-
-    // "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" all collect more than two points
-    // — the first two go through the same pendingPoint/pendingSecondPoint stages "channel" uses
-    // above, the rest accumulate into pendingExtraPoints until MULTI_POINT_TOOLS' count for this
-    // tool is reached, then commit with everything gathered.
-    const multiPoint = MULTI_POINT_TOOLS[activeTool];
-    if (multiPoint) {
-      if (!pendingPoint) {
-        setPendingPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      if (!pendingSecondPoint) {
-        setPendingSecondPoint(point);
-        setPreviewPoint(point);
-        return;
-      }
-      const nextExtra = [...pendingExtraPoints, point];
-      if (nextExtra.length < multiPoint.extraPoints) {
-        setPendingExtraPoints(nextExtra);
-        setPreviewPoint(point);
-        return;
-      }
-      commitDrawings([
-        ...drawings,
-        {
-          id: `drawing-${drawingIdRef.current++}`,
-          x1: pendingPoint.x,
-          y1: pendingPoint.y,
-          x2: pendingSecondPoint.x,
-          y2: pendingSecondPoint.y,
-          // MULTI_POINT_TOOLS only has entries for these three, guaranteed by `multiPoint` above
-          // — narrower than what TS can infer just from the (wider-keyed) lookup being truthy.
-          lineType: activeTool as "fibonacciExtension" | "elliottCorrection" | "elliottImpulse",
-          extraPoints: nextExtra,
-        },
-      ]);
-      cancelDrawingTool();
-      return;
-    }
-
-    // "trendline", "extended", "fibonacci", "rectangle" and "zones" all share the same 2-click
-    // flow — they only differ in how they're drawn (see the canvas draw effect) and, for
-    // "rectangle"/"zones", hit-tested, not in how they're placed. "arrowLine" is the same flow
-    // again but stays lineType-less like a plain trend line, just with arrowRight preset.
-    if (!pendingPoint) {
-      setPendingPoint(point);
-      setPreviewPoint(point);
-      return;
-    }
-    const drawing: TrendLineDrawing = {
-      id: `drawing-${drawingIdRef.current++}`,
-      x1: pendingPoint.x,
-      y1: pendingPoint.y,
-      x2: point.x,
-      y2: point.y,
-      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "zones"
-        ? { lineType: activeTool }
-        : {}),
-      ...(activeTool === "arrowLine" ? { arrowRight: true } : {}),
-    };
-    commitDrawings([...drawings, drawing]);
-    cancelDrawingTool();
-  }
-
-  function handleOverlayDoubleClick() {
-    if (activeTool) return;
-    // Double-clicking a drawing edits it (existing behavior) — double-clicking empty plot space
-    // resets the zoom instead, same gesture the axis strips already use for their own axis.
-    if (!hoveredDrawingId) {
-      resetZoom();
-      return;
-    }
-    const dr = drawings.find((d) => d.id === hoveredDrawingId);
-    if (!dr) return;
-    setEditingId(dr.id);
-    setDraft(dr);
-    // Coordonnées/Texte don't apply to a symbolOverlay (see the modal's own tab filtering) — Style
-    // is the only tab it actually has.
-    setEditModalTab(dr.lineType === "symbolOverlay" ? "style" : "coords");
-  }
-
-  function closeEditModal() {
-    setEditingId(null);
-    setDraft(null);
-  }
-
-  function saveEditModal() {
-    if (!editingId || !draft) return;
-    commitDrawings(drawings.map((d) => (d.id === editingId ? draft : d)));
-    closeEditModal();
-  }
-
-  function deleteEditingDrawing() {
-    if (!editingId) return;
-    commitDrawings(drawings.filter((d) => d.id !== editingId));
-    closeEditModal();
-  }
-
-  // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — every multi-point tool
-  // (fibonacciExtension/elliottCorrection/elliottImpulse) shares this one generic handler instead
-  // of each needing its own, same as a regular trend line's two endpoints always have.
-  function handleEndpointPointerDown(drawingId: string, pointIndex: number) {
-    return (e: React.PointerEvent<SVGCircleElement>) => {
-      // Still stops propagation while locked — otherwise the blocked click would bubble up to
-      // the overlay underneath and start a whole-body drag instead, defeating the lock entirely.
-      e.stopPropagation();
-      if (drawingsLocked) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragEndpointRef.current = { id: drawingId, pointIndex };
-    };
-  }
-
-  function handleEndpointPointerMove(e: React.PointerEvent<SVGCircleElement>) {
-    const drag = dragEndpointRef.current;
-    if (!drag) return;
-    const point = toDataPoint(e);
-    commitDrawings(
-      drawings.map((d) => {
-        if (d.id !== drag.id) return d;
-        if (drag.pointIndex === 0) return { ...d, x1: point.x, y1: point.y };
-        if (drag.pointIndex === 1) return { ...d, x2: point.x, y2: point.y };
-        const extraPoints = [...(d.extraPoints ?? [])];
-        extraPoints[drag.pointIndex - 2] = point;
-        return { ...d, extraPoints };
-      })
-    );
-  }
-
-  function handleEndpointPointerUp(e: React.PointerEvent<SVGCircleElement>) {
-    dragEndpointRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }
-
-  // Redefines one of the measure tool's two completed points by dragging its handle — same
-  // pointer-capture-on-the-handle pattern as a drawing endpoint above, just writing to
-  // measurePoints instead of `drawings` (a measurement was never one to begin with).
-  function handleMeasureHandlePointerDown(point: "p1" | "p2") {
-    return (e: React.PointerEvent<SVGCircleElement>) => {
-      e.stopPropagation();
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragMeasureRef.current = point;
-    };
-  }
-
-  function handleMeasureHandlePointerMove(e: React.PointerEvent<SVGCircleElement>) {
-    const point = dragMeasureRef.current;
-    if (!point) return;
-    const next = toDataPoint(e);
-    setMeasurePoints((mp) => (mp ? { ...mp, [point]: next } : mp));
-  }
-
-  function handleMeasureHandlePointerUp(e: React.PointerEvent<SVGCircleElement>) {
-    dragMeasureRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }
-
-  // Single-handle drag for an axis-constrained line: sets its value directly from the pointer's
-  // absolute position (like the two-endpoint drag above), but along one axis only — a
-  // "horizontal" line's handle only ever changes y1/y2 (kept equal), a "vertical" line's handle
-  // only ever changes x1/x2 (kept equal).
-  function handleAxisHandlePointerDown(drawingId: string) {
-    return (e: React.PointerEvent<SVGCircleElement>) => {
-      // Still stops propagation while locked — same reasoning as handleEndpointPointerDown above.
-      e.stopPropagation();
-      if (drawingsLocked) return;
-      e.currentTarget.setPointerCapture(e.pointerId);
-      dragAxisRef.current = { id: drawingId };
-    };
-  }
-
-  function handleAxisHandlePointerMove(e: React.PointerEvent<SVGCircleElement>) {
-    const drag = dragAxisRef.current;
-    if (!drag) return;
-    const dr = drawings.find((d) => d.id === drag.id);
-    if (!dr) return;
-    const rect = zoomRef.current!.getBoundingClientRect();
-    if (dr.lineType === "horizontal") {
-      const mouseY = e.clientY - rect.top;
-      const pane = paneScaleAndOffset(dr.valueAxis);
-      const value = round4(pane.scale.invert(mouseY - pane.offset));
-      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: value, y2: value } : d)));
-    } else if (dr.lineType === "vertical") {
-      const mouseX = e.clientX - rect.left;
-      const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
-      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue } : d)));
-    } else if (dr.lineType === "ray" || dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
-      // Both a ray's anchor and an arrow marker's single point have both degrees of freedom,
-      // unlike horizontal/vertical's single axis — an arrow marker's own valueAxis is always
-      // undefined (never set at creation, arrows aren't one of the pane-aware lineTypes), so
-      // paneScaleAndOffset always resolves it to price same as before.
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      const dateValue = dateForIndex(zoomedXScale.invert(mouseX));
-      const pane = paneScaleAndOffset(dr.valueAxis);
-      const value = round4(pane.scale.invert(mouseY - pane.offset));
-      commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: dateValue, x2: dateValue, y1: value, y2: value } : d)));
-    } else if (dr.lineType === "channel") {
-      // A channel's 3rd handle only adjusts channelOffset (single axis, vertical) — line 1's own
-      // two endpoints already have their own draggable handles, same as a regular trend line.
-      // Recomputes the offset so line 2 passes through the new mouseY at the handle's own X (its
-      // line 2 midpoint) — the midpoint's line-1 price simplifies to a plain average of y1/y2.
-      const mouseY = e.clientY - rect.top;
-      const midPrice = (dr.y1 + dr.y2) / 2;
-      commitDrawings(
-        drawings.map((d) => (d.id === drag.id ? { ...d, channelOffset: round4(zoomedPriceScale.invert(mouseY) - midPrice) } : d))
-      );
-    }
-  }
-
-  function handleAxisHandlePointerUp(e: React.PointerEvent<SVGCircleElement>) {
-    dragAxisRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-  }
 
   const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoProfile } =
     useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
@@ -1192,343 +546,116 @@ export function CandlestickChart({
     priceHeight,
   });
 
-  function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
-    if (data.length === 0) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
-
-    // Freehand capture: samples points into brushPointsRef (a ref, not state — pointermove can
-    // fire faster than React re-renders, and the committed drawing on pointer up reads straight
-    // from the ref instead of racing a stale closure over React state) throttled to roughly every
-    // 3px of on-screen movement, so a slow stroke isn't hundreds of near-duplicate points. Mirrors
-    // the same array into brushPreview state purely so the draw effect has something to render
-    // live — the ref stays the single source of truth for what actually gets committed.
-    if (brushDrawingRef.current) {
-      const last = brushPointsRef.current[brushPointsRef.current.length - 1];
-      if (last) {
-        const lastX = zoomedXScale(indexForDate(last.x) + 0.5);
-        const lastY = zoomedPriceScale(last.y);
-        if (Math.hypot(mouseX - lastX, mouseY - lastY) < 3) return;
-      }
-      const point = toDataPoint(e);
-      brushPointsRef.current = [...brushPointsRef.current, point];
-      setBrushPreview(brushPointsRef.current);
-      return;
-    }
-
-    if (dragLineRef.current) {
-      const drag = dragLineRef.current;
-      const dxPixels = e.clientX - drag.startClientX;
-      const dyPixels = e.clientY - drag.startClientY;
-      if (drag.orig.lineType === "horizontal") {
-        // Dragging the body moves it exactly like its single handle would — only the
-        // perpendicular axis (here, whichever pane it's anchored to) can change.
-        const { scale } = paneScaleAndOffset(drag.orig.valueAxis);
-        const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
-        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, y1: newValue, y2: newValue } : d)));
-      } else if (drag.orig.lineType === "vertical") {
-        const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
-        const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
-        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate } : d)));
-      } else if (drag.orig.lineType === "ray") {
-        // A ray has both degrees of freedom (unlike horizontal/vertical), so dragging its body
-        // moves its one anchor point in both date and its own pane's value at once.
-        const origX = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
-        const newDate = dateForIndex(zoomedXScale.invert(origX + dxPixels));
-        const { scale } = paneScaleAndOffset(drag.orig.valueAxis);
-        const newValue = round4(scale.invert(scale(drag.orig.y1) + dyPixels));
-        commitDrawings(drawings.map((d) => (d.id === drag.id ? { ...d, x1: newDate, x2: newDate, y1: newValue, y2: newValue } : d)));
-      } else {
-        const origX1 = zoomedXScale(indexForDate(drag.orig.x1) + 0.5);
-        const origX2 = zoomedXScale(indexForDate(drag.orig.x2) + 0.5);
-        const newX1 = dateForIndex(zoomedXScale.invert(origX1 + dxPixels));
-        const newY1 = round4(zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y1) + dyPixels));
-        const newX2 = dateForIndex(zoomedXScale.invert(origX2 + dxPixels));
-        const newY2 = round4(zoomedPriceScale.invert(zoomedPriceScale(drag.orig.y2) + dyPixels));
-        // Any extraPoints (fibonacciExtension/elliottCorrection/elliottImpulse) move by the same
-        // pixel delta as x1/x2, keeping the whole multi-point shape intact.
-        const newExtraPoints = drag.orig.extraPoints?.map((p) => {
-          const origX = zoomedXScale(indexForDate(p.x) + 0.5);
-          return {
-            x: dateForIndex(zoomedXScale.invert(origX + dxPixels)),
-            y: round4(zoomedPriceScale.invert(zoomedPriceScale(p.y) + dyPixels)),
-          };
-        });
-        commitDrawings(
-          drawings.map((d) =>
-            d.id === drag.id
-              ? { ...d, x1: newX1, y1: newY1, x2: newX2, y2: newY2, ...(newExtraPoints ? { extraPoints: newExtraPoints } : {}) }
-              : d
-          )
-        );
-      }
-      return;
-    }
-
-    if (isPanningYRef.current) return;
-
-    const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
-    setHoverIndex(index);
-    setHoverY(mouseY <= priceHeight ? mouseY : null);
-    // Bounded to volume's own [top, bottom) range (wherever it currently sits among the
-    // indicator panes — see volumeTop), not just a bare "> priceHeight" — without both bounds,
-    // hovering into an "own"-pane indicator (RSI/MACD/CHOP, which also satisfies mouseY >
-    // priceHeight) incorrectly kept showing the volume hover line/badge there too, since nothing
-    // distinguished "below the price section" from "specifically inside the volume pane".
-    setHoverVolumeY(
-      volumeVisible && !volumeCollapsed && mouseY > priceHeight + volumeTop && mouseY <= priceHeight + volumeTop + volumeHeight
-        ? mouseY - priceHeight - volumeTop
-        : null
-    );
-
-    if (activeTool && pendingPoint) {
-      setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
-    } else if (!activeTool && visibleDrawings.length > 0) {
-      let closestId: string | null = null;
-      let closestDist = DRAWING_HIT_DISTANCE;
-      for (const dr of visibleDrawings) {
-        // Axis-constrained lines render full-span (see the canvas draw effect below) rather
-        // than between their stored x1/x2 pixel positions, so hit-testing has to match that.
-        let d: number;
-        if (dr.lineType === "horizontal") {
-          const y = pixelYForDrawing(dr);
-          d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
-        } else if (dr.lineType === "ray") {
-          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const y = pixelYForDrawing(dr);
-          d = distanceToSegment(mouseX, mouseY, x, y, dims.boundedWidth, y);
-        } else if (dr.lineType === "vertical") {
-          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
-        } else if (dr.lineType === "channel") {
-          const cx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const cy1 = zoomedPriceScale(dr.y1);
-          const cx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const cy2 = zoomedPriceScale(dr.y2);
-          const offsetPx = zoomedPriceScale(dr.y1 + (dr.channelOffset ?? 0)) - zoomedPriceScale(dr.y1);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, cx1, cy1, cx2, cy2),
-            distanceToSegment(mouseX, mouseY, cx1, cy1 + offsetPx, cx2, cy2 + offsetPx)
-          );
-        } else if (dr.lineType === "fibonacci") {
-          const fx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const fx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          d = Math.min(
-            // The diagonal x1/y1–x2/y2 line itself, same as a regular trend line...
-            distanceToSegment(mouseX, mouseY, fx1, zoomedPriceScale(dr.y1), fx2, zoomedPriceScale(dr.y2)),
-            // ...plus whichever retracement level line is closest.
-            ...FIBONACCI_LEVELS.map((ratio) => {
-              const y = zoomedPriceScale(dr.y1 + (dr.y2 - dr.y1) * ratio);
-              return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
-            })
-          );
-        } else if (
-          dr.lineType === "elliottImpulse" ||
-          dr.lineType === "elliottCorrection" ||
-          dr.lineType === "brush" ||
-          dr.lineType === "elbowArrow"
-        ) {
-          // Same "polyline through every point" distance for a freehand stroke or an open-ended
-          // elbow-arrow polyline as for an Elliott wave's own fixed vertices.
-          const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
-          let minSegmentDist = Infinity;
-          for (let i = 1; i < screenPoints.length; i++) {
-            minSegmentDist = Math.min(
-              minSegmentDist,
-              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
-            );
-          }
-          d = minSegmentDist;
-        } else if (dr.lineType === "rectangle") {
-          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const ry1 = zoomedPriceScale(dr.y1);
-          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const ry2 = zoomedPriceScale(dr.y2);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, rx1, ry1, rx2, ry1),
-            distanceToSegment(mouseX, mouseY, rx2, ry1, rx2, ry2),
-            distanceToSegment(mouseX, mouseY, rx2, ry2, rx1, ry2),
-            distanceToSegment(mouseX, mouseY, rx1, ry2, rx1, ry1)
-          );
-        } else if (dr.lineType === "zones") {
-          // Unlike "rectangle" above (outline-only hit-testing), the three bands together fill
-          // the whole pane height for this x-range — so anywhere inside that column counts as a
-          // direct hit (d = 0), not just near one of the two boundary lines.
-          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const left = Math.min(rx1, rx2);
-          const right = Math.max(rx1, rx2);
-          d =
-            mouseX >= left && mouseX <= right && mouseY >= 0 && mouseY <= priceHeight
-              ? 0
-              : Math.min(
-                  distanceToSegment(mouseX, mouseY, left, 0, right, 0),
-                  distanceToSegment(mouseX, mouseY, left, priceHeight, right, priceHeight),
-                  distanceToSegment(mouseX, mouseY, left, 0, left, priceHeight),
-                  distanceToSegment(mouseX, mouseY, right, 0, right, priceHeight)
-                );
-        } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
-          d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
-        } else if (dr.lineType === "symbolOverlay") {
-          // Same "polyline through every point" distance as a freehand stroke — over its own
-          // projected (rebased-to-price-space) points, not x1/y1/x2/y2, which aren't meaningful
-          // for this lineType (see its own doc comment).
-          const projection = overlayProjections.find((p) => p.drawing.id === dr.id);
-          const screenPoints = (projection?.points ?? []).map((p) => ({ x: zoomedXScale(p.i + 0.5), y: zoomedPriceScale(p.price) }));
-          let minSegmentDist = Infinity;
-          for (let i = 1; i < screenPoints.length; i++) {
-            minSegmentDist = Math.min(
-              minSegmentDist,
-              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
-            );
-          }
-          d = minSegmentDist;
-        } else if (dr.lineType === "fibonacciExtension") {
-          const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const ay = zoomedPriceScale(dr.y1);
-          const bx = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const by = zoomedPriceScale(dr.y2);
-          const distances = [distanceToSegment(mouseX, mouseY, ax, ay, bx, by)];
-          const pointC = dr.extraPoints?.[0];
-          if (pointC) {
-            const cx = zoomedXScale(indexForDate(pointC.x) + 0.5);
-            const cy = zoomedPriceScale(pointC.y);
-            distances.push(distanceToSegment(mouseX, mouseY, bx, by, cx, cy));
-            const legDelta = dr.y2 - dr.y1;
-            const levelX1 = Math.min(bx, cx);
-            const levelX2 = Math.max(bx, cx);
-            for (const ratio of FIBONACCI_EXTENSION_LEVELS) {
-              const y = zoomedPriceScale(pointC.y + legDelta * ratio);
-              distances.push(distanceToSegment(mouseX, mouseY, levelX1, y, levelX2, y));
-            }
-          }
-          d = Math.min(...distances);
-        } else if (dr.lineType === "disjointChannel") {
-          const jx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const jy1 = zoomedPriceScale(dr.y1);
-          const jx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const jy2 = zoomedPriceScale(dr.y2);
-          const distances = [distanceToSegment(mouseX, mouseY, jx1, jy1, jx2, jy2)];
-          const [p3, p4] = dr.extraPoints ?? [];
-          if (p3 && p4) {
-            distances.push(
-              distanceToSegment(
-                mouseX,
-                mouseY,
-                zoomedXScale(indexForDate(p3.x) + 0.5),
-                zoomedPriceScale(p3.y),
-                zoomedXScale(indexForDate(p4.x) + 0.5),
-                zoomedPriceScale(p4.y)
-              )
-            );
-          }
-          d = Math.min(...distances);
-        } else {
-          const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const y1 = zoomedPriceScale(dr.y1);
-          const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const y2 = zoomedPriceScale(dr.y2);
-          // A regular trend line ("extended" included — see effectiveExtendOf) can be extended
-          // past x1/x2 via the Style tab, not only when drawn with the dedicated tool.
-          const extend = effectiveExtendOf(dr);
-          if (extend === "none") {
-            d = distanceToSegment(mouseX, mouseY, x1, y1, x2, y2);
-          } else {
-            const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth, extend);
-            d = distanceToSegment(mouseX, mouseY, extended.x1, extended.y1, extended.x2, extended.y2);
-          }
-        }
-        if (d < closestDist) {
-          closestDist = d;
-          closestId = dr.id;
-        }
-      }
-      updateHoveredDrawingId(closestId);
-    }
+  // All three span the dataset's own (unzoomed) extent rather than the currently visible one,
+  // so they still reach edge to edge after the user zooms/pans away from where they were added
+  // — a price alert or a session marker shouldn't disappear just because the view moved. Marked
+  // with `lineType` so they drag along one axis only (see handlePointerMove/handleAxisHandle*)
+  // and render full-span instead of between their stored x1/x2 (see the canvas draw effect).
+  function addPriceLine() {
+    if (hoverY === null) return;
+    const price = zoomedPriceScale.invert(hoverY);
+    commitDrawings([
+      ...drawings,
+      { id: `drawing-${drawingIdRef.current++}`, x1: data[0].date, y1: price, x2: data[data.length - 1].date, y2: price, lineType: "horizontal" },
+    ]);
   }
 
-  // When hovering a drawing, starts a "drag the whole line" gesture — d3-zoom already backs off
-  // in that case via the filter above, so capturing the pointer here doesn't compete with
-  // anything. Otherwise starts an independent Y-pan via plain window listeners (same pattern
-  // RangeSlider's drag uses) rather than a second setPointerCapture on the SAME overlay d3-zoom
-  // is attached to — an earlier attempt did that, and it raced with d3-zoom's own native pointer
-  // handling and broke X panning entirely. Window listeners never touch this element's pointer
-  // capture, so d3-zoom's own gesture (handling X) is completely unaffected by this running
-  // alongside it for Y.
-  function handleOverlayPointerDown(e: React.PointerEvent<SVGRectElement>) {
-    // Brush is the one drawing tool that places points by dragging instead of clicking — starts
-    // capturing here instead of falling through to the click-based tools' shared handleOverlayClick.
-    if (activeTool === "brush") {
-      e.currentTarget.setPointerCapture(e.pointerId);
-      const point = toDataPoint(e);
-      brushDrawingRef.current = true;
-      brushPointsRef.current = [point];
-      setBrushPreview(brushPointsRef.current);
-      return;
-    }
-    if (activeTool) return;
-    if (hoveredDrawingId) {
-      // Locked: absorb the gesture instead of dragging the line OR falling through to Y-pan —
-      // otherwise panning would shift the price scale under the (unmoved) line, breaking hit
-      // testing at the original screen position. The drawing stays selectable/deletable/editable
-      // (all driven by hover/double-click, untouched here), just not draggable.
-      if (drawingsLocked) return;
-      const dr = drawings.find((d) => d.id === hoveredDrawingId);
-      // Data-driven, same reasoning "locked" absorbs the gesture above — there's no coordinate
-      // for a whole-body drag to shift (see the lineType's own doc comment), and falling through
-      // to Y-pan here would have the same hit-testing-drifts-under-you problem "locked" avoids.
-      if (dr && dr.lineType === "symbolOverlay") return;
-      if (dr) {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        dragLineRef.current = { id: dr.id, startClientX: e.clientX, startClientY: e.clientY, orig: dr };
-        return;
-      }
-    }
-    if (!zoomable) return;
-    const startClientY = e.clientY;
-    const startYTransform = yTransform;
-    isPanningYRef.current = true;
-    const onMove = (ev: PointerEvent) => {
-      const dy = ev.clientY - startClientY;
-      // Only flagged here (once actual movement happens), not at pointerdown — a plain click
-      // with no drag shouldn't disable YAutoScaling.
-      setYManuallyAdjusted(true);
-      setYTransform(d3.zoomIdentity.scale(startYTransform.k).translate(0, startYTransform.y / startYTransform.k + dy / startYTransform.k));
-    };
-    const onUp = () => {
-      isPanningYRef.current = false;
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
+  function addVolumeLine() {
+    if (hoverVolumeY === null) return;
+    const volume = zoomedVolumeScale.invert(hoverVolumeY);
+    commitDrawings([
+      ...drawings,
+      {
+        id: `drawing-${drawingIdRef.current++}`,
+        x1: data[0].date,
+        y1: volume,
+        x2: data[data.length - 1].date,
+        y2: volume,
+        lineType: "horizontal",
+        valueAxis: "volume",
+      },
+    ]);
   }
 
-  function handleOverlayPointerUp(e: React.PointerEvent<SVGRectElement>) {
-    if (brushDrawingRef.current) {
-      brushDrawingRef.current = false;
-      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
-      const points = brushPointsRef.current;
-      brushPointsRef.current = [];
-      setBrushPreview(null);
-      if (points.length >= 2) {
-        const first = points[0];
-        const last = points[points.length - 1];
-        commitDrawings([
-          ...drawings,
-          { id: `drawing-${drawingIdRef.current++}`, x1: first.x, y1: first.y, x2: last.x, y2: last.y, lineType: "brush", extraPoints: points.slice(1, -1) },
-        ]);
-      }
-      cancelDrawingTool();
-      return;
-    }
-    if (!dragLineRef.current) return;
-    dragLineRef.current = null;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+  function addDateLine() {
+    if (!hovered) return;
+    const [p0, p1] = priceScale.domain() as [number, number];
+    commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1, lineType: "vertical" }]);
   }
 
-  const hovered = hoverIndex !== null ? data[hoverIndex] : null;
+  const {
+    handleOverlayClick,
+    handleOverlayDoubleClick,
+    handleEndpointPointerDown,
+    handleEndpointPointerMove,
+    handleEndpointPointerUp,
+    handleMeasureHandlePointerDown,
+    handleMeasureHandlePointerMove,
+    handleMeasureHandlePointerUp,
+    handleAxisHandlePointerDown,
+    handleAxisHandlePointerMove,
+    handleAxisHandlePointerUp,
+    handlePointerMove,
+    handleOverlayPointerDown,
+    handleOverlayPointerUp,
+  } = useDrawingInteractions({
+    data,
+    dims,
+    plotBoundedHeight,
+    priceHeight,
+    volumeHeight,
+    volumeTop,
+    volumeVisible,
+    volumeCollapsed,
+    setHoverIndex,
+    setHoverY,
+    setHoverVolumeY,
+    drawings,
+    commitDrawings,
+    drawingIdRef,
+    activeTool,
+    setActiveTool,
+    pendingPoint,
+    setPendingPoint,
+    setPreviewPoint,
+    pendingSecondPoint,
+    setPendingSecondPoint,
+    pendingExtraPoints,
+    setPendingExtraPoints,
+    setMeasurePoints,
+    drawingsLocked,
+    visibleDrawings,
+    setBrushPreview,
+    brushPointsRef,
+    brushDrawingRef,
+    hoveredDrawingId,
+    updateHoveredDrawingId,
+    setEditingId,
+    setDraft,
+    setEditModalTab,
+    dragEndpointRef,
+    dragAxisRef,
+    dragMeasureRef,
+    dragLineRef,
+    isPanningYRef,
+    cancelDrawingTool,
+    magnetSnapPrice,
+    zoomRef,
+    zoomedXScale,
+    zoomedPriceScale,
+    indexForDate,
+    dateForIndex,
+    priceScale,
+    resetZoom,
+    yTransform,
+    setYTransform,
+    setYManuallyAdjusted,
+    zoomable,
+    paneScaleAndOffset,
+    pixelYForDrawing,
+    resolveValueAxisAtY,
+    overlayProjections,
+  });
 
   useEffect(() => {
     const canvas = canvasRef.current;

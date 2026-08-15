@@ -1,0 +1,345 @@
+import { useEffect, useRef, useState } from "react";
+import type { Candle } from "../interfaces/Candle.interface";
+import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
+import type { DataPoint } from "../interfaces/DataPoint.interface";
+import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
+import type { SymbolSearchResult } from "../interfaces/SymbolSearchResult.interface";
+import { DRAWING_TOOL_CATEGORIES, categoryOfTool } from "../drawingCatalog";
+import { EMPTY_DRAWINGS } from "../constants";
+import { defaultIndicatorColor } from "../indicators";
+
+export interface UseDrawingStateArgs {
+  data: Candle[];
+  defaultDrawings: TrendLineDrawing[] | undefined;
+  onDrawingsChange: ((drawings: TrendLineDrawing[]) => void) | undefined;
+  onAddSymbolOverlay: ((result: SymbolSearchResult) => { date: Date; value: number }[] | Promise<{ date: Date; value: number }[]>) | undefined;
+}
+
+/** Every drawing (trend lines, shapes, symbol-comparison overlays…) — state, tool selection,
+ *  CRUD, and the small keyboard shortcuts (Escape to cancel/finalize, Delete to remove the
+ *  hovered one) that act on them. Pointer-driven placement/dragging lives in
+ *  `useDrawingInteractions` instead (it needs the zoom/pane scales this hook doesn't), which takes
+ *  this hook's full return value as its own input. */
+export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAddSymbolOverlay }: UseDrawingStateArgs) {
+  const [drawings, setDrawings] = useState<TrendLineDrawing[]>(defaultDrawings ?? []);
+  const [activeTool, setActiveTool] = useState<DrawingToolType | null>(null);
+  // Which tool each category's own rail button currently represents — stays selected across
+  // draws, independent of whether drawing is actually active right now, and independent of the
+  // other categories' own selection. Changed via that category's own flyout menu, which (unlike
+  // the button itself) also activates the tool immediately — see handleSelectToolType.
+  const [selectedToolByCategory, setSelectedToolByCategory] = useState<Record<string, DrawingToolType>>(() =>
+    Object.fromEntries(DRAWING_TOOL_CATEGORIES.map((c) => [c.id, c.tools[0].type]))
+  );
+  // Which category's dropdown is open, if any — at most one at a time.
+  const [openToolMenu, setOpenToolMenu] = useState<string | null>(null);
+  const [pendingPoint, setPendingPoint] = useState<DataPoint | null>(null);
+  const [previewPoint, setPreviewPoint] = useState<DataPoint | null>(null);
+  // "channel"'s second point (fixing line 1), set between the tool's 2nd and 3rd clicks — plain
+  // pendingPoint/previewPoint alone are enough for every 2-point tool's flow, channel needs a
+  // 3rd click. Every *other* multi-point tool (fibonacciExtension/elliottCorrection/
+  // elliottImpulse) also passes through this same 2nd-point stage before collecting the rest
+  // into pendingExtraPoints below — they don't diverge from channel until after it.
+  const [pendingSecondPoint, setPendingSecondPoint] = useState<DataPoint | null>(null);
+  // 3rd point onward for tools needing more than two (see MULTI_POINT_TOOLS) — irrelevant to
+  // channel, which computes channelOffset from its 3rd click directly instead of collecting it
+  // here.
+  const [pendingExtraPoints, setPendingExtraPoints] = useState<DataPoint[]>([]);
+  // When on, every new point placed by any drawing tool (via toDataPoint) snaps to whichever of
+  // the nearest candle's open/high/low/close is closest — a persistent modifier rather than a
+  // tool of its own, so it stays on across tool switches until toggled off again.
+  const [magnetActive, setMagnetActive] = useState(false);
+  // Hides every drawing (canvas render, hover/hit-testing, handles, axis badges) without
+  // touching `drawings` itself — toggling it back off brings everything back exactly as it
+  // was, unlike deleting. See `visibleDrawings` below, the single point every drawing-reading
+  // codepath was switched to read from instead of `drawings` directly.
+  const [drawingsHidden, setDrawingsHidden] = useState(false);
+  // Blocks *starting* a body/endpoint/axis-handle drag (handleOverlayPointerDown/
+  // handleEndpointPointerDown/handleAxisHandlePointerDown all bail out early while this is on)
+  // — hover, the delete key, and double-click-to-edit are all untouched, so a locked drawing
+  // stays selectable/deletable/editable, just not draggable.
+  const [drawingsLocked, setDrawingsLocked] = useState(false);
+  // Every codepath that reads drawn shapes for rendering, hit-testing, or handles reads this
+  // instead of `drawings` directly — hiding never mutates `drawings` itself (toggling back on
+  // restores everything exactly as it was), it just makes that read empty in the meantime.
+  const visibleDrawings = drawingsHidden ? EMPTY_DRAWINGS : drawings;
+  // The measure tool's own last completed 2-click measurement (not a `drawings` entry — it's
+  // ephemeral, cleared on Escape/tool switch instead of persisted). `pendingPoint`/`previewPoint`
+  // still drive its live 1st-click-to-cursor preview, same as every other 2-point tool.
+  const [measurePoints, setMeasurePoints] = useState<{ p1: DataPoint; p2: DataPoint } | null>(null);
+  // The brush tool's current in-progress stroke, for live preview only — the committed drawing
+  // (on pointer up) is built from brushPointsRef below, not from this state, so a stroke can be
+  // sampled at pointermove speed without every sample racing a stale closure over React state.
+  const [brushPreview, setBrushPreview] = useState<DataPoint[] | null>(null);
+  const brushPointsRef = useRef<DataPoint[]>([]);
+  const brushDrawingRef = useRef(false);
+  const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
+  const [hoverY, setHoverY] = useState<number | null>(null);
+  const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
+  const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
+  // Tickers whose "+" is currently awaiting onAddSymbolOverlay — a Set (not one at a time) since
+  // there's no reason comparing against AAPL should block also comparing against GOOGL while its
+  // own fetch is still in flight. Purely for each row's own spinner; not read anywhere that
+  // affects the chart itself.
+  const [addingOverlaySymbols, setAddingOverlaySymbols] = useState<Set<string>>(new Set());
+  // pointIndex: 0 = x1/y1, 1 = x2/y2, 2+ = extraPoints[pointIndex - 2] — see allPointsOf.
+  const dragEndpointRef = useRef<{ id: string; pointIndex: number } | null>(null);
+  const dragAxisRef = useRef<{ id: string } | null>(null);
+  // Which of the measure tool's two completed points (not a `drawings` entry, see measurePoints
+  // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
+  // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
+  const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
+  const drawingIdRef = useRef(0);
+
+  // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
+  // read it synchronously at pointerdown time, without re-attaching the zoom behavior on
+  // every hover change.
+  const hoveredDrawingIdRef = useRef<string | null>(null);
+  function updateHoveredDrawingId(id: string | null) {
+    hoveredDrawingIdRef.current = id;
+    setHoveredDrawingId(id);
+  }
+
+  // Set while dragging a whole drawing (pointer down directly on its body, not an endpoint).
+  const dragLineRef = useRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>(null);
+
+  // True while dragging the plot body to pan the price axis vertically, independent of
+  // d3-zoom's own horizontal pan (see handleOverlayPointerDown) — only used to have
+  // handlePointerMove skip its hover-detection work while this drag is live.
+  const isPanningYRef = useRef(false);
+
+  function commitDrawings(next: TrendLineDrawing[]) {
+    setDrawings(next);
+    onDrawingsChange?.(next);
+  }
+
+  function removeSymbolOverlay(ticker: string) {
+    commitDrawings(drawings.filter((d) => !(d.lineType === "symbolOverlay" && d.overlaySymbol === ticker)));
+  }
+
+  // Awaits `onAddSymbolOverlay` (a plain return is fine too — Promise.resolve passes it straight
+  // through) rather than expecting the caller to push a new drawing in themselves: `drawings` has
+  // no controlled counterpart to `defaultDrawings` (same as every other collection in this file),
+  // so an async fetch has no way to land its result other than the chart committing it once the
+  // promise settles. `addingOverlaySymbols` exists purely for each row's own spinner — never read
+  // for anything that affects rendering the overlay itself.
+  async function handleAddSymbolOverlay(result: SymbolSearchResult) {
+    if (!onAddSymbolOverlay || addingOverlaySymbols.has(result.ticker)) return;
+    setAddingOverlaySymbols((prev) => new Set(prev).add(result.ticker));
+    try {
+      const overlayData = await onAddSymbolOverlay(result);
+      if (!overlayData || overlayData.length === 0) return;
+      const sorted = [...overlayData].sort((a, b) => a.date.getTime() - b.date.getTime());
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          // Unused for this lineType (see its own doc comment) — just needs *some* value.
+          x1: first.date,
+          y1: first.value,
+          x2: last.date,
+          y2: last.value,
+          lineType: "symbolOverlay",
+          overlaySymbol: result.ticker,
+          overlaySymbolName: result.name,
+          overlayData: sorted,
+          color: defaultIndicatorColor(drawings.filter((d) => d.lineType === "symbolOverlay").length),
+        },
+      ]);
+    } finally {
+      setAddingOverlaySymbols((prev) => {
+        const next = new Set(prev);
+        next.delete(result.ticker);
+        return next;
+      });
+    }
+  }
+
+  function cancelDrawingTool() {
+    setActiveTool(null);
+    setPendingPoint(null);
+    setPreviewPoint(null);
+    setPendingSecondPoint(null);
+    setPendingExtraPoints([]);
+    setMeasurePoints(null);
+  }
+
+  function handleToolClick(tool: DrawingToolType) {
+    if (activeTool === tool) {
+      cancelDrawingTool();
+    } else {
+      setActiveTool(tool);
+      setPendingPoint(null);
+      setPreviewPoint(null);
+      setPendingSecondPoint(null);
+      setPendingExtraPoints([]);
+      setMeasurePoints(null);
+    }
+  }
+
+  // Picking a tool from a category's flyout menu both changes what that category's own rail
+  // button represents *and* activates it immediately, ready to draw — unlike clicking the
+  // button itself to toggle the already-represented tool on/off, there's no extra confirmation
+  // click needed here since picking a specific tool from the menu is already a deliberate choice.
+  function handleSelectToolType(type: DrawingToolType) {
+    setSelectedToolByCategory((prev) => ({ ...prev, [categoryOfTool(type).id]: type }));
+    setOpenToolMenu(null);
+    setActiveTool(type);
+    setPendingPoint(null);
+    setPreviewPoint(null);
+    setPendingSecondPoint(null);
+    setPendingExtraPoints([]);
+    setMeasurePoints(null);
+  }
+
+  useEffect(() => {
+    // Also armed while only a completed measurement lingers (activeTool already back to null by
+    // then, see the "measure" branch of handleOverlayClick) so Escape can still dismiss it —
+    // every other tool only needs this while still active, since none of them outlive their own
+    // deselection the way a finished measurement does.
+    if (!activeTool && !measurePoints) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Escape") return;
+      // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
+      // point count to reach on its own (see handleOverlayClick), so Escape is the only way it
+      // ever completes. Needs at least 2 points to be a line at all; fewer and there's nothing
+      // to commit, same as cancelling any other half-placed tool.
+      if (activeTool === "elbowArrow" && pendingPoint && pendingExtraPoints.length >= 1) {
+        const points = [pendingPoint, ...pendingExtraPoints];
+        const next: TrendLineDrawing[] = [
+          ...drawings,
+          {
+            id: `drawing-${drawingIdRef.current++}`,
+            x1: points[0].x,
+            y1: points[0].y,
+            x2: points[1].x,
+            y2: points[1].y,
+            lineType: "elbowArrow",
+            extraPoints: points.slice(2),
+          },
+        ];
+        setDrawings(next);
+        onDrawingsChange?.(next);
+      }
+      cancelDrawingTool();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange, measurePoints]);
+
+  // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
+  // already tracks the one line the user is pointing at, same thing a click-to-select would give
+  // here) when Delete/Backspace is pressed — skipped while the edit modal is open (its own
+  // "Supprimer" button is the deliberate action there) or while a text input has focus (typing a
+  // label in the Texte tab shouldn't delete the drawing out from under it).
+  useEffect(() => {
+    if (!hoveredDrawingId || editingId) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const active = document.activeElement;
+      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocused) return;
+      e.preventDefault();
+      const next = drawings.filter((d) => d.id !== hoveredDrawingId);
+      setDrawings(next);
+      onDrawingsChange?.(next);
+      setHoveredDrawingId(null);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hoveredDrawingId, editingId, drawings, onDrawingsChange]);
+
+  // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
+  // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
+  // No-op when the magnet is off, so every call site stays correct without its own branch.
+  function magnetSnapPrice(rawIndex: number, rawY: number): number {
+    if (!magnetActive || data.length === 0) return rawY;
+    const idx = Math.min(data.length - 1, Math.max(0, Math.round(rawIndex - 0.5)));
+    const candle = data[idx];
+    const candidates = [candle.open, candle.high, candle.low, candle.close];
+    return candidates.reduce((closest, v) => (Math.abs(v - rawY) < Math.abs(closest - rawY) ? v : closest), candidates[0]);
+  }
+
+  function closeEditModal() {
+    setEditingId(null);
+    setDraft(null);
+  }
+
+  function saveEditModal() {
+    if (!editingId || !draft) return;
+    commitDrawings(drawings.map((d) => (d.id === editingId ? draft : d)));
+    closeEditModal();
+  }
+
+  function deleteEditingDrawing() {
+    if (!editingId) return;
+    commitDrawings(drawings.filter((d) => d.id !== editingId));
+    closeEditModal();
+  }
+
+  return {
+    drawings,
+    setDrawings,
+    activeTool,
+    setActiveTool,
+    selectedToolByCategory,
+    setSelectedToolByCategory,
+    openToolMenu,
+    setOpenToolMenu,
+    pendingPoint,
+    setPendingPoint,
+    previewPoint,
+    setPreviewPoint,
+    pendingSecondPoint,
+    setPendingSecondPoint,
+    pendingExtraPoints,
+    setPendingExtraPoints,
+    magnetActive,
+    setMagnetActive,
+    drawingsHidden,
+    setDrawingsHidden,
+    drawingsLocked,
+    setDrawingsLocked,
+    visibleDrawings,
+    measurePoints,
+    setMeasurePoints,
+    brushPreview,
+    setBrushPreview,
+    brushPointsRef,
+    brushDrawingRef,
+    hoveredDrawingId,
+    setHoveredDrawingId,
+    hoverY,
+    setHoverY,
+    hoverVolumeY,
+    setHoverVolumeY,
+    editingId,
+    setEditingId,
+    draft,
+    setDraft,
+    editModalTab,
+    setEditModalTab,
+    addingOverlaySymbols,
+    dragEndpointRef,
+    dragAxisRef,
+    dragMeasureRef,
+    drawingIdRef,
+    hoveredDrawingIdRef,
+    updateHoveredDrawingId,
+    dragLineRef,
+    isPanningYRef,
+    commitDrawings,
+    removeSymbolOverlay,
+    handleAddSymbolOverlay,
+    cancelDrawingTool,
+    handleToolClick,
+    handleSelectToolType,
+    magnetSnapPrice,
+    closeEditModal,
+    saveEditModal,
+    deleteEditingDrawing,
+  };
+}
