@@ -21,6 +21,11 @@ export type {
 export { ChartEventTooltip } from "./EventTooltip";
 export type { ChartEventTooltipProps } from "./EventTooltip";
 
+export { SeasonalityView } from "./SeasonalityView";
+export type { SeasonalityViewProps } from "./SeasonalityView";
+export { computeSeasonality } from "./internal/seasonality";
+export type { SeasonalityGranularity, SeasonalityBucket, SeasonalityOccurrence, SeasonalityResult } from "./internal/seasonality";
+
 export { GaugeChart } from "./GaugeChart";
 export type { GaugeChartProps, GaugeThreshold } from "./GaugeChart";
 

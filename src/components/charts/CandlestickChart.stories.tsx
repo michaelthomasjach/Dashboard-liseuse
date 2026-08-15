@@ -516,6 +516,32 @@ export const WithFundamentals: Story = {
   ),
 };
 
+export const WithSeasonality: Story = {
+  name: "Saisonnalité",
+  render: () => (
+    <div style={{ padding: 24 }}>
+      <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+        `seasonality` affiche un bouton calendrier dans l'en-tête — bascule tout le corps du graphe (bougies,
+        volume, indicateurs, dessins, tout) pour la performance moyenne cumulée à travers une année de référence,
+        agrégée sur les années disponibles dans `data` ({MEDIUM_DATASET.length} bougies ≈ 10 ans ici) : chaque année
+        est rebasée en % depuis sa propre première clôture, puis moyennée point par point avec les autres. Un
+        en-tête dédié (juste le nom du symbole et un bouton retour) remplace l'habituel pendant ce mode plutôt que
+        de garder son sélecteur d'intervalle/de mode d'affichage visibles sans rapport avec ce qui s'affiche.
+        Granularité (<strong>Semaine</strong> — jamais plus fin, "jour" n'est pas une option — <strong>Mois</strong>
+        , <strong>Trimestre</strong>, <strong>Année</strong>) et années incluses/exclues (case à cocher par année,
+        toutes cochées par défaut — pratique pour retirer une année de crise ou d'élection) se règlent depuis les
+        contrôles au-dessus du graphe ; "Année" n'ayant qu'un seul point (le rendement moyen de l'année entière),
+        il s'affiche comme un simple chiffre plutôt qu'un graphique à un point. Le moteur de calcul
+        (`computeSeasonality`, dans `internal/seasonality.ts`) est entièrement indépendant du rendu — pur, sans
+        React ni D3 — et exporté séparément pour qui veut le réutiliser ; le rendu lui-même passe par{" "}
+        <code>LineAreaChart</code> plutôt qu'un graphique dédié, un chemin saisonnier n'étant qu'une série de plus
+        une fois calculée.
+      </p>
+      <CandlestickChart data={MEDIUM_DATASET} symbol="GOOGL" seasonality height={STORY_HEIGHT} />
+    </div>
+  ),
+};
+
 export const WithSymbolSearch: Story = {
   name: "Recherche de symbole",
   render: () => {

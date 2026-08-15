@@ -8,6 +8,7 @@ import { useAxisWheelZoom } from "./internal/useAxisWheelZoom";
 import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartEventTooltip } from "./EventTooltip";
+import { SeasonalityView } from "./SeasonalityView";
 import { Popover } from "../forms/Popover";
 import { TextField } from "../forms/TextField";
 import { NumberField } from "../forms/NumberField";
@@ -32,6 +33,7 @@ import {
   SearchIcon,
   ChevronDownIcon,
   ChevronUpIcon,
+  ChevronLeftIcon,
   PlusIcon,
   ActivityIcon,
   SettingsIcon,
@@ -62,6 +64,7 @@ import {
   ZonesIcon,
   CheckIcon,
   RefreshIcon,
+  CalendarIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -1216,6 +1219,14 @@ export interface CandlestickChartProps {
   formatVolume?: (v: number) => string;
   /** Shows a fullscreen toggle button in the header. Default true. */
   fullscreenToggle?: boolean;
+  /** Shows a header button that swaps the whole chart body for `SeasonalityView` — the average
+   *  cumulative return through a reference year, aggregated across `data`'s own historical years
+   *  (see `computeSeasonality` in `internal/seasonality.ts`, kept independent of this component on
+   *  purpose). A dedicated small header (symbol name + a "back" button) replaces the normal one
+   *  while active, for a clear, unambiguous way back to the regular chart — rather than trying to
+   *  keep the regular header's own timeframe/display-mode/indicator controls both visible and
+   *  meaningful over a view none of them actually apply to. Default false. */
+  seasonality?: boolean;
   /** Shows a left-docked toolbar for drawing annotations directly on the chart (currently: trend line). Default false. */
   drawingTools?: boolean;
   /** Uncontrolled initial set of trend-line drawings. */
@@ -1604,6 +1615,7 @@ export function CandlestickChart({
   formatPrice,
   formatVolume,
   fullscreenToggle = true,
+  seasonality = false,
   drawingTools = false,
   defaultDrawings,
   onDrawingsChange,
@@ -1732,6 +1744,12 @@ export function CandlestickChart({
   const [activeEventStack, setActiveEventStack] = useState<{ i: number; events: ChartEvent[] } | null>(null);
   const [eventModalOpen, setEventModalOpen] = useState(false);
   const [symbolSearchOpen, setSymbolSearchOpen] = useState(false);
+  // Swaps the whole chart body for SeasonalityView (see the `seasonality` prop's own doc
+  // comment) — deliberately its own top-level flag, not folded into `chartDisplayMode`, since a
+  // seasonal path isn't another way to draw the same price/date axes the way candle/line/Renko
+  // are; it has its own x-axis (position within a reference year) that drawings/indicators/
+  // volume/events have no meaningful relationship to.
+  const [seasonalityOpen, setSeasonalityOpen] = useState(false);
   const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
   const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
   const [favoriteSymbolIds, setFavoriteSymbolIds] = useState<string[]>(defaultFavoriteSymbolIds ?? []);
@@ -4840,7 +4858,7 @@ export function CandlestickChart({
 
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
-      {showHeader && (
+      {showHeader && !seasonalityOpen && (
         <div className="lq-chart__header" style={{ width: dims.width }}>
           {timeframes && timeframes.length > 0 && (
             <>
@@ -4955,6 +4973,17 @@ export function CandlestickChart({
               Réinitialiser le zoom
             </button>
           )}
+          {seasonality && (
+            <button
+              type="button"
+              className="lq-chart__icon-button"
+              onClick={() => setSeasonalityOpen(true)}
+              aria-label="Saisonnalité"
+              title="Saisonnalité : performance moyenne par période, agrégée sur l'historique"
+            >
+              <CalendarIcon size={14} />
+            </button>
+          )}
           {fullscreenToggle && (
             <button
               type="button"
@@ -4968,6 +4997,23 @@ export function CandlestickChart({
         </div>
       )}
 
+      {/* Deliberately its own small header rather than trying to keep the regular one's
+          timeframe/display-mode/indicator controls both visible and meaningful over a view none
+          of them actually apply to — a dedicated "back" button here is a clearer way out of
+          seasonality mode than expecting the same button that opened it to also be the one that
+          closes it. */}
+      {showHeader && seasonalityOpen && (
+        <div className="lq-chart__header" style={{ width: dims.width }}>
+          <button type="button" className="lq-chart__icon-button" onClick={() => setSeasonalityOpen(false)} aria-label="Retour au graphique">
+            <ChevronLeftIcon size={14} />
+          </button>
+          <span className="lq-chart__symbol-info-name">{symbol ? `${symbol} — Saisonnalité` : "Saisonnalité"}</span>
+        </div>
+      )}
+
+      {seasonalityOpen ? (
+        <SeasonalityView data={data} height={plotHeight} />
+      ) : (
       <div
         className="lq-chart__plot"
         style={{ width: dims.width, height: plotHeight }}
@@ -6115,6 +6161,7 @@ export function CandlestickChart({
             );
           })()}
       </div>
+      )}
 
       {/* Own positioned ancestor is the root .lq-chart (this sits outside .lq-chart__plot, which
           would otherwise become the nearer positioned ancestor and confine it to the plot area

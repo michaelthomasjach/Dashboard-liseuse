@@ -156,6 +156,50 @@
   font-size: 0.85rem;
 }
 
+.lq-chart__seasonality {
+  padding: var(--lq-space-3);
+}
+
+.lq-chart__seasonality-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  margin-bottom: var(--lq-space-3);
+}
+
+.lq-chart__seasonality-year-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-1);
+  padding: var(--lq-space-2);
+  max-height: 60vh;
+  overflow-y: auto;
+  min-width: 120px;
+}
+
+/* "year" granularity — a single aggregate number reads better as a stat than a one-point line
+   chart (see SeasonalityView's own comment). Centered in the same box LineAreaChart would have
+   filled, so switching granularity doesn't jump the layout around. */
+.lq-chart__seasonality-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--lq-space-2);
+  text-align: center;
+}
+
+.lq-chart__seasonality-summary-value {
+  font-size: 2.5rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.lq-chart__seasonality-summary-label {
+  color: var(--lq-color-text-muted);
+  font-size: 0.8rem;
+}
+
 .lq-chart__legend {
   display: flex;
   flex-wrap: wrap;
