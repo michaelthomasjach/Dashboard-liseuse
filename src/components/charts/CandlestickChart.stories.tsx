@@ -353,9 +353,10 @@ export const WithSubPaneIndicators: Story = {
         (paramètres) et la corbeille (suppression) restent juste après le nom. Glisser le fin liseré juste
         au-dessus d'un en-tête de panneau (volume compris) redimensionne ce panneau ; glisser (ou double-clic
         pour réinitialiser) son propre axe Y le rescale verticalement, indépendamment des autres. La{" "}
-        <strong>poignée à 6 points</strong> tout à gauche de RSI/MACD/CHOP glisse pour réordonner les panneaux
-        entre eux (l'échange se déclenche dès que le curseur franchit la moitié de la hauteur d'un panneau
-        voisin, pas besoin d'atteindre son bord — Volume reste toujours en premier). Le dernier bouton de la
+        <strong>poignée à 6 points</strong> tout à gauche de chaque panneau (Volume compris) glisse pour les
+        réordonner entre eux (l'échange se déclenche dès que le curseur franchit la moitié de la hauteur d'un
+        panneau voisin, pas besoin d'atteindre son bord) — Volume n'est plus fixé juste sous le prix, il peut se
+        glisser n'importe où parmi RSI/MACD/CHOP comme n'importe lequel d'entre eux. Le dernier bouton de la
         colonne d'outils, tout en bas, ouvre <strong>"Dessins et indicateurs"</strong> : trois groupes — dessins
         actuellement sur le graphe, indicateurs superposés au prix, indicateurs en sous-panneau (Volume compris)
         — chacun avec un badge identifiant son type et sa propre roue crantée/corbeille. Les outils{" "}
