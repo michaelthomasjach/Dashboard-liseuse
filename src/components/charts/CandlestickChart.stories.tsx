@@ -558,6 +558,73 @@ export const WithSymbolSearch: Story = {
   },
 };
 
+// A small in-memory "quote database" of daily closes per ticker, keyed the same as
+// MOCK_SYMBOL_DB — stands in for a real quote API the same way MOCK_SYMBOL_DB stands in for a
+// real symbol-search one. A different seed/base per ticker so trajectories actually diverge
+// instead of moving in lockstep, aligned to SYMBOL_DATASET's own dates (a real overlay wouldn't
+// need to be — see the story's own description — this just keeps the mock data simple).
+const OVERLAY_SEED_BY_TICKER: Record<string, number> = {
+  NVDA: 15,
+  AAPL: 27,
+  MSFT: 44,
+  SPX: 3,
+  BTCUSD: 61,
+  ETHUSD: 52,
+};
+function generateOverlaySeries(ticker: string): { date: Date; value: number }[] {
+  const seed = OVERLAY_SEED_BY_TICKER[ticker] ?? 7;
+  return generateCandles(SYMBOL_DATASET.length, 100 + seed * 3, seed).map((c, i) => ({ date: SYMBOL_DATASET[i].date, value: c.close }));
+}
+
+export const WithSymbolOverlay: Story = {
+  name: "Overlay de comparaison de symboles",
+  render: () => {
+    const [favorites, setFavorites] = useState<string[]>([]);
+    const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
+    const [currentSymbol, setCurrentSymbol] = useState("MSFT");
+    return (
+      <div style={{ padding: 24 }}>
+        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
+          Depuis la modale de recherche (`symbolSearch`), chaque résultat a maintenant un bouton <strong>+</strong>{" "}
+          à côté de son nom (survol, comme l'étoile favoris) — <strong>double-clic sur un résultat</strong> garde
+          son comportement habituel (changer le symbole principal), <strong>cliquer +</strong> l'ajoute en overlay
+          de comparaison sans fermer la modale (essaie "AAPL"). Dès qu'au moins un overlay est présent, l'axe des
+          prix passe en <strong>%</strong>, recalculé depuis le <strong>premier point visible</strong> de chaque
+          série (glisse/zoome pour voir la référence bouger) — chaque symbole compare sa propre performance depuis
+          ce point, indépendamment de son prix réel (`overlayProjections` : la série de l'overlay est rebasée sur
+          sa propre référence puis reprojetée sur le prix de la série principale, plutôt que de changer l'échelle
+          elle-même — bougies, indicateurs et dessins ancrés au prix restent donc inchangés, seul le libellé de
+          l'axe se relit différemment). Le symbole ajouté apparaît en haut à gauche du graphe, dans la même légende
+          que les indicateurs superposés au prix (survol → œil masque/affiche, corbeille supprime, roue crantée
+          ouvre ses réglages) : chaque overlay est un vrai <code>TrendLineDrawing</code>{" "}
+          (<code>lineType: "symbolOverlay"</code>), pas un mécanisme séparé — même infrastructure d'édition
+          (couleur, épaisseur, style de trait) que n'importe quel autre dessin, sélectionnable/supprimable (Suppr)
+          en survolant sa ligne sur le graphe comme n'importe quel autre. Reclique <strong>+</strong> (devenu une
+          coche) pour retirer un overlay ; l'axe revient en prix une fois le dernier retiré. `onAddSymbolOverlay`
+          (async, un léger délai simulé ici pour montrer le petit indicateur de chargement sur le bouton) renvoie
+          la série de comparaison — la bibliothèque n'a pas de source de données à elle, comme
+          `symbolSearchResults`/`fundamentals`.
+        </p>
+        <CandlestickChart
+          data={SYMBOL_DATASET}
+          symbol={currentSymbol}
+          symbolSearch
+          symbolSearchResults={results}
+          onSymbolSearchChange={(query, category) => setResults(filterMockSymbols(query, category, favorites))}
+          onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
+          defaultFavoriteSymbolIds={favorites}
+          onFavoriteSymbolIdsChange={setFavorites}
+          onAddSymbolOverlay={async (result) => {
+            await new Promise((resolve) => setTimeout(resolve, 600));
+            return generateOverlaySeries(result.ticker);
+          }}
+          height={STORY_HEIGHT}
+        />
+      </div>
+    );
+  },
+};
+
 export const LargeDataset: Story = {
   name: "Grand volume de données (2 500 bougies)",
   render: () => (

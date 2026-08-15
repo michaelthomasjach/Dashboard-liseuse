@@ -1212,3 +1212,62 @@
 .lq-chart__symbol-search-favorite--active {
   color: #e0a95c;
 }
+
+/* Compare-against toggle — same hover-reveal-unless-active convention as the favorite star right
+   next to it (see its own comment above), reusing the accent color/shape family instead of a
+   fresh one so it reads as "the other row action", not a visually unrelated button bolted on. */
+.lq-chart__symbol-search-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  margin-right: 4px;
+  padding: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+  opacity: 0;
+}
+
+.lq-chart__symbol-search-row:hover .lq-chart__symbol-search-overlay,
+.lq-chart__symbol-search-overlay:focus-visible,
+.lq-chart__symbol-search-overlay--active {
+  opacity: 1;
+}
+
+.lq-chart__symbol-search-overlay:hover {
+  color: var(--lq-color-accent);
+}
+
+.lq-chart__symbol-search-overlay--active {
+  color: var(--lq-color-accent);
+}
+
+.lq-chart__symbol-search-overlay:disabled {
+  cursor: default;
+}
+
+@keyframes lq-chart-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* A functional loading indicator, not a decorative idle animation like the weather icons' own
+   `.lq-icon-spin` (which is deliberately slow, and turned off under the e-ink palette along with
+   every other purely-decorative animation) — this one has to keep spinning regardless of palette,
+   since it's the only sign an async onAddSymbolOverlay call is still in flight. Still respects
+   prefers-reduced-motion, same as the rest of this library's animations. */
+.lq-chart__symbol-search-overlay-spinner {
+  animation: lq-chart-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lq-chart__symbol-search-overlay-spinner {
+    animation: none;
+  }
+}

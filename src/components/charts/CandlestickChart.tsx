@@ -60,6 +60,8 @@ import {
   OverlayBadgeIcon,
   PaneBadgeIcon,
   ZonesIcon,
+  CheckIcon,
+  RefreshIcon,
 } from "../icons";
 import "./charts-shared.css";
 
@@ -258,7 +260,8 @@ export interface TrendLineDrawing {
     | "brush"
     | "arrowUp"
     | "arrowDown"
-    | "zones";
+    | "zones"
+    | "symbolOverlay";
   /** Which pane's own value scale y is expressed in — "price" (default), "volume", or the id of
    *  an "own"-pane indicator (RSI/CHOP/MACD) to anchor a "horizontal"/"ray" line to that pane
    *  instead — a single click (no pending-point/preview phase to thread pane state through,
@@ -289,6 +292,22 @@ export interface TrendLineDrawing {
   positiveColor?: string;
   negativeColor?: string;
   neutralColor?: string;
+  /** "symbolOverlay" only: a second instrument's own price series, plotted for comparison against
+   *  `data` — added via the "+" button next to a result in the symbol-search modal (see
+   *  `CandlestickChartProps.onAddSymbolOverlay`), never by clicking the chart, so it has no
+   *  placement flow of its own in `handleOverlayClick`. x1/y1/x2/y2 are still set (to
+   *  `overlayData`'s own first/last point) purely so every drawing has *some* value for them —
+   *  nothing reads them for this lineType, `overlayData` is what actually renders. Same stance as
+   *  `data`/`fundamentals`: the library has no data source of its own, this is the app's own
+   *  fetched series, just plotted and interacted with. */
+  overlaySymbol?: string;
+  overlaySymbolName?: string;
+  overlayData?: { date: Date; value: number }[];
+  /** Hides a drawing without deleting it — like an indicator's own `hidden`, but generic here
+   *  since (unlike indicators) most drawing types have never needed one: only "symbolOverlay"'s
+   *  own legend entry exposes a toggle for it today, though nothing stops another drawing type
+   *  from using it later. Default false (visible). */
+  hidden?: boolean;
 }
 
 /** Standard Fibonacci retracement ratios, 0 (y1) to 1 (y2) — the same default set most trading
@@ -393,6 +412,16 @@ function formatFundamentalValue(kind: IndicatorKind, value: number): string {
     default:
       return value.toFixed(2);
   }
+}
+
+/** A raw price (or "equivalent price", see `overlayProjections`) reinterpreted as a % change from
+ *  a reference price — what the whole price axis reads in once `compareMode` is active, instead
+ *  of `pFmt`'s plain currency. Signed (a leading "+" on a gain, matching the OHLC readout's own
+ *  `ohlcSign` convention) since "up or down from the reference" is the entire point of this view. */
+function formatPercentFromReference(value: number, reference: number): string {
+  if (reference === 0) return "0.0%";
+  const pct = (value / reference - 1) * 100;
+  return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
 }
 
 /** A fundamental's own value at each candle — forward-filled (step function) from the most recent
@@ -1085,6 +1114,13 @@ function categoryOfTool(type: DrawingToolType): DrawingToolCategory {
 // `lineType` of its own to disambiguate by. Used for both its label and its icon, e.g. in the
 // "Dessins et indicateurs" modal's per-row badge.
 function drawingToolMeta(dr: TrendLineDrawing): { label: string; icon: typeof TrendLineIcon } {
+  // Not a click-to-place tool (added from the symbol-search modal instead — see
+  // onAddSymbolOverlay), so it has no entry in DRAWING_TOOL_CATEGORIES to find below. Reuses
+  // OverlayBadgeIcon (already means "drawn directly over the price candles" elsewhere) rather
+  // than a new icon just for this.
+  if (dr.lineType === "symbolOverlay") {
+    return { label: [dr.overlaySymbol, dr.overlaySymbolName].filter(Boolean).join(" · ") || "Symbole", icon: OverlayBadgeIcon };
+  }
   const toolId: DrawingToolType = dr.lineType ?? (dr.arrowLeft || dr.arrowRight ? "arrowLine" : "trendline");
   for (const category of DRAWING_TOOL_CATEGORIES) {
     const tool = category.tools.find((t) => t.type === toolId);
@@ -1262,6 +1298,20 @@ export interface CandlestickChartProps {
   onSymbolSearchChange?: (query: string, category: SymbolSearchCategory) => void;
   /** Fires when a result row is clicked — the modal closes automatically right after. */
   onSymbolSelect?: (result: SymbolSearchResult) => void;
+  /** Fires when a result row's "+" is clicked (hover-revealed, next to its name — the modal stays
+   *  open, unlike `onSymbolSelect`) to compare that instrument against the main one. Returns (or
+   *  resolves to) the comparison series itself — the library has no data source of its own, same
+   *  stance as `data`/`fundamentals`/`symbolSearchResults`. Once it resolves, the chart appends a
+   *  `symbolOverlay` drawing itself (`drawings` stays uncontrolled, like everywhere else in this
+   *  file — there's no way for the caller to inject one directly, since fetching is inherently
+   *  async and `drawings` has no controlled counterpart to `defaultDrawings`) — reported back via
+   *  `onDrawingsChange` same as any other new drawing. The "+" shows a small spinner while the
+   *  promise is pending, and turns into a checkmark (click to remove) once that symbol is already
+   *  an active overlay — a plain fire-and-forget callback couldn't support either without the
+   *  library tracking pending/active state itself, which returning the data instead sidesteps. */
+  onAddSymbolOverlay?: (
+    result: SymbolSearchResult
+  ) => { date: Date; value: number }[] | Promise<{ date: Date; value: number }[]>;
   /** Uncontrolled set of favorited result ids — the star toggle at the far right of each result
    *  row (visible on hover, or always once favorited). Persisted the same way as `drawings`/
    *  `indicators`: seeds initial state, changes reported back via `onFavoriteSymbolIdsChange`. */
@@ -1576,6 +1626,7 @@ export function CandlestickChart({
   symbolSearchResults,
   onSymbolSearchChange,
   onSymbolSelect,
+  onAddSymbolOverlay,
   defaultFavoriteSymbolIds,
   onFavoriteSymbolIdsChange,
   livePrice = false,
@@ -1684,6 +1735,11 @@ export function CandlestickChart({
   const [symbolSearchQuery, setSymbolSearchQuery] = useState("");
   const [symbolSearchCategory, setSymbolSearchCategory] = useState<SymbolSearchCategory>("all");
   const [favoriteSymbolIds, setFavoriteSymbolIds] = useState<string[]>(defaultFavoriteSymbolIds ?? []);
+  // Tickers whose "+" is currently awaiting onAddSymbolOverlay — a Set (not one at a time) since
+  // there's no reason comparing against AAPL should block also comparing against GOOGL while its
+  // own fetch is still in flight. Purely for each row's own spinner; not read anywhere that
+  // affects the chart itself.
+  const [addingOverlaySymbols, setAddingOverlaySymbols] = useState<Set<string>>(new Set());
   // Ticks once a second, only while `livePrice` is on — its only job is giving the countdown
   // badge (a plain DOM element, not part of the canvas draw effect) a reason to re-render each
   // second; the dashed line/price badge themselves only depend on `data` and don't need this.
@@ -1840,6 +1896,50 @@ export function CandlestickChart({
       onFavoriteSymbolIdsChange?.(next);
       return next;
     });
+  }
+
+  function removeSymbolOverlay(ticker: string) {
+    commitDrawings(drawings.filter((d) => !(d.lineType === "symbolOverlay" && d.overlaySymbol === ticker)));
+  }
+
+  // Awaits `onAddSymbolOverlay` (a plain return is fine too — Promise.resolve passes it straight
+  // through) rather than expecting the caller to push a new drawing in themselves: `drawings` has
+  // no controlled counterpart to `defaultDrawings` (same as every other collection in this file),
+  // so an async fetch has no way to land its result other than the chart committing it once the
+  // promise settles. `addingOverlaySymbols` exists purely for each row's own spinner — never read
+  // for anything that affects rendering the overlay itself.
+  async function handleAddSymbolOverlay(result: SymbolSearchResult) {
+    if (!onAddSymbolOverlay || addingOverlaySymbols.has(result.ticker)) return;
+    setAddingOverlaySymbols((prev) => new Set(prev).add(result.ticker));
+    try {
+      const overlayData = await onAddSymbolOverlay(result);
+      if (!overlayData || overlayData.length === 0) return;
+      const sorted = [...overlayData].sort((a, b) => a.date.getTime() - b.date.getTime());
+      const first = sorted[0];
+      const last = sorted[sorted.length - 1];
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          // Unused for this lineType (see its own doc comment) — just needs *some* value.
+          x1: first.date,
+          y1: first.value,
+          x2: last.date,
+          y2: last.value,
+          lineType: "symbolOverlay",
+          overlaySymbol: result.ticker,
+          overlaySymbolName: result.name,
+          overlayData: sorted,
+          color: defaultIndicatorColor(drawings.filter((d) => d.lineType === "symbolOverlay").length),
+        },
+      ]);
+    } finally {
+      setAddingOverlaySymbols((prev) => {
+        const next = new Set(prev);
+        next.delete(result.ticker);
+        return next;
+      });
+    }
   }
 
   // `onSymbolSearchChange` deliberately isn't a dependency below — a typical caller passes an
@@ -2103,6 +2203,48 @@ export function CandlestickChart({
     return { start: Math.max(0, Math.floor(i0)), end: Math.min(data.length, Math.ceil(i1)) };
   }, [data.length, zoomedXScale]);
 
+  const symbolOverlays = useMemo(() => drawings.filter((d) => d.lineType === "symbolOverlay"), [drawings]);
+  // Comparing against at least one other symbol switches the whole price axis to a % reading —
+  // cleared back to plain price the moment the last overlay is removed, not a separate toggle of
+  // its own.
+  const compareMode = symbolOverlays.length > 0;
+
+  // Each overlay projected onto the *main* series' own price space — not a fresh %-domain scale
+  // of its own, which would mean threading a whole parallel code path through candles/indicators/
+  // price-anchored drawings/every display mode just to render one extra line. Instead: rebase the
+  // overlay to a % change from its own first-*visible*-point reference (exactly like the main
+  // series already implicitly is one, relative to its own reference, whenever an axis reads
+  // "% from here"), then project that % onto the main reference's price — `mainReference *
+  // (1 + pctChange)`. Feeding that "equivalent price" through the completely unmodified
+  // `zoomedPriceScale` lands it exactly where a real instrument trading at that price would sit —
+  // candles, indicators, and every price-anchored drawing stay 100% untouched, only the axis
+  // *label* (see the price ChartAxis' own tickFormat) reinterprets the same pixels as %. Recomputed
+  // on every pan/zoom (visibleRange.start moving) since "from the first visible point" is by
+  // definition a moving target, same spirit as YAutoScaling.
+  const overlayProjections = useMemo(() => {
+    if (symbolOverlays.length === 0 || data.length === 0) return [];
+    const refIdx = Math.max(0, Math.min(data.length - 1, visibleRange.start));
+    const mainReference = data[refIdx].close;
+    const refTime = data[refIdx].date.getTime();
+    return symbolOverlays.map((dr) => {
+      const series = [...(dr.overlayData ?? [])].sort((a, b) => a.date.getTime() - b.date.getTime());
+      if (series.length === 0) return { drawing: dr, mainReference, points: [] as { i: number; price: number }[] };
+      // The overlay's own reference: its last point on or before the main series' first-visible
+      // date, falling back to the overlay's own first point when its history starts later (its
+      // comparison then simply begins wherever its own data actually does).
+      let overlayReference = series[0].value;
+      for (const p of series) {
+        if (p.date.getTime() > refTime) break;
+        overlayReference = p.value;
+      }
+      const points = series.map((p) => ({
+        i: indexForDate(p.date),
+        price: overlayReference !== 0 ? mainReference * (p.value / overlayReference) : mainReference,
+      }));
+      return { drawing: dr, mainReference, points };
+    });
+  }, [symbolOverlays, data, visibleRange.start, indexForDate]);
+
   // Always the full dataset's own domain — deliberately NOT reactive to pan/zoom, so it stays a
   // stable base for `zoomedPriceScale` below. `YAutoScaling` doesn't change this scale itself;
   // instead a separate effect derives an equivalent `yTransform` that makes the *zoomed* scale
@@ -2136,12 +2278,29 @@ export function CandlestickChart({
   // (`visibleRange.start`/`.end`, plain numbers) rather than `zoomedXScale` itself, which is a
   // fresh object every render (even ones triggered by unrelated state like hover) — indices only
   // actually change on a real pan/zoom, so this skips needless recomputation the rest of the time.
+  // While comparing (compareMode), this fit runs unconditionally — ignoring yAutoScalingState/
+  // yManuallyAdjusted — and folds in every overlay's own visible (rebased) range alongside the
+  // candles': a fixed or manually-set axis wouldn't mean anything once it's showing a comparison,
+  // same reasoning MACD's own pane never respects YAutoScaling either. Manual Y-axis
+  // dragging/wheel is effectively a no-op for as long as any overlay is present, since this
+  // effect immediately recomputes over it on the next render.
   useEffect(() => {
-    if (!yAutoScalingState || yManuallyAdjusted || data.length === 0) return;
+    if (data.length === 0) return;
+    if (!compareMode && (!yAutoScalingState || yManuallyAdjusted)) return;
     const slice = data.slice(Math.max(0, visibleRange.start), Math.min(data.length, visibleRange.end));
     const source = slice.length > 0 ? slice : data;
     const highs = source.map((d) => d.high);
     const lows = source.map((d) => d.low);
+    if (compareMode) {
+      for (const { points } of overlayProjections) {
+        for (const p of points) {
+          if (p.i >= visibleRange.start && p.i <= visibleRange.end) {
+            highs.push(p.price);
+            lows.push(p.price);
+          }
+        }
+      }
+    }
     const min = d3.min(lows) ?? 0;
     const max = d3.max(highs) ?? 1;
     const pad = (max - min) * 0.08 || 1;
@@ -2152,7 +2311,17 @@ export function CandlestickChart({
     const k = priceHeight / denom;
     const y = -k * priceScale(targetMax);
     setYTransform(new d3.ZoomTransform(k, 0, y));
-  }, [yAutoScalingState, yManuallyAdjusted, data, visibleRange.start, visibleRange.end, priceScale, priceHeight]);
+  }, [
+    yAutoScalingState,
+    yManuallyAdjusted,
+    data,
+    visibleRange.start,
+    visibleRange.end,
+    priceScale,
+    priceHeight,
+    compareMode,
+    overlayProjections,
+  ]);
 
   // 10% headroom on top of the tallest bar, so it doesn't reach all the way up to the
   // price/volume divider — leaves a small visual gap between the bars and the line.
@@ -2769,7 +2938,9 @@ export function CandlestickChart({
     if (!dr) return;
     setEditingId(dr.id);
     setDraft(dr);
-    setEditModalTab("coords");
+    // Coordonnées/Texte don't apply to a symbolOverlay (see the modal's own tab filtering) — Style
+    // is the only tab it actually has.
+    setEditModalTab(dr.lineType === "symbolOverlay" ? "style" : "coords");
   }
 
   function closeEditModal() {
@@ -3318,6 +3489,20 @@ export function CandlestickChart({
                 );
         } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
           d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
+        } else if (dr.lineType === "symbolOverlay") {
+          // Same "polyline through every point" distance as a freehand stroke — over its own
+          // projected (rebased-to-price-space) points, not x1/y1/x2/y2, which aren't meaningful
+          // for this lineType (see its own doc comment).
+          const projection = overlayProjections.find((p) => p.drawing.id === dr.id);
+          const screenPoints = (projection?.points ?? []).map((p) => ({ x: zoomedXScale(p.i + 0.5), y: zoomedPriceScale(p.price) }));
+          let minSegmentDist = Infinity;
+          for (let i = 1; i < screenPoints.length; i++) {
+            minSegmentDist = Math.min(
+              minSegmentDist,
+              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
+            );
+          }
+          d = minSegmentDist;
         } else if (dr.lineType === "fibonacciExtension") {
           const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
           const ay = zoomedPriceScale(dr.y1);
@@ -3409,6 +3594,10 @@ export function CandlestickChart({
       // (all driven by hover/double-click, untouched here), just not draggable.
       if (drawingsLocked) return;
       const dr = drawings.find((d) => d.id === hoveredDrawingId);
+      // Data-driven, same reasoning "locked" absorbs the gesture above — there's no coordinate
+      // for a whole-body drag to shift (see the lineType's own doc comment), and falling through
+      // to Y-pan here would have the same hit-testing-drifts-under-you problem "locked" avoids.
+      if (dr && dr.lineType === "symbolOverlay") return;
       if (dr) {
         e.currentTarget.setPointerCapture(e.pointerId);
         dragLineRef.current = { id: dr.id, startClientX: e.clientX, startClientY: e.clientY, orig: dr };
@@ -4261,6 +4450,32 @@ export function CandlestickChart({
       ctx.restore();
     }
 
+    // Symbol-comparison overlays (see onAddSymbolOverlay/compareMode) — each drawn as a plain
+    // line through its own overlayProjections (already rebased onto the main series' own price
+    // space, see that memo's own doc comment), same clip as everything else in this section since
+    // it's conceptually "another line over price", same as SMA/EMA above.
+    for (const { drawing: dr, points } of overlayProjections) {
+      if (dr.hidden) continue;
+      const windowStart = Math.max(0, visibleRange.start - 2);
+      const windowEnd = Math.min(data.length, visibleRange.end + 2);
+      const visiblePoints = points.filter((p) => p.i >= windowStart && p.i <= windowEnd);
+      if (visiblePoints.length < 2) continue;
+      const color = dr.color ?? defaultIndicatorColor(symbolOverlays.indexOf(dr));
+      ctx.save();
+      ctx.strokeStyle = color;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      visiblePoints.forEach((p, k) => {
+        const x = zoomedXScale(p.i + 0.5);
+        const y = zoomedPriceScale(p.price);
+        if (k === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.stroke();
+      ctx.restore();
+    }
+
     ctx.restore(); // end price-section clip
 
     if (volumeVisible) {
@@ -4565,6 +4780,8 @@ export function CandlestickChart({
     indicatorPaneTops,
     zoomedOwnPaneScales,
     indicators,
+    overlayProjections,
+    symbolOverlays,
     hovered,
     hoverY,
     hoverVolumeY,
@@ -4600,6 +4817,10 @@ export function CandlestickChart({
   const dFmt = formatDate ?? d3.timeFormat("%d %b %Y");
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
+  // Every price-axis-pinned badge (hover, live price, price-overlay indicator values, horizontal/
+  // ray drawing values) reads through this instead of `pFmt` directly, so they always agree with
+  // the axis right beside them (see the price ChartAxis' own tickFormat, same compareMode check).
+  const priceAxisFmt = (v: number) => (compareMode ? formatPercentFromReference(v, overlayProjections[0]?.mainReference ?? v) : pFmt(v));
   const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
   const currentModeEntry = CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0];
   // The top-left legend's own indicators — price overlays only, `ownPaneIndicators` (RSI/CHOP/
@@ -4958,7 +5179,7 @@ export function CandlestickChart({
               corner overlapping the OHLC readout above them — and made their "eye" button here a
               silent no-op, since an own-pane indicator's visibility reads `paneCollapsed`, not
               `hidden` (see `Indicator.hidden`'s own doc comment). */}
-          {showIndicators && overlayIndicators.length > 0 && (
+          {((showIndicators && overlayIndicators.length > 0) || symbolOverlays.length > 0) && (
           <div className="lq-chart__indicator-legend">
             {overlayIndicators.map((indicator) => {
               // The *full* indicators array's own index, not this filtered map's — the canvas
@@ -5015,6 +5236,64 @@ export function CandlestickChart({
               </div>
               );
             })}
+            {/* Symbol-comparison overlays (see onAddSymbolOverlay) — same legend, same hover-
+                revealed eye/trash/gear actions as a price-overlay indicator's own entry above,
+                but wired to the drawing this one actually is: the gear/double-click open its
+                edit modal (Style tab only, see there), the eye toggles its own `hidden` field,
+                the trash removes it from `drawings` directly (no confirmation round-trip through
+                the app needed, unlike adding one — removing never needs new data). Hovering it
+                also sets `hoveredDrawingId`, the same state a mouse actually over its line on the
+                canvas would — so the line highlights while its legend entry is hovered, and
+                Suppr/Retour arrière removes it from here too, exactly like hovering the line
+                itself would. */}
+            {symbolOverlays.map((dr) => (
+              <div
+                key={dr.id}
+                className="lq-chart__indicator-legend-item"
+                style={{ color: dr.color ?? defaultIndicatorColor(symbolOverlays.indexOf(dr)) }}
+                onDoubleClick={() => {
+                  setEditingId(dr.id);
+                  setDraft(dr);
+                  setEditModalTab("style");
+                }}
+                onMouseEnter={() => setHoveredDrawingId(dr.id)}
+                onMouseLeave={() => setHoveredDrawingId((id) => (id === dr.id ? null : id))}
+              >
+                <span className={["lq-chart__indicator-legend-label", dr.hidden && "lq-chart__indicator-legend-label--hidden"].filter(Boolean).join(" ")}>
+                  {drawingLabel(dr)}
+                </span>
+                <div className="lq-chart__indicator-legend-actions">
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => commitDrawings(drawings.map((d) => (d.id === dr.id ? { ...d, hidden: !d.hidden } : d)))}
+                    aria-label={dr.hidden ? `Afficher ${drawingLabel(dr)}` : `Masquer ${drawingLabel(dr)}`}
+                  >
+                    {dr.hidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />}
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => removeSymbolOverlay(dr.overlaySymbol ?? "")}
+                    aria-label={`Supprimer ${drawingLabel(dr)}`}
+                  >
+                    <TrashIcon size={11} />
+                  </button>
+                  <button
+                    type="button"
+                    className="lq-chart__indicator-legend-action"
+                    onClick={() => {
+                      setEditingId(dr.id);
+                      setDraft(dr);
+                      setEditModalTab("style");
+                    }}
+                    aria-label={`Paramètres ${drawingLabel(dr)}`}
+                  >
+                    <SettingsIcon size={11} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
           )}
         </div>
@@ -5291,7 +5570,12 @@ export function CandlestickChart({
             </clipPath>
           </defs>
           <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
-            <ChartAxis scale={zoomedPriceScale} orientation="right" transform={`translate(${dims.boundedWidth}, 0)`} tickFormat={(v) => pFmt(Number(v))} />
+            <ChartAxis
+              scale={zoomedPriceScale}
+              orientation="right"
+              transform={`translate(${dims.boundedWidth}, 0)`}
+              tickFormat={(v) => priceAxisFmt(Number(v))}
+            />
 
             {volumeVisible && (
               <>
@@ -5449,6 +5733,11 @@ export function CandlestickChart({
                 // per-type code needed there since it shifts every point — extraPoints included —
                 // by the same pixel delta regardless of how many there are).
                 if (dr.lineType === "brush") return null;
+                // Data-driven (see onAddSymbolOverlay) — x1/y1/x2/y2 aren't real coordinates for
+                // it (see its own doc comment), so there's nothing meaningful to drag by point or
+                // as a whole (see handlePointerMove's own exclusion). Still hoverable/selectable/
+                // deletable via Suppr and editable via double-click, same as brush above.
+                if (dr.lineType === "symbolOverlay") return null;
                 // Axis-constrained lines get a single handle at a fixed point along the axis
                 // they don't move on (never at their data endpoints, which aren't meaningful
                 // drag targets here — the whole line only has one degree of freedom).
@@ -5641,7 +5930,7 @@ export function CandlestickChart({
             <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
               <PlusIcon size={9} />
             </button>
-            <span className="lq-chart__axis-value-text">{pFmt(zoomedPriceScale.invert(hoverY))}</span>
+            <span className="lq-chart__axis-value-text">{priceAxisFmt(zoomedPriceScale.invert(hoverY))}</span>
           </div>
         )}
         {hoverVolumeY !== null && (
@@ -5708,7 +5997,7 @@ export function CandlestickChart({
                     backgroundColor: `var(${up ? "--lq-color-up" : "--lq-color-down"})`,
                   }}
                 >
-                  <span className="lq-chart__axis-value-text">{pFmt(lastCandle.close)}</span>
+                  <span className="lq-chart__axis-value-text">{priceAxisFmt(lastCandle.close)}</span>
                 </div>
                 {remainingMs !== null && (
                   <div
@@ -5750,7 +6039,7 @@ export function CandlestickChart({
                   backgroundColor: color,
                 }}
               >
-                <span className="lq-chart__axis-value-text">{pFmt(value)}</span>
+                <span className="lq-chart__axis-value-text">{priceAxisFmt(value)}</span>
               </div>
             );
           })}
@@ -5777,7 +6066,7 @@ export function CandlestickChart({
                   minWidth: dims.margin.right,
                 }}
               >
-                <span className="lq-chart__axis-value-text">{isPrice ? pFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
+                <span className="lq-chart__axis-value-text">{isPrice ? priceAxisFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
               </div>
             );
           })}
@@ -5849,7 +6138,7 @@ export function CandlestickChart({
         <Modal
           open
           onClose={closeEditModal}
-          title="Modifier la ligne"
+          title={draft.lineType === "symbolOverlay" ? `Paramètres — ${drawingLabel(draft)}` : "Modifier la ligne"}
           footer={
             <div className="lq-chart__edit-drawing-footer">
               <button type="button" className="lq-chart__reset-button" onClick={deleteEditingDrawing}>
@@ -5861,18 +6150,25 @@ export function CandlestickChart({
             </div>
           }
         >
-          <Tabs
-            items={[
-              { id: "coords", label: "Coordonnées" },
-              { id: "text", label: "Texte" },
-              { id: "style", label: "Style" },
-            ]}
-            value={editModalTab}
-            onChange={(id) => setEditModalTab(id as "coords" | "text" | "style")}
-            className="lq-chart__edit-drawing-tabs"
-          />
+          {/* Coordonnées/Texte don't apply to a symbolOverlay — x1/y1/x2/y2 aren't real
+              coordinates for it (see the lineType's own doc comment) and there's no text label to
+              speak of, only Style (thickness/color/line style, plus its own "Visible" toggle)
+              does anything — so it skips the tab bar entirely rather than showing two tabs with
+              nothing in them. */}
+          {draft.lineType !== "symbolOverlay" && (
+            <Tabs
+              items={[
+                { id: "coords", label: "Coordonnées" },
+                { id: "text", label: "Texte" },
+                { id: "style", label: "Style" },
+              ]}
+              value={editModalTab}
+              onChange={(id) => setEditModalTab(id as "coords" | "text" | "style")}
+              className="lq-chart__edit-drawing-tabs"
+            />
+          )}
 
-          {editModalTab === "coords" && (
+          {editModalTab === "coords" && draft.lineType !== "symbolOverlay" && (
             <>
               {/* A horizontal/vertical line only has one degree of freedom (see the single drag
                   handle above) — editing its two endpoints independently here would let them
@@ -5987,7 +6283,7 @@ export function CandlestickChart({
                   date+price row per point (x1/y1, x2/y2, then extraPoints), generic over however
                   many that tool needs instead of a fixed "Début"/"Fin" pair. */}
               {draft.lineType &&
-                MULTI_POINT_TOOLS[draft.lineType]?.labels.map((label, i) => {
+                MULTI_POINT_TOOLS[draft.lineType as DrawingToolType]?.labels.map((label, i) => {
                   const point = i === 0 ? { x: draft.x1, y: draft.y1 } : i === 1 ? { x: draft.x2, y: draft.y2 } : draft.extraPoints?.[i - 2];
                   if (!point) return null;
                   const setPointField = (next: Partial<DataPoint>) => {
@@ -6062,7 +6358,7 @@ export function CandlestickChart({
             </>
           )}
 
-          {editModalTab === "text" && (
+          {editModalTab === "text" && draft.lineType !== "symbolOverlay" && (
             <>
               <TextField
                 label="Texte"
@@ -6241,6 +6537,13 @@ export function CandlestickChart({
                     </div>
                   </div>
                 </>
+              )}
+              {draft.lineType === "symbolOverlay" && (
+                <Checkbox
+                  checked={!draft.hidden}
+                  onChange={(visible) => setDraft({ ...draft, hidden: !visible })}
+                  label="Visible"
+                />
               )}
             </>
           )}
@@ -6641,6 +6944,8 @@ export function CandlestickChart({
             ) : (
               (symbolSearchResults ?? []).map((result, i) => {
                 const isFavorite = favoriteSymbolIds.includes(result.id);
+                const isOverlayActive = symbolOverlays.some((d) => d.overlaySymbol === result.ticker);
+                const isOverlayLoading = addingOverlaySymbols.has(result.ticker);
                 return (
                   <div className="lq-chart__symbol-search-row" key={result.id}>
                     <button
@@ -6661,6 +6966,37 @@ export function CandlestickChart({
                       <span className="lq-chart__symbol-search-name">{result.name}</span>
                       <span className="lq-chart__symbol-search-source">{result.source}</span>
                     </button>
+                    {/* Compare against the main symbol — hover-revealed like the favorite star,
+                        but stays visible once active too, same reasoning. Turns into a checkmark
+                        (click removes it) once that symbol is already an overlay, and a spinner
+                        while onAddSymbolOverlay's own promise is in flight — a plain one-way "add"
+                        button couldn't reflect either without the caller tracking that state
+                        itself, which returning the data instead lets the chart do here. Only
+                        rendered when the caller actually supports it (onAddSymbolOverlay set) —
+                        a "+" that silently did nothing would be worse than no button at all. */}
+                    {onAddSymbolOverlay && (
+                      <button
+                        type="button"
+                        className={[
+                          "lq-chart__symbol-search-overlay",
+                          isOverlayActive && "lq-chart__symbol-search-overlay--active",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => (isOverlayActive ? removeSymbolOverlay(result.ticker) : handleAddSymbolOverlay(result))}
+                        disabled={isOverlayLoading}
+                        aria-label={isOverlayActive ? `Retirer ${result.ticker} de la comparaison` : `Comparer avec ${result.ticker}`}
+                        title={isOverlayActive ? `Retirer ${result.ticker} de la comparaison` : `Comparer avec ${result.ticker}`}
+                      >
+                        {isOverlayLoading ? (
+                          <RefreshIcon size={14} className="lq-chart__symbol-search-overlay-spinner" />
+                        ) : isOverlayActive ? (
+                          <CheckIcon size={14} />
+                        ) : (
+                          <PlusIcon size={14} />
+                        )}
+                      </button>
+                    )}
                     {/* Invisible until the row is hovered/focused (see charts-shared.css) — unless
                         already favorited, in which case it stays visible so favorited results
                         can actually be told apart from a glance, not just while hovering. */}
