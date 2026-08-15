@@ -1,0 +1,17 @@
+export type IndicatorKind =
+  | "sma"
+  | "ema"
+  | "wma"
+  | "vwap"
+  | "bollinger"
+  | "rsi"
+  | "chop"
+  | "macd"
+  | "freeCashFlow"
+  | "netIncome"
+  | "totalRevenue"
+  | "netMargin"
+  | "grossMargin"
+  | "peRatio"
+  | "eps"
+  | "debtToEquity";
