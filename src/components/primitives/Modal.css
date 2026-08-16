@@ -53,6 +53,18 @@
   border-bottom: none;
 }
 
+.lq-modal__header--draggable {
+  cursor: grab;
+  /* Dragging quickly can otherwise select the title text (or whatever's behind the cursor) —
+     same reasoning every other pointer-drag in this library disables text selection while live. */
+  user-select: none;
+  touch-action: none;
+}
+
+.lq-modal__header--draggable:active {
+  cursor: grabbing;
+}
+
 .lq-modal__title {
   margin: 0;
   font-size: 1.3rem;
