@@ -10,6 +10,7 @@ import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
 import { usePaneDragReorder } from "./candlestick/hooks/usePaneDragReorder";
 import { useThemePaletteTick } from "./candlestick/hooks/useThemePaletteTick";
+import { useDefaultDrawingColor } from "./candlestick/hooks/useDefaultDrawingColor";
 import { useAddLineHandlers } from "./candlestick/hooks/useAddLineHandlers";
 import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
@@ -243,6 +244,7 @@ export function CandlestickChart({
   const plotBoundedHeight = Math.max(0, plotHeight - dims.margin.top - dims.margin.bottom);
 
   const themeTick = useThemePaletteTick(ref);
+  const defaultDrawingColor = useDefaultDrawingColor(ref, themeTick);
 
   const {
     indicators,
@@ -902,6 +904,7 @@ export function CandlestickChart({
         saveEditModal={saveEditModal}
         deleteEditingDrawing={deleteEditingDrawing}
         valueAxisLabel={valueAxisLabel}
+        defaultColor={defaultDrawingColor}
       />
 
       <IndicatorModals

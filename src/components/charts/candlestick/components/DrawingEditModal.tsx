@@ -10,7 +10,6 @@ import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { drawingLabel, MULTI_POINT_TOOLS } from "../drawingCatalog";
 import { allPointsOf, round4, effectiveExtendOf } from "../drawingGeometry";
 import { contrastingTextColor, toDateInputValue, fromDateInputValue } from "../formatting";
-import { DEFAULT_DRAWING_COLOR } from "../constants";
 
 export interface DrawingEditModalProps {
   draft: TrendLineDrawing | null;
@@ -21,6 +20,10 @@ export interface DrawingEditModalProps {
   saveEditModal: () => void;
   deleteEditingDrawing: () => void;
   valueAxisLabel: (valueAxis: string | undefined) => string;
+  /** The same theme-accent color a drawing with no explicit `color` actually renders in on
+   *  canvas (see useDefaultDrawingColor) — seeds the color pickers below so they show what's
+   *  really drawn instead of a color that only matches one particular theme. */
+  defaultColor: string;
 }
 
 /** The "Modifier la ligne" / "Paramètres — <symbol>" modal opened by double-clicking a drawing —
@@ -36,6 +39,7 @@ export function DrawingEditModal({
   saveEditModal,
   deleteEditingDrawing,
   valueAxisLabel,
+  defaultColor,
 }: DrawingEditModalProps) {
   if (!draft) return null;
   return (
@@ -289,7 +293,7 @@ export function DrawingEditModal({
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={draft.textColor ?? draft.color ?? DEFAULT_DRAWING_COLOR}
+                value={draft.textColor ?? draft.color ?? defaultColor}
                 onChange={(e) => setDraft({ ...draft, textColor: e.target.value })}
               />
             </div>
@@ -361,7 +365,7 @@ export function DrawingEditModal({
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={draft.color ?? DEFAULT_DRAWING_COLOR}
+                value={draft.color ?? defaultColor}
                 onChange={(e) => setDraft({ ...draft, color: e.target.value })}
               />
             </div>
