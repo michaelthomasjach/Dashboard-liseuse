@@ -1,4 +1,4 @@
-import { useEffect, useRef, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import * as d3 from "d3";
 
 export interface UseD3ZoomOptions {
@@ -42,7 +42,6 @@ export function useD3Zoom<T extends Element>({
   filter,
   constrain,
 }: UseD3ZoomOptions): UseD3ZoomResult<T> {
-  const ref = useRef<T>(null);
   const behaviorRef = useRef<d3.ZoomBehavior<T, unknown> | null>(null);
   const onZoomRef = useRef(onZoom);
   onZoomRef.current = onZoom;
@@ -51,6 +50,30 @@ export function useD3Zoom<T extends Element>({
   const constrainRef = useRef(constrain);
   constrainRef.current = constrain;
   const [scaleMin, scaleMax] = scaleExtent;
+
+  // A plain `useRef` never tells this hook when its *element* gets swapped for a new one — e.g.
+  // the plot area unmounting/remounting when toggling SeasonalityView on and off leaves the
+  // attach effect below none the wiser, since `ref.current` isn't itself a dependency (refs never
+  // trigger re-renders) and nothing else in the effect's own deps necessarily changes across that
+  // remount. The result: the fresh element never gets d3-zoom's event listeners, and pan/zoom
+  // silently stops working the moment the user comes back. `current` is instead a getter/setter
+  // pair over a plain variable — functionally identical to a normal ref for every existing reader
+  // (`ref.current`, `ref={ref}` in JSX), but the setter (which React calls on mount *and* unmount)
+  // bumps `mountTick`, so the effect's dependency array below can see the swap and re-attach.
+  const [mountTick, setMountTick] = useState(0);
+  const nodeRef = useRef<{ current: T | null }>();
+  if (!nodeRef.current) {
+    let node: T | null = null;
+    nodeRef.current = Object.defineProperty({} as { current: T | null }, "current", {
+      get: () => node,
+      set: (v: T | null) => {
+        node = v;
+        setMountTick((t) => t + 1);
+      },
+      enumerable: true,
+    });
+  }
+  const ref = nodeRef.current;
 
   useEffect(() => {
     const el = ref.current;
@@ -91,7 +114,7 @@ export function useD3Zoom<T extends Element>({
       selection.on(".zoom", null);
       behaviorRef.current = null;
     };
-  }, [enabled, width, height, scaleMin, scaleMax]);
+  }, [enabled, width, height, scaleMin, scaleMax, mountTick, ref]);
 
   return {
     ref,
