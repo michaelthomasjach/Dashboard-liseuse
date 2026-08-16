@@ -302,6 +302,7 @@ export function CandlestickChart({
     activeTemplateId,
     isDirty: templatesDirty,
     saveTemplate,
+    saveTemplateAs,
     loadTemplate,
     deleteTemplate,
   } = useChartTemplates({
@@ -679,6 +680,7 @@ export function CandlestickChart({
           activeTemplateId={activeTemplateId}
           templatesDirty={templatesDirty}
           onSaveTemplate={saveTemplate}
+          onSaveTemplateAs={saveTemplateAs}
           onLoadTemplate={loadTemplate}
           onDeleteTemplate={deleteTemplate}
         />

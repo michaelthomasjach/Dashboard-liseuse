@@ -46,6 +46,7 @@ export interface ChartHeaderProps {
   activeTemplateId: string | null;
   templatesDirty: boolean;
   onSaveTemplate: (name?: string) => void;
+  onSaveTemplateAs: (name: string) => void;
   onLoadTemplate: (id: string) => void;
   onDeleteTemplate: (id: string) => void;
 }
@@ -86,6 +87,7 @@ export function ChartHeader({
   activeTemplateId,
   templatesDirty,
   onSaveTemplate,
+  onSaveTemplateAs,
   onLoadTemplate,
   onDeleteTemplate,
 }: ChartHeaderProps) {
@@ -219,6 +221,7 @@ export function ChartHeader({
           activeTemplateId={activeTemplateId}
           isDirty={templatesDirty}
           onSave={onSaveTemplate}
+          onSaveAs={onSaveTemplateAs}
           onLoad={onLoadTemplate}
           onDelete={onDeleteTemplate}
         />

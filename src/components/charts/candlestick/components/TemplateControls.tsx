@@ -1,8 +1,8 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal } from "../../../primitives/Modal";
 import { DropdownPanel } from "../../../primitives/DropdownPanel";
 import { TextField } from "../../../forms/TextField";
-import { SaveIcon, FolderIcon, CheckIcon, TrashIcon } from "../../../icons";
+import { SaveIcon, PlusIcon, FolderIcon, CheckIcon, TrashIcon } from "../../../icons";
 import type { ChartTemplate } from "../interfaces/ChartTemplate.interface";
 
 export interface TemplateControlsProps {
@@ -10,6 +10,7 @@ export interface TemplateControlsProps {
   activeTemplateId: string | null;
   isDirty: boolean;
   onSave: (name?: string) => void;
+  onSaveAs: (name: string) => void;
   onLoad: (id: string) => void;
   onDelete: (id: string) => void;
 }
@@ -20,10 +21,14 @@ export interface TemplateControlsProps {
  *  into `useChartTemplates` (passed in as the on* props above); this component only owns the
  *  transient UI state — which modal/dropdown is open, the name field, and a pending load id
  *  waiting on a save-or-discard decision. */
-export function TemplateControls({ templates, activeTemplateId, isDirty, onSave, onLoad, onDelete }: TemplateControlsProps) {
+export function TemplateControls({ templates, activeTemplateId, isDirty, onSave, onSaveAs, onLoad, onDelete }: TemplateControlsProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownAnchorRef = useRef<HTMLButtonElement>(null);
-  const [modal, setModal] = useState<"name" | "confirmDiscard" | null>(null);
+  // "name": the header Save button's own first-time-save prompt (submitting overwrites nothing —
+  // there's nothing active yet). "nameSaveAs": the "+" button's own prompt (submitting always
+  // creates a new template, active or not). Both render the exact same modal shell, just with a
+  // different title and a different onSave/onSaveAs call on submit.
+  const [modal, setModal] = useState<"name" | "nameSaveAs" | "confirmDiscard" | null>(null);
   // Set only while `modal === "confirmDiscard"` (or the "name" modal it can hand off to, when
   // there's no active template to just overwrite) — which template the user actually clicked,
   // applied once they've decided whether to save the current one first.
@@ -54,9 +59,24 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
     setModal("name");
   }
 
+  // The small "+" next to Save — always prompts for a name and always creates a new template,
+  // regardless of whether one's already active (unlike the Save button itself, which overwrites
+  // the active one when there is one). Never has a pending load behind it (only the discard-guard
+  // modal sets that), so submitting it never needs to chain into a load afterward.
+  function handleSaveAsClick() {
+    setNameValue("");
+    setModal("nameSaveAs");
+  }
+
   function handleNameSubmit() {
     const trimmed = nameValue.trim();
     if (!trimmed) return;
+    if (modal === "nameSaveAs") {
+      onSaveAs(trimmed);
+      setModal(null);
+      flashSaved();
+      return;
+    }
     onSave(trimmed);
     setModal(null);
     if (pendingLoadId) {
@@ -66,6 +86,34 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
       flashSaved();
     }
   }
+
+  // Ctrl/Cmd+S: same intent as clicking the Save button, just without needing to reach for the
+  // mouse. Unlike the drawing/indicator clipboard shortcuts elsewhere in this file, this one
+  // isn't gated on focus — Ctrl+S has no competing meaning for a plain text input the way
+  // Ctrl+C/Ctrl+V do, so intercepting the browser's own save-page dialog here is always what's
+  // wanted. The one exception is the name modal's own input: submitting *that* (whichever of
+  // "name"/"nameSaveAs" is open) is what a user mid-rename would actually expect from Ctrl+S,
+  // not a second, redundant attempt to open the same modal over itself.
+  //
+  // Kept behind a ref (same reasoning as usePaneLayout's own reorderPanesRef) rather than listed
+  // as effect dependencies — handleNameSubmit/handleSaveClick are plain closures, a fresh
+  // reference every render, so depending on them directly would mean tearing down and
+  // re-attaching this listener just as often; reading the latest version through a ref that's
+  // kept in sync during render lets the listener itself mount exactly once.
+  const saveShortcutRef = useRef(() => {});
+  saveShortcutRef.current = () => {
+    if (modal === "name" || modal === "nameSaveAs") handleNameSubmit();
+    else handleSaveClick();
+  };
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey) || e.key.toLowerCase() !== "s") return;
+      e.preventDefault();
+      saveShortcutRef.current();
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   function handleRowClick(id: string) {
     setDropdownOpen(false);
@@ -121,10 +169,22 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
           type="button"
           className="lq-chart__icon-button"
           onClick={handleSaveClick}
-          aria-label={activeTemplateId ? "Enregistrer le modèle" : "Enregistrer comme nouveau modèle"}
-          title={activeTemplateId ? "Enregistrer le modèle" : "Enregistrer comme nouveau modèle"}
+          aria-label={activeTemplateId ? "Enregistrer le modèle (Ctrl+S)" : "Enregistrer comme nouveau modèle (Ctrl+S)"}
+          title={activeTemplateId ? "Enregistrer le modèle (Ctrl+S)" : "Enregistrer comme nouveau modèle (Ctrl+S)"}
         >
           {justSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
+        </button>
+        {/* "Enregistrer sous" — always a new template, distinct from Save itself overwriting the
+            active one. A smaller icon (not its own full lq-chart__icon-button-sized glyph) reads
+            as "a modifier on Save" rather than an equally-weighted peer action. */}
+        <button
+          type="button"
+          className="lq-chart__icon-button"
+          onClick={handleSaveAsClick}
+          aria-label="Enregistrer sous (nouveau modèle)"
+          title="Enregistrer sous (nouveau modèle)"
+        >
+          <PlusIcon size={11} />
         </button>
         <button
           ref={dropdownAnchorRef}
@@ -169,11 +229,11 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
         )}
       </DropdownPanel>
 
-      {modal === "name" && (
+      {(modal === "name" || modal === "nameSaveAs") && (
         <Modal
           open
           onClose={closeModal}
-          title="Enregistrer le modèle"
+          title={modal === "nameSaveAs" ? "Enregistrer sous" : "Enregistrer le modèle"}
           footer={
             <div className="lq-chart__edit-drawing-footer">
               <button type="button" className="lq-chart__reset-button" onClick={closeModal}>

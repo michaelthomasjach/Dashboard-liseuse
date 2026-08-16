@@ -56,6 +56,14 @@ export function useChartTemplates({
   // Template active: dirty means the live layout has drifted from what was last saved under it.
   const isDirty = activeTemplate ? serializeSnapshot(currentSnapshot()) !== serializeSnapshot(activeTemplate) : indicators.length > 0;
 
+  function createTemplate(name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    const id = `template-${templateIdRef.current++}`;
+    commitTemplates([...templates, { id, name: trimmed, ...currentSnapshot() }]);
+    setActiveTemplateId(id);
+  }
+
   /** No active template: creates a new one named `name` and makes it active — `name` is
    *  required here (the caller collects it via the "name this template" modal first). Active
    *  template already set: overwrites its own snapshot in place, `name` ignored — this is the
@@ -65,11 +73,14 @@ export function useChartTemplates({
       commitTemplates(templates.map((t) => (t.id === activeTemplate.id ? { ...t, ...currentSnapshot() } : t)));
       return;
     }
-    const trimmed = name?.trim();
-    if (!trimmed) return;
-    const id = `template-${templateIdRef.current++}`;
-    commitTemplates([...templates, { id, name: trimmed, ...currentSnapshot() }]);
-    setActiveTemplateId(id);
+    if (name) createTemplate(name);
+  }
+
+  /** "Enregistrer sous" — always creates a brand new template from the current layout and makes
+   *  it active, even with one already active (unlike `saveTemplate`, which overwrites that one
+   *  instead). The header's own small "+" next to Save is the only entry point for this. */
+  function saveTemplateAs(name: string) {
+    createTemplate(name);
   }
 
   function loadTemplate(id: string) {
@@ -84,5 +95,5 @@ export function useChartTemplates({
     if (activeTemplateId === id) setActiveTemplateId(null);
   }
 
-  return { templates, activeTemplateId, activeTemplate, isDirty, saveTemplate, loadTemplate, deleteTemplate };
+  return { templates, activeTemplateId, activeTemplate, isDirty, saveTemplate, saveTemplateAs, loadTemplate, deleteTemplate };
 }
