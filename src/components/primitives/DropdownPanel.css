@@ -1,0 +1,87 @@
+.lq-dropdown-panel {
+  display: flex;
+  flex-direction: column;
+  max-width: 90vw;
+}
+
+.lq-dropdown-panel__header {
+  padding: var(--lq-space-3) var(--lq-space-3) var(--lq-space-2);
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+}
+
+.lq-dropdown-panel__header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lq-space-2);
+}
+
+.lq-dropdown-panel__header-count {
+  font-weight: 400;
+  color: var(--lq-color-text-muted);
+}
+
+.lq-dropdown-panel__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-1);
+  padding: var(--lq-space-2);
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+/* Optional — a body doesn't have to be built from these (SeasonalityView's own is a column of
+   Checkbox rows instead), but a plain single-select list like Select's own options is common
+   enough to style once here rather than in every caller that wants one. */
+.lq-dropdown-panel__option {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-dropdown-panel__option:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-dropdown-panel__option--selected {
+  background-color: var(--lq-color-fill);
+  color: var(--lq-color-accent-contrast);
+  font-weight: 700;
+}
+
+.lq-dropdown-panel__footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lq-space-2);
+  padding: var(--lq-space-2) var(--lq-space-3);
+  border-top: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-dropdown-panel__footer-action {
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-bg);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-dropdown-panel__footer-action:hover {
+  color: var(--lq-color-text);
+  border-color: var(--lq-color-border);
+}
