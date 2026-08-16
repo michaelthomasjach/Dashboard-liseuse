@@ -48,3 +48,16 @@ export const WithError: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [tags, setTags] = useState<string[]>(["AAPL", "MSFT"]);
+    return (
+      <div style={{ maxWidth: 360, display: "flex", flexDirection: "column", gap: 16 }}>
+        <TagInput size="small" label="Small" value={tags} onChange={setTags} placeholder="Ajouter…" />
+        <TagInput label="Normal (défaut)" value={tags} onChange={setTags} placeholder="Ajouter…" />
+      </div>
+    );
+  },
+};

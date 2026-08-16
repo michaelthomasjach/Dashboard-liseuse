@@ -48,6 +48,18 @@
   cursor: not-allowed;
 }
 
+/* `size="small"` — a shorter, denser control for tight layouts (a filter bar, a table cell)
+   where the default 40px control reads oversized. Font-size lives here too (not just on
+   .lq-field__input below) since some controls built on .lq-field__control — Select's trigger,
+   DatePicker's trigger — put their own text directly inside it rather than through a real
+   .lq-field__input, and need that size to reach them by inheritance. */
+.lq-field__control--small {
+  min-height: 32px;
+  padding: 0 var(--lq-space-2);
+  gap: var(--lq-space-1);
+  font-size: 0.8rem;
+}
+
 .lq-field__input {
   flex: 1;
   min-width: 0;
@@ -57,6 +69,10 @@
   font-family: inherit;
   font-size: 0.9rem;
   color: var(--lq-color-text);
+}
+
+.lq-field__input--small {
+  font-size: 0.8rem;
 }
 
 .lq-field__input::placeholder {

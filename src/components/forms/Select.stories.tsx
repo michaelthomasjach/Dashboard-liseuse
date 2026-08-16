@@ -49,3 +49,16 @@ export const WithError: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [value, setValue] = useState<string | null>("eur");
+    return (
+      <div style={{ maxWidth: 260, display: "flex", flexDirection: "column", gap: 16 }}>
+        <Select size="small" label="Small" options={OPTIONS} value={value} onChange={setValue} />
+        <Select label="Normal (défaut)" options={OPTIONS} value={value} onChange={setValue} />
+      </div>
+    );
+  },
+};

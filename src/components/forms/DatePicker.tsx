@@ -18,6 +18,8 @@ export interface DatePickerProps {
   placement?: "bottom" | "top";
   disabled?: boolean;
   className?: string;
+  /** Control height/padding/font-size. Default "normal" (40px). */
+  size?: "small" | "normal";
 }
 
 type ViewMode = "days" | "months" | "years";
@@ -39,6 +41,7 @@ export function DatePicker({
   placement = "bottom",
   disabled,
   className,
+  size = "normal",
 }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewMonth, setViewMonth] = useState(() => value ?? new Date());
@@ -60,7 +63,13 @@ export function DatePicker({
       <button
         ref={anchorRef}
         type="button"
-        className={["lq-field__control", "lq-date-picker__trigger", error && "lq-field__control--error", disabled && "lq-field__control--disabled"]
+        className={[
+          "lq-field__control",
+          "lq-date-picker__trigger",
+          size === "small" && "lq-field__control--small",
+          error && "lq-field__control--error",
+          disabled && "lq-field__control--disabled",
+        ]
           .filter(Boolean)
           .join(" ")}
         disabled={disabled}

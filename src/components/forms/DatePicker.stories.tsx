@@ -34,3 +34,16 @@ export const WithMinMax: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [value, setValue] = useState<Date | null>(new Date());
+    return (
+      <div style={{ maxWidth: 260, display: "flex", flexDirection: "column", gap: 16 }}>
+        <DatePicker size="small" label="Small" value={value} onChange={setValue} />
+        <DatePicker label="Normal (défaut)" value={value} onChange={setValue} />
+      </div>
+    );
+  },
+};

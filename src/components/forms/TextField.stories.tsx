@@ -36,3 +36,13 @@ export const WithError: Story = {
     </div>
   ),
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => (
+    <div style={{ maxWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}>
+      <TextField size="small" label="Small" placeholder="Compact" leadingIcon={<SearchIcon size={14} />} />
+      <TextField label="Normal (défaut)" placeholder="40px" leadingIcon={<SearchIcon size={16} />} />
+    </div>
+  ),
+};

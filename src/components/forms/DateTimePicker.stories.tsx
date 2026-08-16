@@ -36,3 +36,16 @@ export const FiveMinuteSteps: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [value, setValue] = useState<Date | null>(new Date());
+    return (
+      <div style={{ maxWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}>
+        <DateTimePicker size="small" label="Small" value={value} onChange={setValue} />
+        <DateTimePicker label="Normal (défaut)" value={value} onChange={setValue} />
+      </div>
+    );
+  },
+};

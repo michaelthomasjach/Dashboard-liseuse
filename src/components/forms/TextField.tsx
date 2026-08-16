@@ -9,12 +9,14 @@ export interface TextFieldProps extends Omit<InputHTMLAttributes<HTMLInputElemen
   leadingIcon?: ReactNode;
   trailingIcon?: ReactNode;
   containerClassName?: string;
+  /** Control height/padding/font-size. Default "normal" (40px). */
+  size?: "small" | "normal";
 }
 
 /** Base text input: label, leading/trailing icon slots, and an error state that
  *  every other form control in this library (Select, MaskedInput, DatePicker) shares visually. */
 export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function TextField(
-  { label, error, helperText, leadingIcon, trailingIcon, className, containerClassName, id, disabled, ...rest },
+  { label, error, helperText, leadingIcon, trailingIcon, className, containerClassName, id, disabled, size = "normal", ...rest },
   ref
 ) {
   const autoId = useId();
@@ -30,6 +32,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
       <div
         className={[
           "lq-field__control",
+          size === "small" && "lq-field__control--small",
           error && "lq-field__control--error",
           disabled && "lq-field__control--disabled",
         ]
@@ -40,7 +43,7 @@ export const TextField = forwardRef<HTMLInputElement, TextFieldProps>(function T
         <input
           ref={ref}
           id={inputId}
-          className={["lq-field__input", className].filter(Boolean).join(" ")}
+          className={["lq-field__input", size === "small" && "lq-field__input--small", className].filter(Boolean).join(" ")}
           disabled={disabled}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? `${inputId}-error` : helperText ? `${inputId}-helper` : undefined}

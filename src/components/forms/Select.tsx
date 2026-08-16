@@ -22,6 +22,8 @@ export interface SelectProps<T extends string = string> {
   helperText?: string;
   ariaLabel?: string;
   className?: string;
+  /** Control height/padding/font-size. Default "normal" (40px). */
+  size?: "small" | "normal";
 }
 
 /** Adapted dropdown select: opens below the trigger by default, flips above
@@ -38,6 +40,7 @@ export function Select<T extends string = string>({
   helperText,
   ariaLabel,
   className,
+  size = "normal",
 }: SelectProps<T>) {
   const [open, setOpen] = useState(false);
   const anchorRef = useRef<HTMLButtonElement>(null);
@@ -49,7 +52,13 @@ export function Select<T extends string = string>({
       <button
         ref={anchorRef}
         type="button"
-        className={["lq-field__control", "lq-select__trigger", error && "lq-field__control--error", disabled && "lq-field__control--disabled"]
+        className={[
+          "lq-field__control",
+          "lq-select__trigger",
+          size === "small" && "lq-field__control--small",
+          error && "lq-field__control--error",
+          disabled && "lq-field__control--disabled",
+        ]
           .filter(Boolean)
           .join(" ")}
         aria-haspopup="listbox"

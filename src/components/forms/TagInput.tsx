@@ -16,6 +16,8 @@ export interface TagInputProps {
   preventDuplicates?: boolean;
   maxTags?: number;
   className?: string;
+  /** Control min-height/padding/font-size. Default "normal" (40px). */
+  size?: "small" | "normal";
 }
 
 /** Free-form tag/chip input: type and press comma or Enter to add a tag, Backspace on an
@@ -31,6 +33,7 @@ export function TagInput({
   preventDuplicates = true,
   maxTags,
   className,
+  size = "normal",
 }: TagInputProps) {
   const [inputValue, setInputValue] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +69,7 @@ export function TagInput({
         className={[
           "lq-field__control",
           "lq-tag-input",
+          size === "small" && "lq-tag-input--small",
           error && "lq-field__control--error",
           disabled && "lq-field__control--disabled",
         ]

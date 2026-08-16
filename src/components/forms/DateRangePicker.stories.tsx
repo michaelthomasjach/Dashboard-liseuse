@@ -34,3 +34,19 @@ export const Preselected: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const today = new Date();
+    const in5Days = new Date();
+    in5Days.setDate(today.getDate() + 5);
+    const [value, setValue] = useState<DateRange>({ start: today, end: in5Days });
+    return (
+      <div style={{ maxWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}>
+        <DateRangePicker size="small" label="Small" value={value} onChange={setValue} />
+        <DateRangePicker label="Normal (défaut)" value={value} onChange={setValue} />
+      </div>
+    );
+  },
+};
