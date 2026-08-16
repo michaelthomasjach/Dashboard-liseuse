@@ -42,6 +42,7 @@ import type { IndicatorKind } from "./candlestick/interfaces/IndicatorKind.inter
 import type { IndicatorBand } from "./candlestick/interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./candlestick/interfaces/IndicatorMACD.interface";
 import type { Indicator } from "./candlestick/interfaces/Indicator.interface";
+import type { CustomIndicatorDef } from "./candlestick/interfaces/CustomIndicatorDef.interface";
 import type { ChartTemplate } from "./candlestick/interfaces/ChartTemplate.interface";
 import type { ChartDisplayMode } from "./candlestick/interfaces/ChartDisplayMode.interface";
 import type { TimeframeOption } from "./candlestick/interfaces/TimeframeOption.interface";
@@ -61,6 +62,7 @@ export type {
   IndicatorBand,
   IndicatorMACD,
   Indicator,
+  CustomIndicatorDef,
   ChartTemplate,
   ChartDisplayMode,
   TimeframeOption,
@@ -97,7 +99,7 @@ export function CandlestickChart({
   onDrawingsChange,
   showIndicators = false,
   defaultIndicators,
-  onIndicatorsChange,
+  onIndicatorsChange, customIndicators,
   showTemplates = false,
   defaultTemplates,
   onTemplatesChange,
@@ -286,24 +288,21 @@ export function CandlestickChart({
     resetPaneYAxis,
     commitIndicators,
     loadIndicatorLayout,
-    addIndicator,
+    addIndicator, addCustomIndicator,
     openIndicatorSettings,
     closeIndicatorSettings,
     saveIndicatorSettings,
     deleteEditingIndicator,
     toggleIndicatorHidden,
     removeIndicator,
-    volumeVisible,
-    volumeCollapsed,
+    volumeVisible, volumeCollapsed,
     startPaneResize,
     reorderPanesRef,
     ownPaneIndicators,
-    indicatorPaneHeights,
-    indicatorPaneTops,
+    indicatorPaneHeights, indicatorPaneTops,
     volumeTop,
     allPanesOrder,
-    volumeHeight,
-    priceHeight,
+    volumeHeight, priceHeight,
   } = usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolume, plotBoundedHeight });
 
   const {
@@ -642,7 +641,7 @@ export function CandlestickChart({
   const currentModeEntry = CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0];
   // The top-left legend's own indicators — price overlays only, `ownPaneIndicators` (RSI/CHOP/
   // MACD) already have their own pane header and don't belong here too.
-  const overlayIndicators = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
+  const overlayIndicators = indicators.filter((ind) => indicatorCatalogEntry(ind).pane === "price");
 
   const { candle: ohlcCandle, delta: ohlcDelta, deltaPct: ohlcDeltaPct, sign: ohlcSign } = computeOhlcReadout(data, effectiveHoverIndex);
 
@@ -935,6 +934,7 @@ export function CandlestickChart({
         showVolume={showVolume}
         setVolumePaneState={setVolumePaneState}
         addIndicator={addIndicator}
+        customIndicators={customIndicators} addCustomIndicator={addCustomIndicator}
         indicatorsManagerOpen={indicatorsManagerOpen}
         setIndicatorsManagerOpen={setIndicatorsManagerOpen}
         indicators={indicators}

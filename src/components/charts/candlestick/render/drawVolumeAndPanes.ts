@@ -235,10 +235,54 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
           }
         }
         ctx.stroke();
+      } else if (ind.customData?.draw === "histogram") {
+        // Same zero-baseline bar shape as MACD's own histogram above, just against this pane's
+        // own auto-fit scale instead of MACD's fixed one — `scale(0)` still works as a baseline
+        // even when the visible values never actually cross zero (e.g. a metric that's always
+        // positive), since it just lands outside the pane's own clipped area rather than at some
+        // meaningless position.
+        const numericPoints = points as { i: number; value: number }[];
+        const zeroY = scale(0);
+        ctx.globalAlpha = isEink ? 0.35 : 0.6;
+        ctx.fillStyle = isEink ? colorText : color;
+        for (const p of numericPoints) {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value);
+          ctx.fillRect(x - candleWidth / 2, Math.min(y, zeroY), Math.max(candleWidth, 1), Math.abs(y - zeroY));
+        }
+        ctx.globalAlpha = 1;
+      } else if (ind.customData?.draw === "area") {
+        const numericPoints = points as { i: number; value: number }[];
+        const zeroY = scale(0);
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        numericPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          if (k === 0) ctx.moveTo(x, zeroY);
+          ctx.lineTo(x, scale(p.value));
+        });
+        ctx.lineTo(zoomedXScale(numericPoints[numericPoints.length - 1].i + 0.5), zeroY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1.5;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        numericPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = scale(p.value);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
       } else {
-        // Fundamental indicators (Free Cash Flow, Net Income, P/E…): a plain line, no fixed
-        // reference levels — unlike RSI/CHOP there's no universal "overbought/oversold"-style
-        // threshold that would mean anything across arbitrary metrics/companies.
+        // Fundamental indicators (Free Cash Flow, Net Income, P/E…) and a custom "line"-draw one:
+        // a plain line, no fixed reference levels — unlike RSI/CHOP there's no universal
+        // "overbought/oversold"-style threshold that would mean anything across arbitrary
+        // metrics/companies.
         const numericPoints = points as { i: number; value: number }[];
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { Indicator } from "../interfaces/Indicator.interface";
+import type { CustomIndicatorDef } from "../interfaces/CustomIndicatorDef.interface";
 import type { IndicatorCatalogEntry } from "../indicators";
 import { indicatorCatalogEntry } from "../indicators";
 import {
@@ -149,6 +150,15 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     ]);
   }
 
+  // A caller-supplied CustomIndicatorDef (see CandlestickChartProps.customIndicators) instead of
+  // one of the built-in catalog's own entries — carries a full copy of `def` on `customData`
+  // rather than just its id (see that field's own doc), with "custom" as `kind` purely to satisfy
+  // the type (never actually read for these — computeIndicatorValues/indicatorCatalogEntry both
+  // check `customData` first).
+  function addCustomIndicator(def: CustomIndicatorDef) {
+    commitIndicators([...indicators, { id: `indicator-${indicatorIdRef.current++}`, kind: "custom", period: 0, customData: def }]);
+  }
+
   function openIndicatorSettings(id: string) {
     const indicator = indicators.find((i) => i.id === id);
     if (!indicator) return;
@@ -255,7 +265,7 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     const byId = new Map(indicators.map((ind) => [ind.id, ind]));
     const reordered = newOwnOrder.map((id) => byId.get(id)).filter((ind): ind is Indicator => ind !== undefined);
     let cursor = 0;
-    const next = indicators.map((ind) => (indicatorCatalogEntry(ind.kind).pane === "own" ? (reordered[cursor++] ?? ind) : ind));
+    const next = indicators.map((ind) => (indicatorCatalogEntry(ind).pane === "own" ? (reordered[cursor++] ?? ind) : ind));
     commitIndicators(next);
   }
   // The pane-drag-reorder effect (see usePaneDragReorder) works over one unified order ("volume"
@@ -297,7 +307,7 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
   // without this they'd be a fresh array/reference every render, which would make an "only these
   // deps" dependency array pointless (always "changed").
   const { ownPaneIndicators, indicatorPaneHeights, indicatorPaneTops, volumeTop, allPanesOrder } = useMemo(() => {
-    const owned = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "own");
+    const owned = indicators.filter((ind) => indicatorCatalogEntry(ind).pane === "own");
     const heights = owned.map((ind) =>
       ind.paneCollapsed ? SUB_PANE_COLLAPSED_HEIGHT : Math.round(plotBoundedHeight * (paneHeightFractions[ind.id] ?? DEFAULT_PANE_HEIGHT_FRACTION))
     );
@@ -358,6 +368,7 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     commitIndicators,
     loadIndicatorLayout,
     addIndicator,
+    addCustomIndicator,
     openIndicatorSettings,
     closeIndicatorSettings,
     saveIndicatorSettings,

@@ -5,6 +5,7 @@ import { NumberField } from "../../../forms/NumberField";
 import { SearchIcon, SettingsIcon, TrashIcon, OverlayBadgeIcon, PaneBadgeIcon } from "../../../icons";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
+import type { CustomIndicatorDef } from "../interfaces/CustomIndicatorDef.interface";
 import { INDICATOR_CATALOG, type IndicatorCatalogEntry, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "../indicators";
 import { drawingToolMeta, drawingLabel } from "../drawingCatalog";
 
@@ -16,6 +17,10 @@ export interface IndicatorModalsProps {
   showVolume: boolean;
   setVolumePaneState: (state: "expanded" | "collapsed" | "hidden") => void;
   addIndicator: (entry: IndicatorCatalogEntry) => void;
+  /** Caller-supplied indicators (see CandlestickChartProps.customIndicators) — merged into the
+   *  picker alongside the built-in catalog, grouped by their own `section`. */
+  customIndicators: CustomIndicatorDef[] | undefined;
+  addCustomIndicator: (def: CustomIndicatorDef) => void;
   indicatorsManagerOpen: boolean;
   setIndicatorsManagerOpen: (open: boolean) => void;
   indicators: Indicator[];
@@ -52,6 +57,8 @@ export function IndicatorModals({
   showVolume,
   setVolumePaneState,
   addIndicator,
+  customIndicators,
+  addCustomIndicator,
   indicatorsManagerOpen,
   setIndicatorsManagerOpen,
   indicators,
@@ -88,14 +95,31 @@ export function IndicatorModals({
             {(() => {
               const query = indicatorSearchQuery.trim().toLowerCase();
               const showVolumeOption = showVolume && "volume".includes(query);
-              const matches = INDICATOR_CATALOG.filter(
+              // Built-in and custom entries merged into one tagged list before grouping, so a
+              // custom indicator's own `section` slots it in alongside the built-in categories
+              // exactly like any other — each entry keeps a reference to whichever of
+              // IndicatorCatalogEntry/CustomIndicatorDef it actually came from, since only that
+              // original shape knows what `onClick` needs to add it (addIndicator vs.
+              // addCustomIndicator take different argument types).
+              type PickerOption = { key: string; label: string; category: string; pane: "price" | "own"; onSelect: () => void };
+              const builtinOptions: PickerOption[] = INDICATOR_CATALOG.filter(
                 (entry) => entry.label.toLowerCase().includes(query) || entry.shortLabel.toLowerCase().includes(query)
-              );
-              const groups: { category: string; entries: IndicatorCatalogEntry[] }[] = [];
-              for (const entry of matches) {
-                const group = groups.find((g) => g.category === entry.category);
-                if (group) group.entries.push(entry);
-                else groups.push({ category: entry.category, entries: [entry] });
+              ).map((entry) => ({ key: entry.kind, label: entry.label, category: entry.category, pane: entry.pane, onSelect: () => addIndicator(entry) }));
+              const customOptions: PickerOption[] = (customIndicators ?? [])
+                .filter((def) => def.label.toLowerCase().includes(query) || (def.shortLabel ?? "").toLowerCase().includes(query))
+                .map((def) => ({
+                  key: def.id,
+                  label: def.label,
+                  category: def.section,
+                  pane: def.type === "overlay" ? "price" : "own",
+                  onSelect: () => addCustomIndicator(def),
+                }));
+              const allOptions = [...builtinOptions, ...customOptions];
+              const groups: { category: string; options: PickerOption[] }[] = [];
+              for (const option of allOptions) {
+                const group = groups.find((g) => g.category === option.category);
+                if (group) group.options.push(option);
+                else groups.push({ category: option.category, options: [option] });
               }
               if (!showVolumeOption && groups.length === 0) {
                 return <p className="lq-chart__indicator-picker-empty">Aucun indicateur ne correspond à « {indicatorSearchQuery} ».</p>;
@@ -125,19 +149,19 @@ export function IndicatorModals({
                   {groups.map((group) => (
                     <div className="lq-chart__indicator-picker-group" key={group.category}>
                       <div className="lq-chart__indicator-picker-group-label">{group.category}</div>
-                      {group.entries.map((entry) => (
+                      {group.options.map((option) => (
                         <button
-                          key={entry.kind}
+                          key={option.key}
                           type="button"
                           className="lq-chart__indicator-picker-option"
-                          onClick={() => addIndicator(entry)}
+                          onClick={option.onSelect}
                         >
-                          <span className="lq-chart__indicator-picker-name">{entry.label}</span>
+                          <span className="lq-chart__indicator-picker-name">{option.label}</span>
                           <span
                             className="lq-chart__indicators-manager-badge"
-                            title={entry.pane === "price" ? "Superposé au prix" : "Panneau séparé"}
+                            title={option.pane === "price" ? "Superposé au prix" : "Panneau séparé"}
                           >
-                            {entry.pane === "price" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
+                            {option.pane === "price" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
                           </span>
                         </button>
                       ))}
@@ -154,7 +178,7 @@ export function IndicatorModals({
         <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Dessins et indicateurs" footer={null}>
           <div className="lq-chart__indicators-manager">
             {(() => {
-              const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
+              const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind).pane === "price");
               const own = ownPaneIndicators;
               if (overlay.length === 0 && own.length === 0 && !volumeVisible && visibleDrawings.length === 0) {
                 return <p className="lq-chart__indicator-picker-empty">Rien à gérer pour l'instant — aucun dessin ni indicateur actif.</p>;
@@ -259,7 +283,7 @@ export function IndicatorModals({
             </div>
           }
         >
-          {indicatorCatalogEntry(indicatorDraft.kind).hasPeriod && (
+          {indicatorCatalogEntry(indicatorDraft).hasPeriod && (
             <NumberField
               label="Période"
               min={1}
@@ -269,7 +293,7 @@ export function IndicatorModals({
               onChange={(v) => setIndicatorDraft({ ...indicatorDraft, period: v === "" ? indicatorDraft.period : v })}
             />
           )}
-          {indicatorCatalogEntry(indicatorDraft.kind).hasStdDev && (
+          {indicatorCatalogEntry(indicatorDraft).hasStdDev && (
             <NumberField
               label="Écart-type (bandes)"
               min={0.5}
@@ -324,15 +348,97 @@ export function IndicatorModals({
               />
             </>
           )}
-          <div className="lq-field">
-            <label className="lq-field__label">Couleur</label>
-            <input
-              type="color"
-              className="lq-chart__color-input"
-              value={indicatorDraft.color ?? defaultIndicatorColor(indicators.findIndex((i) => i.id === indicatorDraft.id))}
-              onChange={(e) => setIndicatorDraft({ ...indicatorDraft, color: e.target.value })}
+          {indicatorDraft.kind === "supertrend" && (
+            <NumberField
+              label="Multiplicateur (× ATR)"
+              min={0.5}
+              max={10}
+              step={0.5}
+              value={indicatorDraft.supertrendMultiplier ?? 3}
+              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, supertrendMultiplier: v === "" ? indicatorDraft.supertrendMultiplier : v })}
             />
-          </div>
+          )}
+          {indicatorDraft.kind === "parabolicSar" && (
+            <div className="lq-chart__edit-drawing-row">
+              <NumberField
+                label="Pas"
+                min={0.01}
+                max={1}
+                step={0.01}
+                value={indicatorDraft.sarStep ?? 0.02}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, sarStep: v === "" ? indicatorDraft.sarStep : v })}
+              />
+              <NumberField
+                label="Max"
+                min={0.05}
+                max={1}
+                step={0.05}
+                value={indicatorDraft.sarMax ?? 0.2}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, sarMax: v === "" ? indicatorDraft.sarMax : v })}
+              />
+            </div>
+          )}
+          {indicatorDraft.kind === "gaps" && (
+            <NumberField
+              label="Écart minimum (%)"
+              min={0}
+              max={20}
+              step={0.1}
+              value={indicatorDraft.gapsMinPercent ?? 0.1}
+              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, gapsMinPercent: v === "" ? indicatorDraft.gapsMinPercent : v })}
+            />
+          )}
+          {indicatorDraft.kind === "ichimoku" && (
+            <div className="lq-chart__edit-drawing-row">
+              <NumberField
+                label="Conversion"
+                min={1}
+                max={100}
+                step={1}
+                value={indicatorDraft.ichimokuConversionPeriod ?? 9}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, ichimokuConversionPeriod: v === "" ? indicatorDraft.ichimokuConversionPeriod : v })}
+              />
+              <NumberField
+                label="Base"
+                min={1}
+                max={200}
+                step={1}
+                value={indicatorDraft.ichimokuBasePeriod ?? 26}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, ichimokuBasePeriod: v === "" ? indicatorDraft.ichimokuBasePeriod : v })}
+              />
+              <NumberField
+                label="Span B"
+                min={1}
+                max={300}
+                step={1}
+                value={indicatorDraft.ichimokuSpanPeriod ?? 52}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, ichimokuSpanPeriod: v === "" ? indicatorDraft.ichimokuSpanPeriod : v })}
+              />
+              <NumberField
+                label="Déplacement"
+                min={1}
+                max={200}
+                step={1}
+                value={indicatorDraft.ichimokuDisplacement ?? 26}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, ichimokuDisplacement: v === "" ? indicatorDraft.ichimokuDisplacement : v })}
+              />
+            </div>
+          )}
+          {/* Supertrend always uses the chart's own up/down colors (so its trend flips read
+              consistently with candle coloring) and Parabolic SAR colors each dot by which side
+              of price it's on — neither reads `color` at all, so the picker would be a dead
+              control for them. */}
+          {indicatorDraft.kind !== "supertrend" && indicatorDraft.kind !== "parabolicSar" && (
+            <div className="lq-field">
+              <label className="lq-field__label">Couleur</label>
+              <input
+                type="color"
+                className="lq-chart__color-input"
+                value={indicatorDraft.color ?? defaultIndicatorColor(indicators.findIndex((i) => i.id === indicatorDraft.id))}
+                onChange={(e) => setIndicatorDraft({ ...indicatorDraft, color: e.target.value })}
+              />
+            </div>
+          )}
         </Modal>
       )}
     </>

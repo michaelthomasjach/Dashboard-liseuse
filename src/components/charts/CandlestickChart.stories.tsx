@@ -9,6 +9,7 @@ import {
   type Candle,
   type ChartDisplayMode,
   type OverlayDataPoint,
+  type CustomIndicatorDef,
 } from "./CandlestickChart";
 import { ChartWorkspace } from "./ChartWorkspace";
 import { generateCandles } from "../../test-data/financeSampleData";
@@ -82,6 +83,45 @@ const ALL_FEATURES_FUNDAMENTALS: FundamentalDataPoint[] = [
     peRatio: 24.6,
     eps: 1.41,
     debtToEquity: 0.51,
+  },
+];
+
+// Demonstrates `customIndicators` (see CustomIndicatorDef's own doc) — three metrics the built-in
+// catalog doesn't have, each showing a different `type`/`draw` combination: gross margin as a
+// price-overlay line (the same "on the chart itself" slot SMA/EMA use), dividend per share as its
+// own histogram sub-pane, income tax as its own area sub-pane. Same sparse, quarterly-report shape
+// as ALL_FEATURES_FUNDAMENTALS on purpose — this is exactly the kind of data an app would reach
+// for `customIndicators` to plot instead of waiting on a new built-in kind for every metric.
+const CUSTOM_INDICATORS: CustomIndicatorDef[] = [
+  {
+    id: "grossMarginPct",
+    label: "Marge brute (%)",
+    section: "fundamentals",
+    type: "overlay",
+    draw: "line",
+    color: "#7fb37f",
+    formatValue: (v) => `${v.toFixed(1)}%`,
+    data: ALL_FEATURES_FUNDAMENTALS.map((f) => ({ date: f.date, value: 130 + f.grossMargin })),
+  },
+  {
+    id: "dividendPerShare",
+    label: "Dividende par action",
+    section: "fundamentals",
+    type: "own",
+    draw: "histogram",
+    color: "#6c87c9",
+    formatValue: (v) => `$${v.toFixed(2)}`,
+    data: ALL_FEATURES_FUNDAMENTALS.map((f, i) => ({ date: f.date, value: 0.4 + i * 0.05 })),
+  },
+  {
+    id: "incomeTax",
+    label: "Impôt sur le revenu",
+    section: "fundamentals",
+    type: "own",
+    draw: "area",
+    color: "#c96c8f",
+    formatValue: (v) => `$${(v / 1_000_000).toFixed(0)}M`,
+    data: ALL_FEATURES_FUNDAMENTALS.map((f) => ({ date: f.date, value: f.netIncome * 0.22 })),
   },
 ];
 
@@ -178,6 +218,7 @@ export const AllFeatures: Story = {
             showVolume={false}
             showIndicators
             fundamentals={ALL_FEATURES_FUNDAMENTALS}
+            customIndicators={CUSTOM_INDICATORS}
             fullscreenToggle
             zoomable
             timeframes={TIMEFRAMES}

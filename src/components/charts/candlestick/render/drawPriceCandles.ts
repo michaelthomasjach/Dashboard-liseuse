@@ -2,8 +2,16 @@ import type { RenderCandlestickChartParams } from "../interfaces/RenderCandlesti
 import type { ChartCanvasStyle } from "../interfaces/ChartCanvasStyle.interface";
 import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
 import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
+import type { IndicatorSupertrendPoint } from "../interfaces/IndicatorSupertrendPoint.interface";
+import type { IndicatorIchimokuPoint } from "../interfaces/IndicatorIchimokuPoint.interface";
+import type { IndicatorGapPoint } from "../interfaces/IndicatorGapPoint.interface";
 import { snapPixel } from "../drawingGeometry";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
+
+// "gaps"/"parabolicSar" are point-based (a rectangle or a dot renders fine on its own) rather
+// than line-shaped like every other indicator here, so they're exempt from the "needs at least 2
+// points to draw anything" gate below.
+const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar"]);
 
 /** Phase 1 of `renderCandlestickChart`: opens the price section's own clip (left open — closed by
  *  `drawPriceDrawings`, always called right after this in the same synchronous pass, see
@@ -191,10 +199,11 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       ctx.restore();
     }
 
-    // Only price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger/ZigZag) draw here — "own"-pane
-    // ones (RSI/CHOP/MACD) get their own clipped section further down, alongside volume.
+    // Only price-overlay indicators draw here — "own"-pane ones (RSI/CHOP/MACD/ATR/fundamentals)
+    // get their own clipped section further down, alongside volume.
     visibleIndicators.forEach(({ indicator, points }, index) => {
-      if (indicator.hidden || points.length < 2 || indicatorCatalogEntry(indicator.kind).pane !== "price") return;
+      if (indicator.hidden || indicatorCatalogEntry(indicator).pane !== "price") return;
+      if (points.length === 0 || (points.length < 2 && !POINT_BASED_KINDS.has(indicator.kind))) return;
       const color = indicator.color ?? defaultIndicatorColor(index);
       ctx.save();
       ctx.strokeStyle = color;
@@ -230,6 +239,152 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
             ctx.fillText(p.value.label, x, y + (p.value.kind === "high" ? -5 : 5));
           }
         }
+      } else if (indicator.kind === "supertrend") {
+        // Colored per-segment by trend (the chart's own up/down colors, not `indicator.color` —
+        // see that field's own doc) rather than one continuous stroke — each tiny 2-point segment
+        // takes the color of the bar it's arriving *at*, which both reads correctly moment-to-
+        // moment and keeps every segment connected to its neighbors (including right across a
+        // flip, where the value itself genuinely jumps from one band to the other — that's the
+        // real Supertrend "flip line" every trading platform shows, not a rendering artifact).
+        const stPoints = points as { i: number; value: IndicatorSupertrendPoint }[];
+        ctx.lineWidth = 1.5;
+        for (let k = 1; k < stPoints.length; k++) {
+          const from = stPoints[k - 1];
+          const to = stPoints[k];
+          ctx.strokeStyle = to.value.trend === "up" ? colorUp : colorDown;
+          ctx.beginPath();
+          ctx.moveTo(zoomedXScale(from.i + 0.5), zoomedPriceScale(from.value.value));
+          ctx.lineTo(zoomedXScale(to.i + 0.5), zoomedPriceScale(to.value.value));
+          ctx.stroke();
+        }
+      } else if (indicator.kind === "ichimoku") {
+        const icPoints = points as { i: number; value: IndicatorIchimokuPoint }[];
+        // Cloud: a small quad per consecutive pair that has both spans, rather than one big
+        // closed path — the winning span (and so the fill color, bullish vs. bearish) can flip
+        // partway through, needing a fresh color exactly at that crossing point.
+        ctx.save();
+        ctx.globalAlpha = 0.12;
+        for (let k = 1; k < icPoints.length; k++) {
+          const { spanA: a0, spanB: b0 } = icPoints[k - 1].value;
+          const { spanA: a1, spanB: b1 } = icPoints[k].value;
+          if (a0 === null || b0 === null || a1 === null || b1 === null) continue;
+          const x0 = zoomedXScale(icPoints[k - 1].i + 0.5);
+          const x1 = zoomedXScale(icPoints[k].i + 0.5);
+          ctx.fillStyle = a0 + a1 >= b0 + b1 ? colorUp : colorDown;
+          ctx.beginPath();
+          ctx.moveTo(x0, zoomedPriceScale(a0));
+          ctx.lineTo(x1, zoomedPriceScale(a1));
+          ctx.lineTo(x1, zoomedPriceScale(b1));
+          ctx.lineTo(x0, zoomedPriceScale(b0));
+          ctx.closePath();
+          ctx.fill();
+        }
+        ctx.restore();
+
+        // Four lines, each walked independently since the five components warm up at different
+        // rates (some fields can be null while others on the same point aren't) — lifting the pen
+        // across any null gap instead of connecting straight across it. Conventional fixed colors
+        // (not `indicator.color`, which can't represent five differently-colored lines) — same
+        // reasoning Supertrend's own up/down colors aren't user-configurable either.
+        const strokeIchimokuField = (get: (v: IndicatorIchimokuPoint) => number | null, lineColor: string, dashed: boolean) => {
+          ctx.save();
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = 1.25;
+          ctx.setLineDash(dashed ? [4, 3] : []);
+          ctx.beginPath();
+          let drawing = false;
+          for (const p of icPoints) {
+            const v = get(p.value);
+            if (v === null) {
+              drawing = false;
+              continue;
+            }
+            const x = zoomedXScale(p.i + 0.5);
+            const y = zoomedPriceScale(v);
+            if (!drawing) {
+              ctx.moveTo(x, y);
+              drawing = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        };
+        strokeIchimokuField((v) => v.conversion, "#e0a95c", false);
+        strokeIchimokuField((v) => v.base, "#6c87c9", false);
+        strokeIchimokuField((v) => v.spanA, colorUp, false);
+        strokeIchimokuField((v) => v.spanB, colorDown, false);
+        strokeIchimokuField((v) => v.chikou, colorMuted, true);
+      } else if (indicator.kind === "parabolicSar") {
+        // Dots, not a connected line — real Parabolic SAR jumps discontinuously at every trend
+        // flip, so a line through consecutive points would draw a misleading diagonal across the
+        // flip instead of the dots-flip-sides-of-price reading every trading platform shows.
+        // Colored by which side of price each dot is actually on (a plain price value has no
+        // trend flag of its own to read instead — see computeParabolicSARValues) rather than
+        // `indicator.color`, matching Supertrend's own reasoning.
+        const sarPoints = points as { i: number; value: number }[];
+        for (const p of sarPoints) {
+          const candle = data[p.i];
+          if (!candle) continue;
+          const above = p.value > candle.close;
+          ctx.fillStyle = above ? colorDown : colorUp;
+          ctx.beginPath();
+          ctx.arc(zoomedXScale(p.i + 0.5), zoomedPriceScale(p.value), 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else if (indicator.kind === "gaps") {
+        // Rectangles, not a line — see IndicatorGapPoint's own doc. Faded once filled (still
+        // shown, for context, but visually secondary to a still-open one).
+        const gapPoints = points as { i: number; value: IndicatorGapPoint }[];
+        for (const p of gapPoints) {
+          const g = p.value;
+          const x0 = zoomedXScale(p.i - 1 + 0.5);
+          const x1 = zoomedXScale(g.endIndex + 0.5);
+          const y0 = zoomedPriceScale(g.top);
+          const y1 = zoomedPriceScale(g.bottom);
+          ctx.save();
+          ctx.globalAlpha = g.filled ? 0.08 : 0.18;
+          ctx.fillStyle = g.direction === "up" ? colorUp : colorDown;
+          ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
+          ctx.restore();
+        }
+      } else if (indicator.customData?.draw === "histogram") {
+        // A custom overlay indicator drawn as bars — the price pane has no meaningful "zero"
+        // baseline to bar-chart against the way an own-pane one does (see the own-pane branch's
+        // own doc for that one), so bars run from the pane's own bottom edge up to each value
+        // instead, same spirit as a volume pane's own bars running from its own floor.
+        const numericPoints = points as { i: number; value: number }[];
+        ctx.globalAlpha = isEink ? 0.35 : 0.6;
+        ctx.fillStyle = isEink ? colorText : color;
+        for (const p of numericPoints) {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value);
+          ctx.fillRect(x - candleWidth / 2, y, Math.max(candleWidth, 1), priceHeight - y);
+        }
+        ctx.globalAlpha = 1;
+      } else if (indicator.customData?.draw === "area") {
+        const numericPoints = points as { i: number; value: number }[];
+        ctx.globalAlpha = 0.12;
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        numericPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          if (k === 0) ctx.moveTo(x, priceHeight);
+          ctx.lineTo(x, zoomedPriceScale(p.value));
+        });
+        ctx.lineTo(zoomedXScale(numericPoints[numericPoints.length - 1].i + 0.5), priceHeight);
+        ctx.closePath();
+        ctx.fill();
+        ctx.globalAlpha = 1;
+
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        numericPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
       } else if (typeof points[0].value === "number") {
         ctx.lineWidth = 1.5;
         ctx.beginPath();

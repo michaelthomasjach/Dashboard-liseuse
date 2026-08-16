@@ -1,10 +1,12 @@
 import type { IndicatorKind } from "./IndicatorKind.interface";
+import type { CustomIndicatorDef } from "./CustomIndicatorDef.interface";
 
 export interface Indicator {
   id: string;
   kind: IndicatorKind;
   /** Lookback window, in candles. Ignored by "vwap" (a cumulative, unwindowed average) and
-   *  "macd" (uses fastPeriod/slowPeriod/signalPeriod instead). */
+   *  "macd"/"ichimoku" (their own multi-period settings below instead). Doubles as "atr"'s and
+   *  "supertrend"'s own ATR period. */
   period: number;
   /** Band width, in standard deviations. Only used by "bollinger". Default 2. */
   stdDev?: number;
@@ -18,7 +20,35 @@ export interface Indicator {
   /** "zigzag" only — shows each confirmed pivot's HH/HL/LH/LL label (see
    *  `IndicatorZigZagPoint.label`) next to it. Default true. */
   zigzagShowLabels?: boolean;
-  /** CSS color. Defaults to a color cycled from a small built-in palette. */
+  /** "supertrend" only — band width, as a multiple of ATR (see `period` above for the ATR period
+   *  itself). Default 3. */
+  supertrendMultiplier?: number;
+  /** "parabolicSar" only — the acceleration factor's own starting value/step per extreme-point
+   *  update, and its cap. Defaults 0.02/0.2, the conventional parameters. */
+  sarStep?: number;
+  sarMax?: number;
+  /** "gaps" only — the minimum jump between one candle's high/low and the next's, as a percentage
+   *  of the earlier candle's own price, before it counts as a gap at all. Default 0.1. */
+  gapsMinPercent?: number;
+  /** "ichimoku" only — defaults 9/26/52/26, the conventional parameters (see
+   *  `computeIchimokuValues`'s own doc for what `ichimokuDisplacement` does and its one
+   *  limitation). */
+  ichimokuConversionPeriod?: number;
+  ichimokuBasePeriod?: number;
+  ichimokuSpanPeriod?: number;
+  ichimokuDisplacement?: number;
+  /** Set once this indicator represents a `CustomIndicatorDef` the caller supplied via
+   *  `CandlestickChartProps.customIndicators`, rather than one of the library's own built-in
+   *  kinds — `kind` itself is meaningless in that case ("custom" exists in `IndicatorKind` purely
+   *  to satisfy the type). Carries a full, self-contained copy of that def (not just its id) so
+   *  this indicator keeps working correctly even if the caller later removes it from
+   *  `customIndicators` or the array identity changes — same reasoning `Indicator` never re-reads
+   *  its own settings from a live prop anywhere else either. */
+  customData?: CustomIndicatorDef;
+  /** CSS color. Defaults to a color cycled from a small built-in palette. Ignored by "supertrend"
+   *  (always the chart's own up/down colors, so its trend-flip reads consistently with candle
+   *  coloring) and "parabolicSar" (same reasoning — its dots are colored per-point by which side
+   *  of price they're on, not by a single indicator-wide color). */
   color?: string;
   /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the
    *  legend's eye icon. Only meaningful for a `pane: "price"` indicator (see

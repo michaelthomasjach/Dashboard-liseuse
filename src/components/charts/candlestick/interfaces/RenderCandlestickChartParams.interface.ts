@@ -4,9 +4,7 @@ import type { Candle } from "./Candle.interface";
 import type { TrendLineDrawing } from "./TrendLineDrawing.interface";
 import type { DataPoint } from "./DataPoint.interface";
 import type { Indicator } from "./Indicator.interface";
-import type { IndicatorBand } from "./IndicatorBand.interface";
-import type { IndicatorMACD } from "./IndicatorMACD.interface";
-import type { IndicatorZigZagPoint } from "./IndicatorZigZagPoint.interface";
+import type { IndicatorValue } from "./IndicatorValue.interface";
 import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
 import type { DrawingToolType } from "./DrawingToolType.interface";
 import type { PriceBrick, TpoProfile } from "../chartModes";
@@ -76,6 +74,6 @@ export interface RenderCandlestickChartParams {
   brushPreview: DataPoint[] | null;
   measurePoints: { p1: DataPoint; p2: DataPoint } | null;
   livePrice: boolean;
-  visibleIndicators: { indicator: Indicator; points: { i: number; value: number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint }[] }[];
+  visibleIndicators: { indicator: Indicator; points: { i: number; value: IndicatorValue }[] }[];
   indexForDate: (d: Date) => number;
 }

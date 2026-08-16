@@ -4,15 +4,17 @@ import { PlusIcon } from "../../../icons";
 import { ChartEventTooltip } from "../../EventTooltip";
 import type { Candle } from "../interfaces/Candle.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
-import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
-import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
-import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
+import type { IndicatorValue } from "../interfaces/IndicatorValue.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { ChartEvent } from "../interfaces/ChartEvent.interface";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
 import { CROSSHAIR_ADD_INSET, LIVE_COUNTDOWN_OFFSET } from "../constants";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "../eventsCatalog";
 import { formatCountdown, formatCompactNumber } from "../formatting";
+
+// Kinds whose value shape this file's own "latest overlay value" badge doesn't understand (a
+// plain number, or a band's own middle line) — see where this is used, below.
+const OVERLAY_BADGE_EXCLUDED_KINDS: string[] = ["zigzag", "supertrend", "ichimoku", "gaps"];
 
 export interface ChartHoverBadgesProps {
   hoverY: number | null;
@@ -41,7 +43,7 @@ export interface ChartHoverBadgesProps {
   clampToPriceAxis: (y: number) => number;
   now: number;
   showIndicators: boolean;
-  indicatorValues: { indicator: Indicator; values: (number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint | null)[] }[];
+  indicatorValues: { indicator: Indicator; values: (IndicatorValue | null)[] }[];
   visibleDrawings: TrendLineDrawing[];
   volumeVisible: boolean;
   pixelYForDrawing: (dr: TrendLineDrawing) => number;
@@ -231,12 +233,15 @@ export function ChartHoverBadges({
           line). */}
       {showIndicators &&
         indicatorValues.map(({ indicator, values }, idx) => {
-          // ZigZag excluded here too — its "latest value" is the last *confirmed* pivot, often
-          // several bars behind the current price (see computeZigZagValues) rather than a
-          // meaningful "right now" reading the way a moving average's own latest value is, so it
-          // isn't given a badge at all (the pivots themselves already get their own HH/HL/LH/LL
-          // labels directly on the chart).
-          if (indicator.hidden || indicatorCatalogEntry(indicator.kind).pane !== "price" || indicator.kind === "zigzag") return null;
+          // ZigZag/Supertrend/Ichimoku/Gaps excluded here — none of them have a value shape this
+          // generic "plain number, or a band's own middle line" badge understands (see the next
+          // check below), and for ZigZag/Gaps specifically their "latest value" wouldn't be a
+          // meaningful "right now" reading anyway (a stale confirmed pivot, or a gap rectangle
+          // rather than a price at all) — each already gets its own on-chart labels instead
+          // (ZigZag's HH/HL/LH/LL, Gaps' shaded rectangle). Parabolic SAR and a custom "line"/
+          // "area"/"histogram" indicator are plain numbers, so they're deliberately *not* excluded
+          // here — they get this badge exactly like SMA/EMA does.
+          if (indicator.hidden || indicatorCatalogEntry(indicator).pane !== "price" || OVERLAY_BADGE_EXCLUDED_KINDS.includes(indicator.kind)) return null;
           const last = values[values.length - 1];
           if (last === null) return null;
           // Only ever a plain number (SMA/EMA/WMA/VWAP) or a band (Bollinger, use its middle

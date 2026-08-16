@@ -2,6 +2,7 @@ import type { ChartMargin } from "../../internal/useChartDimensions";
 import type { Candle } from "./Candle.interface";
 import type { TrendLineDrawing, OverlayDataPoint } from "./TrendLineDrawing.interface";
 import type { Indicator } from "./Indicator.interface";
+import type { CustomIndicatorDef } from "./CustomIndicatorDef.interface";
 import type { ChartTemplate } from "./ChartTemplate.interface";
 import type { TimeframeEntry } from "./TimeframeEntry.interface";
 import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
@@ -47,6 +48,14 @@ export interface CandlestickChartProps {
   defaultIndicators?: Indicator[];
   /** Fires whenever an indicator is added, edited, or removed. */
   onIndicatorsChange?: (indicators: Indicator[]) => void;
+  /** The library's own built-in catalog (moving averages, oscillators, the eight fundamentals…)
+   *  covers a fixed, closed set — this is the open-ended escape hatch for anything else: a
+   *  fundamentals metric beyond those eight (gross margin, dividend yield, income tax…), a
+   *  proprietary score, any other "one number per reporting date" series. Each entry shows up in
+   *  the "Ajouter un indicateur" picker exactly like a built-in one, grouped by its own `section`
+   *  — see `CustomIndicatorDef`'s own doc for the full shape (`{ id, label, section, type: "overlay"
+   *  | "own", draw: "line" | "area" | "histogram", data: [{ date, value }] }`). */
+  customIndicators?: CustomIndicatorDef[];
   /** Shows a Save button plus a templates dropdown at the right edge of the header — captures
    *  the *indicator/pane* layout (which indicators, their own settings, pane order, pane
    *  height, the Volume pane's own position/collapse state), not drawings or display/timeframe
