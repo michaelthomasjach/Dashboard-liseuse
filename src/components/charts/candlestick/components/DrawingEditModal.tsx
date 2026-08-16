@@ -10,6 +10,14 @@ import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { drawingLabel, MULTI_POINT_TOOLS } from "../drawingCatalog";
 import { allPointsOf, round4, effectiveExtendOf } from "../drawingGeometry";
 import { contrastingTextColor, toDateInputValue, fromDateInputValue } from "../formatting";
+import { CHART_DISPLAY_MODES } from "../chartModes";
+import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
+
+// Same catalog the main chart's own display-mode menu offers (see ChartHeader), minus "tpo" — a
+// volume-profile histogram has no sensible reading as a second, comparison-only series.
+const OVERLAY_DISPLAY_MODE_OPTIONS = CHART_DISPLAY_MODES.filter((m): m is typeof m & { mode: Exclude<ChartDisplayMode, "tpo"> } => m.mode !== "tpo").map(
+  (m) => ({ value: m.mode, label: m.label })
+);
 
 export interface DrawingEditModalProps {
   draft: TrendLineDrawing | null;
@@ -42,6 +50,11 @@ export function DrawingEditModal({
   defaultColor,
 }: DrawingEditModalProps) {
   if (!draft) return null;
+  // Every overlayDisplayMode besides "line" needs open/high/low on every point — a plain
+  // close-only overlay (see OverlayDataPoint's own doc) has nothing a candle body or brick could
+  // be drawn from, so the Style tab's own selector collapses to just "Ligne" then.
+  const hasOverlayOHLC =
+    (draft.overlayData?.length ?? 0) > 0 && draft.overlayData!.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined);
   return (
     <Modal
       open
@@ -448,21 +461,14 @@ export function DrawingEditModal({
           )}
           {draft.lineType === "symbolOverlay" && (
             <>
-              {/* Only offered once every point actually carries open/high/low — a plain
-                  close-only overlay (see OverlayDataPoint's own doc) has nothing a candle body
-                  could be drawn from. */}
-              {(draft.overlayData?.length ?? 0) > 0 &&
-                draft.overlayData!.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined) && (
-                  <Select
-                    label="Mode d'affichage"
-                    value={draft.overlayDisplayMode ?? "line"}
-                    onChange={(v) => setDraft({ ...draft, overlayDisplayMode: v })}
-                    options={[
-                      { value: "line", label: "Ligne" },
-                      { value: "candle", label: "Bougies" },
-                    ]}
-                  />
-                )}
+              {hasOverlayOHLC && (
+                <Select
+                  label="Mode d'affichage"
+                  value={draft.overlayDisplayMode ?? "line"}
+                  onChange={(v) => setDraft({ ...draft, overlayDisplayMode: v })}
+                  options={OVERLAY_DISPLAY_MODE_OPTIONS}
+                />
+              )}
               <Checkbox
                 checked={!draft.hidden}
                 onChange={(visible) => setDraft({ ...draft, hidden: !visible })}

@@ -1,8 +1,10 @@
+import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
+
 /** One point of a symbol-comparison overlay's own series (see `TrendLineDrawing.overlayData` and
  *  `CandlestickChartProps.onAddSymbolOverlay`) — `value` (the close) is the only field every
  *  overlay is guaranteed to have; `open`/`high`/`low` are optional, supplied only by a caller
  *  whose data source actually has full OHLC bars for the compared instrument, and only then does
- *  the edit modal offer `overlayDisplayMode: "candle"` for it. */
+ *  the edit modal offer any `overlayDisplayMode` besides "line" for it. */
 export interface OverlayDataPoint {
   date: Date;
   value: number;
@@ -169,17 +171,22 @@ export interface TrendLineDrawing {
   overlaySymbolName?: string;
   /** `value` (the close) is what every point rebases *against* regardless of display mode (see
    *  overlayProjections' own doc) and what `overlayDisplayMode: "line"` plots. `open`/`high`/
-   *  `low` are optional (see OverlayDataPoint) — the edit modal only offers "Bougies" once
-   *  they're actually present. */
+   *  `low` are optional (see OverlayDataPoint) — the edit modal only offers a non-"line"
+   *  `overlayDisplayMode` once they're actually present. */
   overlayData?: OverlayDataPoint[];
-  /** How this comparison overlay itself renders — "line" (default) draws its own rebased close
-   *  through every point, same as before this field existed; "candle" draws full rebased OHLC
-   *  bars instead, styled hollow (stroked, never filled) in the overlay's own `color` rather than
-   *  the theme's up/down hues, so it reads as "a comparison instrument", not a second primary
-   *  series competing with `data`'s own candles — and so two overlays both in candle mode still
-   *  stay visually distinct from each other by outline color. Falls back to "line" if `overlayData`
-   *  turns out not to actually carry open/high/low (see its own doc). */
-  overlayDisplayMode?: "line" | "candle";
+  /** How this comparison overlay itself renders — same catalog of modes as
+   *  `CandlestickChartProps.defaultChartDisplayMode` (minus "tpo", a volume-profile histogram
+   *  that has no sensible reading as a second, comparison-only series), all computed from the
+   *  overlay's own rebased OHLC instead of `data`'s: "line" (default) draws its rebased close
+   *  through every point, same as before this field existed; "candle"/"heikinAshi" draw full
+   *  bars, "renko"/"lineBreak" draw bricks (same ATR(14)/3-line settings as the main series' own
+   *  defaults — no separate configuration for an overlay). Every mode besides "line" is styled
+   *  hollow (stroked, never filled) in the overlay's own `color` rather than the theme's up/down
+   *  hues, so it reads as "a comparison instrument", not a second primary series competing with
+   *  `data`'s own candles — and so two overlays in the same non-line mode still stay visually
+   *  distinct from each other by outline color. Falls back to "line" if `overlayData` turns out
+   *  not to actually carry open/high/low (see its own doc). */
+  overlayDisplayMode?: Exclude<ChartDisplayMode, "tpo">;
   /** Hides a drawing without deleting it — like an indicator's own `hidden`, but generic here
    *  since (unlike indicators) most drawing types have never needed one: only "symbolOverlay"'s
    *  own legend entry exposes a toggle for it today, though nothing stops another drawing type

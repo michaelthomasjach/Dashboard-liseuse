@@ -9,6 +9,7 @@ import type { Candle } from "../interfaces/Candle.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { MAX_EMPTY_FRACTION, AXIS_BADGE_HALF_HEIGHT } from "../constants";
+import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, type PriceBrick } from "../chartModes";
 
 export interface UseZoomAndScalesArgs {
   data: Candle[];
@@ -154,7 +155,47 @@ export function useZoomAndScales({
         high: p.high !== undefined ? rebase(p.high) : undefined,
         low: p.low !== undefined ? rebase(p.low) : undefined,
       }));
-      return { drawing: dr, mainReference, points };
+
+      // Heikin Ashi/Renko/Line Break all need a full rebased Candle[] to run the very same
+      // transforms `useChartDisplayMode` runs on `data` itself — computed on the *rebased* series
+      // (not the overlay's own raw prices) purely so the output already sits in the main series'
+      // price space, with no further rebasing needed once these functions have run: every one of
+      // them is scale-covariant (a plain `k = mainReference/overlayReference` multiplier commutes
+      // with HA's own averaging and with every brick threshold comparison, which only ever checks
+      // one side of `>=`/`<=` against the other), so the results are identical either way.
+      const hasOHLC = points.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined);
+      let haPoints: { i: number; price: number; open: number; high: number; low: number }[] | undefined;
+      let bricks: PriceBrick[] | undefined;
+      if (hasOHLC && dr.overlayDisplayMode && dr.overlayDisplayMode !== "line" && dr.overlayDisplayMode !== "candle") {
+        const rebasedCandles: Candle[] = series.map((p) => ({
+          date: p.date,
+          open: rebase(p.open!),
+          high: rebase(p.high!),
+          low: rebase(p.low!),
+          close: rebase(p.value),
+        }));
+        if (dr.overlayDisplayMode === "heikinAshi") {
+          haPoints = computeHeikinAshiCandles(rebasedCandles).map((c, k) => ({
+            i: points[k].i,
+            price: c.close,
+            open: c.open,
+            high: c.high,
+            low: c.low,
+          }));
+        } else {
+          // "renko"/"lineBreak" — same ATR(14)/3-line settings as the main series' own defaults
+          // (see TrendLineDrawing.overlayDisplayMode's own doc); startIndex/endIndex come back as
+          // positions *within* rebasedCandles, remapped here to the real data-aligned indices
+          // `points` already computed so bricks land correctly on the shared X scale.
+          const rawBricks =
+            dr.overlayDisplayMode === "renko"
+              ? computeRenkoBricks(rebasedCandles, computeRenkoBrickSize(rebasedCandles, 14))
+              : computeLineBreakBricks(rebasedCandles, 3);
+          bricks = rawBricks.map((b) => ({ ...b, startIndex: points[b.startIndex].i, endIndex: points[b.endIndex].i }));
+        }
+      }
+
+      return { drawing: dr, mainReference, points, haPoints, bricks };
     });
   }, [symbolOverlays, data, visibleRange.start, indexForDate]);
 
@@ -205,14 +246,33 @@ export function useZoomAndScales({
     const highs = source.map((d) => d.high);
     const lows = source.map((d) => d.low);
     if (compareMode) {
-      for (const { points } of overlayProjections) {
-        for (const p of points) {
-          if (p.i >= visibleRange.start && p.i <= visibleRange.end) {
-            // A candle-mode overlay's own high/low, when present, fit the axis to its whole bar
-            // rather than just its close — otherwise a tall wick could render clipped against a
-            // range that only ever accounted for `price` (the close).
-            highs.push(p.high ?? p.price);
-            lows.push(p.low ?? p.price);
+      for (const { drawing: dr, points, haPoints, bricks } of overlayProjections) {
+        if (dr.overlayDisplayMode === "heikinAshi" && haPoints) {
+          for (const p of haPoints) {
+            if (p.i >= visibleRange.start && p.i <= visibleRange.end) {
+              highs.push(p.high);
+              lows.push(p.low);
+            }
+          }
+        } else if (bricks) {
+          // "renko"/"lineBreak" — a brick spans a whole index *range*, not one point, so it
+          // counts as visible whenever that range overlaps the visible one at all, not just when
+          // its own single index would.
+          for (const b of bricks) {
+            if (b.endIndex >= visibleRange.start && b.startIndex <= visibleRange.end) {
+              highs.push(Math.max(b.open, b.close));
+              lows.push(Math.min(b.open, b.close));
+            }
+          }
+        } else {
+          for (const p of points) {
+            if (p.i >= visibleRange.start && p.i <= visibleRange.end) {
+              // A candle-mode overlay's own high/low, when present, fit the axis to its whole bar
+              // rather than just its close — otherwise a tall wick could render clipped against a
+              // range that only ever accounted for `price` (the close).
+              highs.push(p.high ?? p.price);
+              lows.push(p.low ?? p.price);
+            }
           }
         }
       }

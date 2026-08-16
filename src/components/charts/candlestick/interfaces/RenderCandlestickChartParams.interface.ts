@@ -47,6 +47,16 @@ export interface RenderCandlestickChartParams {
     drawing: TrendLineDrawing;
     mainReference: number;
     points: { i: number; price: number; open?: number; high?: number; low?: number }[];
+    /** Only set when `drawing.overlayDisplayMode === "heikinAshi"` (and `points` has OHLC) —
+     *  `points` transformed the same way `useChartDisplayMode`'s own `heikinAshiCandles` derives
+     *  from `data`, just applied to the overlay's already-rebased series instead. */
+    haPoints?: { i: number; price: number; open: number; high: number; low: number }[];
+    /** Only set when `drawing.overlayDisplayMode` is "renko"/"lineBreak" (and `points` has OHLC)
+     *  — same `PriceBrick` shape `useChartDisplayMode`'s own renkoBricks/lineBreakBricks use for
+     *  `data`, just computed from the overlay's own rebased series, with `startIndex`/`endIndex`
+     *  already remapped from positions in that series to real `data`-aligned indices (via
+     *  `indexForDate`) so bricks land in the right place on the shared X scale. */
+    bricks?: PriceBrick[];
   }[];
   symbolOverlays: TrendLineDrawing[];
   hovered: Candle | null;

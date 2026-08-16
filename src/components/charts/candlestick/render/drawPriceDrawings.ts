@@ -594,24 +594,61 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     // Symbol-comparison overlays (see onAddSymbolOverlay/compareMode) — drawn through their own
     // overlayProjections (already rebased onto the main series' own price space, see that memo's
     // own doc comment), same clip as everything else in this section since it's conceptually
-    // "another series over price", same as SMA/EMA above. Two shapes: a plain line through each
-    // point's rebased close (the default, and the only option when `overlayData` doesn't carry
-    // open/high/low), or full OHLC bars when `overlayDisplayMode: "candle"` opted in and every
-    // visible point actually has them.
-    for (const { drawing: dr, points } of overlayProjections) {
+    // "another series over price", same as SMA/EMA above. `overlayDisplayMode` picks the shape: a
+    // plain line through each point's rebased close (the default, and the only option when
+    // `overlayData` doesn't carry open/high/low), full OHLC bars ("candle"/"heikinAshi"), or
+    // bricks ("renko"/"lineBreak") — every non-line shape hollow (stroke-only, never filled) in
+    // the overlay's own color rather than the theme's up/down hues, so it reads as "a comparison
+    // instrument" instead of a second primary series competing with `data`'s own filled candles,
+    // and so multiple overlays in the same mode still stay visually distinct from each other by
+    // outline color alone.
+    const windowStart = Math.max(0, visibleRange.start - 2);
+    const windowEnd = Math.min(data.length, visibleRange.end + 2);
+    for (const { drawing: dr, points, haPoints, bricks } of overlayProjections) {
       if (dr.hidden) continue;
-      const windowStart = Math.max(0, visibleRange.start - 2);
-      const windowEnd = Math.min(data.length, visibleRange.end + 2);
       const visiblePoints = points.filter((p) => p.i >= windowStart && p.i <= windowEnd);
       if (visiblePoints.length < 2) continue;
       const color = dr.color ?? defaultIndicatorColor(symbolOverlays.indexOf(dr));
-      const canDrawCandles = visiblePoints.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined);
 
-      if (dr.overlayDisplayMode === "candle" && canDrawCandles) {
-        // Hollow (stroke-only, never filled) in the overlay's own color rather than the theme's
-        // up/down hues — reads as "a comparison instrument" instead of a second primary series
-        // competing with `data`'s own filled candles, and keeps multiple candle-mode overlays
-        // visually distinct from each other by outline color alone.
+      if (dr.overlayDisplayMode === "heikinAshi" && haPoints) {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+        for (const p of haPoints) {
+          if (p.i < windowStart || p.i > windowEnd) continue;
+          const cx = zoomedXScale(p.i + 0.5);
+          const bodyTop = zoomedPriceScale(Math.max(p.open, p.price));
+          const bodyBottom = zoomedPriceScale(Math.min(p.open, p.price));
+          ctx.beginPath();
+          ctx.moveTo(cx, zoomedPriceScale(p.high));
+          ctx.lineTo(cx, zoomedPriceScale(p.low));
+          ctx.stroke();
+          ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, Math.max(1, bodyBottom - bodyTop));
+        }
+        ctx.restore();
+      } else if ((dr.overlayDisplayMode === "renko" || dr.overlayDisplayMode === "lineBreak") && bricks) {
+        // Same geometry as the main series' own renko/lineBreak rendering (see drawPriceCandles)
+        // — bricks positioned on the existing index-based X scale, one slot's worth of overlap
+        // trimmed off whichever brick shares a boundary with the previous one — just hollow and
+        // in the overlay's own color instead of filled with the theme's up/down hue.
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+        for (let bi = 0; bi < bricks.length; bi++) {
+          const brick = bricks[bi];
+          if (brick.endIndex < windowStart || brick.startIndex > windowEnd) continue;
+          const prevBrick = bi > 0 ? bricks[bi - 1] : null;
+          const sharesBoundaryWithPrev = prevBrick !== null && brick.startIndex === prevBrick.endIndex && brick.startIndex !== brick.endIndex;
+          const renderStartIndex = sharesBoundaryWithPrev ? brick.startIndex + 1 : brick.startIndex;
+          const x1 = zoomedXScale(renderStartIndex);
+          const x2 = zoomedXScale(brick.endIndex + 1);
+          const top = zoomedPriceScale(Math.max(brick.open, brick.close));
+          const bottom = zoomedPriceScale(Math.min(brick.open, brick.close));
+          const inset = Math.min(1.5, (x2 - x1) / 4);
+          ctx.strokeRect(x1 + inset, top, Math.max(1, x2 - x1 - inset * 2), Math.max(1, bottom - top));
+        }
+        ctx.restore();
+      } else if (dr.overlayDisplayMode === "candle" && visiblePoints.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined)) {
         ctx.save();
         ctx.strokeStyle = color;
         ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
