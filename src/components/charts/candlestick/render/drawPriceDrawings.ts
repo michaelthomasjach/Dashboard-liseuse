@@ -6,6 +6,7 @@ import {
   FIBONACCI_EXTENSION_LEVELS,
   ELLIOTT_IMPULSE_VERTEX_LABELS,
   ELLIOTT_CORRECTION_VERTEX_LABELS,
+  HEAD_SHOULDERS_VERTEX_LABELS,
   MULTI_POINT_TOOLS,
 } from "../drawingCatalog";
 import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick } from "../drawingGeometry";
@@ -47,11 +48,13 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     // own-pane indicator are drawn within that pane's own clipped section instead, "vertical"
     // ones are drawn full-height further down, outside any clip).
     for (const dr of visibleDrawings) {
-      // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown" have their own geometry
-      // entirely unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras"
-      // shape every other type below shares — drawn in their own dedicated loops further down
-      // instead, same reasoning "vertical" (full-height, outside this clip) already skips this
-      // one for.
+      // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown"/"forecast" have their own
+      // geometry entirely unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType
+      // extras" shape every other type below shares — drawn in their own dedicated loops further
+      // down instead, same reasoning "vertical" (full-height, outside this clip) already skips
+      // this one for. "forecast" specifically draws a *curved* line between the same two points
+      // instead of a straight one, so it can't share this loop's own straight moveTo/lineTo call
+      // the way even every other excluded type here still visually builds on in its own loop.
       if (
         dr.lineType === "vertical" ||
         dr.lineType === "rectangle" ||
@@ -60,6 +63,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         dr.lineType === "brush" ||
         dr.lineType === "arrowUp" ||
         dr.lineType === "arrowDown" ||
+        dr.lineType === "forecast" ||
         // Its x1/y1/x2/y2 aren't real coordinates (see the lineType's own doc comment) — just
         // the overlay's own first/last raw points, unrelated to the main series' price space.
         // Drawn separately, correctly rebased, by the dedicated symbol-overlay loop further
@@ -185,6 +189,31 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.textBaseline = "bottom";
         ctx.fillStyle = lineColor;
         allScreen.forEach((p, i) => ctx.fillText(vertexLabels[i] ?? "", p.x, p.y - 6));
+        ctx.restore();
+      }
+
+      // "headShoulders": same shape as elliottImpulse/elliottCorrection just above — x1/x2 (left
+      // shoulder to head, already drawn above) is the first segment, extraPoints continue the
+      // polyline through the right shoulder and the neckline's own two points — but only the
+      // three peaks (left shoulder/head/right shoulder) get a vertex label, not the neckline ends.
+      if (dr.lineType === "headShoulders" && dr.extraPoints?.length) {
+        const restScreen = dr.extraPoints.map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        for (const p of restScreen) ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+
+        const allScreen = [{ x: x1, y: y1 }, { x: x2, y: y2 }, ...restScreen];
+        ctx.save();
+        ctx.setLineDash([]);
+        ctx.font = `700 10px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "bottom";
+        ctx.fillStyle = lineColor;
+        allScreen.forEach((p, i) => {
+          const label = HEAD_SHOULDERS_VERTEX_LABELS[i];
+          if (label) ctx.fillText(label, p.x, p.y - 6);
+        });
         ctx.restore();
       }
 
@@ -360,6 +389,68 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       ctx.restore();
     }
 
+    // "forecast": a curved (not straight) arrow from x1/y1 to x2/y2 — a price-projection
+    // annotation, not a support/resistance line — bowed via a quadratic curve through a control
+    // point offset perpendicular to the straight A-B segment, each end labeled with its own
+    // price/date, and the end additionally with the price change and elapsed time from the start.
+    for (const dr of visibleDrawings) {
+      if (dr.lineType !== "forecast") continue;
+      const lineColor = dr.color ?? colorAccent;
+      const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
+      const ay = zoomedPriceScale(dr.y1);
+      const bx = zoomedXScale(indexForDate(dr.x2) + 0.5);
+      const by = zoomedPriceScale(dr.y2);
+      const dx = bx - ax;
+      const dy = by - ay;
+      const len = Math.hypot(dx, dy) || 1;
+      const bow = len * 0.28;
+      const cx = (ax + bx) / 2 - (dy / len) * bow;
+      const cy = (ay + by) / 2 + (dx / len) * bow;
+
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(cx, cy, bx, by);
+      ctx.stroke();
+      ctx.restore();
+      // Arrowhead direction follows the curve's own tangent at B (the control point -> B
+      // segment), not the straight A->B direction, so it visually continues the arc instead of
+      // pointing slightly off from where the curve actually arrives.
+      drawArrowhead(ctx, cx, cy, bx, by, lineColor);
+
+      ctx.beginPath();
+      ctx.arc(ax, ay, 3, 0, Math.PI * 2);
+      ctx.fillStyle = lineColor;
+      ctx.fill();
+
+      const days = Math.round((dr.x2.getTime() - dr.x1.getTime()) / 86_400_000);
+      const pctChange = dr.y1 !== 0 ? ((dr.y2 - dr.y1) / dr.y1) * 100 : 0;
+      const sign = dr.y2 >= dr.y1 ? "+" : "";
+      const fmtDate = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
+
+      ctx.save();
+      ctx.textAlign = "left";
+      ctx.textBaseline = "bottom";
+      ctx.fillStyle = lineColor;
+      ctx.font = `600 11px ${fontFamily}`;
+      ctx.fillText(dr.y1.toFixed(2), ax + 6, ay - 4);
+      ctx.font = `400 10px ${fontFamily}`;
+      ctx.fillText(fmtDate(dr.x1), ax + 6, ay + 12);
+
+      ctx.fillStyle = pctChange >= 0 ? colorUp : colorDown;
+      ctx.font = `600 11px ${fontFamily}`;
+      ctx.fillText(`${sign}${(dr.y2 - dr.y1).toFixed(2)} (${sign}${pctChange.toFixed(2)}%) en ${days}j`, bx + 6, by - 12);
+      ctx.fillStyle = lineColor;
+      ctx.font = `400 10px ${fontFamily}`;
+      ctx.fillText(`${dr.y2.toFixed(2)} · ${fmtDate(dr.x2)}`, bx + 6, by + 4);
+      ctx.restore();
+
+      drawDrawingText(ctx, dr, ax, ay, bx, by, lineColor, fontFamily);
+    }
+
     // "arrowUp"/"arrowDown": a single-point marker, drawn as a small triangle just clear of its
     // own point (below it pointing up, above it pointing down) rather than centered on it, so it
     // doesn't sit on top of whatever candle it's marking.
@@ -469,6 +560,24 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
           else ctx.lineTo(x, y);
         });
         ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
+        ctx.stroke();
+      } else if (activeTool === "forecast") {
+        // Same bow-via-quadratic-curve shape as the committed render (see the "forecast" loop
+        // below), so the preview doesn't visually snap from a straight line to a curved one the
+        // instant the 2nd click commits it.
+        const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const y1 = zoomedPriceScale(pendingPoint.y);
+        const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
+        const y2 = zoomedPriceScale(previewPoint.y);
+        const dx = x2 - x1;
+        const dy = y2 - y1;
+        const len = Math.hypot(dx, dy) || 1;
+        const bow = len * 0.28;
+        const cx = (x1 + x2) / 2 - (dy / len) * bow;
+        const cy = (y1 + y2) / 2 + (dx / len) * bow;
+        ctx.beginPath();
+        ctx.moveTo(x1, y1);
+        ctx.quadraticCurveTo(cx, cy, x2, y2);
         ctx.stroke();
       } else {
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);

@@ -19,6 +19,8 @@ import {
   ArrowLineIcon,
   MeasureIcon,
   OverlayBadgeIcon,
+  HeadShouldersIcon,
+  ForecastIcon,
 } from "../../icons";
 import type { DrawingToolType } from "./interfaces/DrawingToolType.interface";
 import type { TrendLineDrawing } from "./interfaces/TrendLineDrawing.interface";
@@ -49,12 +51,17 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
   elliottCorrection: { extraPoints: 2, labels: ["Point 0", "Point A", "Point B", "Point C"] },
   elliottImpulse: { extraPoints: 4, labels: ["Point 0", "Point 1", "Point 2", "Point 3", "Point 4", "Point 5"] },
   disjointChannel: { extraPoints: 2, labels: ["Point 1", "Point 2", "Point 3", "Point 4"] },
+  headShoulders: { extraPoints: 3, labels: ["Épaule gauche", "Tête", "Épaule droite", "Ligne de cou (début)", "Ligne de cou (fin)"] },
 };
 
 // Short vertex labels drawn directly on the chart next to each point — distinct from
 // MULTI_POINT_TOOLS' longer "Point X" labels, which are for the edit modal's field list instead.
 export const ELLIOTT_IMPULSE_VERTEX_LABELS = ["0", "1", "2", "3", "4", "5"];
 export const ELLIOTT_CORRECTION_VERTEX_LABELS = ["0", "A", "B", "C"];
+// Only the three peaks get a label — the neckline's own two points (indices 3-4) aren't
+// individually identified the way a peak is, same "not every vertex needs a name" idea a
+// disjointChannel's own 4 points already accept.
+export const HEAD_SHOULDERS_VERTEX_LABELS = ["ÉG", "T", "ÉD", "", ""];
 
 export interface DrawingToolDef {
   type: DrawingToolType;
@@ -114,6 +121,13 @@ export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
   {
     id: "measure",
     tools: [{ type: "measure", label: "Mesure", icon: MeasureIcon }],
+  },
+  {
+    id: "patterns",
+    tools: [
+      { type: "headShoulders", label: "ETE (Épaule-Tête-Épaule)", icon: HeadShouldersIcon },
+      { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
+    ],
   },
 ];
 

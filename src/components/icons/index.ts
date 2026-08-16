@@ -87,4 +87,6 @@ export {
   BrushIcon,
   ArrowLineIcon,
   ZonesIcon,
+  HeadShouldersIcon,
+  ForecastIcon,
 } from "./icons";

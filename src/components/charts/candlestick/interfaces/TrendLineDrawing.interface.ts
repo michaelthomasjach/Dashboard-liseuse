@@ -110,7 +110,14 @@ export interface TrendLineDrawing {
    *  at a time (there can be dozens of them), only the whole stroke together. "arrowUp"/
    *  "arrowDown" are single-point markers (x2/y2 always mirrors x1/y1, same convention as
    *  "horizontal") drawn as a small triangle pointing up/down, anchored just clear of the point
-   *  itself. */
+   *  itself. "headShoulders" is the same fixed-click-count shape as elliottImpulse/
+   *  elliottCorrection (x1/y1, x2/y2, then 3 `extraPoints`) — left shoulder, head, right
+   *  shoulder, then the neckline's own two points — drawn as one connected polyline through all
+   *  five, the same way Elliott's own vertices are, with the three peaks labeled. "forecast" is a
+   *  free two-point tool like a plain trend line, but drawn as a curved (not straight) arrow from
+   *  x1/y1 to x2/y2, each end labeled with its own price/date, and the end additionally with the
+   *  price change and elapsed time from the start — a price-projection annotation, not a support/
+   *  resistance line. */
   lineType?:
     | "horizontal"
     | "vertical"
@@ -128,6 +135,8 @@ export interface TrendLineDrawing {
     | "arrowUp"
     | "arrowDown"
     | "zones"
+    | "headShoulders"
+    | "forecast"
     | "symbolOverlay";
   /** Which pane's own value scale y is expressed in — "price" (default), "volume", or the id of
    *  an "own"-pane indicator (RSI/CHOP/MACD) to anchor a "horizontal"/"ray" line to that pane
@@ -142,7 +151,8 @@ export interface TrendLineDrawing {
   channelOffset?: number;
   /** Points beyond x1/y1 (the 1st) and x2/y2 (the 2nd), in click order — "fibonacciExtension"
    *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
-   *  (line 2's own two points — see `lineType` above for how they're derived). Unused otherwise. */
+   *  (line 2's own two points — see `lineType` above for how they're derived), "headShoulders" 3
+   *  (right shoulder, then the neckline's own two points). Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
   /** "zones" only: x1/y1 and x2/y2 are still opposite corners like "rectangle", but split the
    *  price pane into three horizontal bands instead of one filled box — above the higher of the

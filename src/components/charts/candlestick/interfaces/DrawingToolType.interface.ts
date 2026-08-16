@@ -17,4 +17,6 @@ export type DrawingToolType =
   | "arrowUp"
   | "arrowDown"
   | "arrowLine"
-  | "zones";
+  | "zones"
+  | "headShoulders"
+  | "forecast";

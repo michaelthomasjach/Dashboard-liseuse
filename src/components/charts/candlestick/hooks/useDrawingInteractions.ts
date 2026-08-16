@@ -363,9 +363,11 @@ export function useDrawingInteractions({
           y1: pendingPoint.y,
           x2: pendingSecondPoint.x,
           y2: pendingSecondPoint.y,
-          // MULTI_POINT_TOOLS only has entries for these three, guaranteed by `multiPoint` above
-          // — narrower than what TS can infer just from the (wider-keyed) lookup being truthy.
-          lineType: activeTool as "fibonacciExtension" | "elliottCorrection" | "elliottImpulse",
+          // MULTI_POINT_TOOLS only has entries for these four (disjointChannel's own 4th point is
+          // computed, not clicked, so it never reaches this generic branch — see MULTI_POINT_TOOLS'
+          // own doc), guaranteed by `multiPoint` above — narrower than what TS can infer just from
+          // the (wider-keyed) lookup being truthy.
+          lineType: activeTool as "fibonacciExtension" | "elliottCorrection" | "elliottImpulse" | "headShoulders",
           extraPoints: nextExtra,
         },
       ]);
@@ -373,9 +375,9 @@ export function useDrawingInteractions({
       return;
     }
 
-    // "trendline", "extended", "fibonacci", "rectangle" and "zones" all share the same 2-click
-    // flow — they only differ in how they're drawn (see the canvas draw effect) and, for
-    // "rectangle"/"zones", hit-tested, not in how they're placed. "arrowLine" is the same flow
+    // "trendline", "extended", "fibonacci", "rectangle", "zones" and "forecast" all share the
+    // same 2-click flow — they only differ in how they're drawn (see the canvas draw effect) and,
+    // for "rectangle"/"zones", hit-tested, not in how they're placed. "arrowLine" is the same flow
     // again but stays lineType-less like a plain trend line, just with arrowRight preset.
     if (!pendingPoint) {
       setPendingPoint(point);
@@ -388,7 +390,7 @@ export function useDrawingInteractions({
       y1: pendingPoint.y,
       x2: point.x,
       y2: point.y,
-      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "zones"
+      ...(activeTool === "extended" || activeTool === "fibonacci" || activeTool === "rectangle" || activeTool === "zones" || activeTool === "forecast"
         ? { lineType: activeTool }
         : {}),
       ...(activeTool === "arrowLine" ? { arrowRight: true } : {}),
@@ -678,10 +680,11 @@ export function useDrawingInteractions({
           dr.lineType === "elliottImpulse" ||
           dr.lineType === "elliottCorrection" ||
           dr.lineType === "brush" ||
-          dr.lineType === "elbowArrow"
+          dr.lineType === "elbowArrow" ||
+          dr.lineType === "headShoulders"
         ) {
-          // Same "polyline through every point" distance for a freehand stroke or an open-ended
-          // elbow-arrow polyline as for an Elliott wave's own fixed vertices.
+          // Same "polyline through every point" distance for a freehand stroke, an open-ended
+          // elbow-arrow polyline, or an Elliott wave's/Head & Shoulders' own fixed vertices.
           const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
           let minSegmentDist = Infinity;
           for (let i = 1; i < screenPoints.length; i++) {

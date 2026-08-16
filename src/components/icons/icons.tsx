@@ -696,3 +696,22 @@ export const ZonesIcon = (props: IconProps) => (
     <path d="M10.95 18.25h2.1" />
   </IconBase>
 );
+
+/** Three peaks (a shorter, a taller, a shorter again) over a flat neckline — the Head & Shoulders
+ *  pattern's own silhouette. */
+export const HeadShouldersIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 17 6 9l3 4 3-9 3 9 3-4 4 8" />
+    <path d="M2 17h20" strokeDasharray="2.5 2.5" />
+  </IconBase>
+);
+
+/** A curved (not straight) arrow from a dot to an arrowhead — distinguishing this from
+ *  TrendLineIcon's own straight diagonal, matching the tool's actual curved-projection line. */
+export const ForecastIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 18C4 10 10 6 19 6" />
+    <path d="M19 6 14.5 5.5M19 6 17 10" />
+    <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);
