@@ -1,7 +1,8 @@
-import { Fragment } from "react";
+import { Fragment, useRef, useState } from "react";
 import type { RefObject, Dispatch, SetStateAction } from "react";
 import { Popover } from "../../../forms/Popover";
-import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, LayersIcon } from "../../../icons";
+import { Checkbox } from "../../../forms/Checkbox";
+import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon } from "../../../icons";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { DRAWING_TOOL_CATEGORIES } from "../drawingCatalog";
 
@@ -22,15 +23,18 @@ export interface ToolsRailProps {
   setDrawingsHidden: Dispatch<SetStateAction<boolean>>;
   drawingsLocked: boolean;
   setDrawingsLocked: Dispatch<SetStateAction<boolean>>;
+  eventKinds: string[];
+  hiddenEventKinds: Set<string>;
+  setHiddenEventKinds: Dispatch<SetStateAction<Set<string>>>;
   indicatorsManagerOpen: boolean;
   setIndicatorsManagerOpen: Dispatch<SetStateAction<boolean>>;
 }
 
 /** The left-docked drawing-tools rail (`drawingTools` prop): one button + chevron + flyout menu
  *  per tool category (Lignes/Fibonacci/Vagues d'Elliott/Formes/Mesure), then the persistent
- *  aimant/hide-drawings/lock-drawings toggles, then the "Dessins et indicateurs" manager button
- *  pinned to the rail's own bottom edge. Purely presentational — every interaction is a callback
- *  prop from `useDrawingState`. */
+ *  aimant/hide-drawings/lock-drawings/event-visibility toggles, then the "Dessins et indicateurs"
+ *  manager button pinned to the rail's own bottom edge. Purely presentational — every interaction
+ *  is a callback prop from `useDrawingState`/`useChartEvents`. */
 export function ToolsRail({
   drawingTools,
   dims,
@@ -48,9 +52,15 @@ export function ToolsRail({
   setDrawingsHidden,
   drawingsLocked,
   setDrawingsLocked,
+  eventKinds,
+  hiddenEventKinds,
+  setHiddenEventKinds,
   indicatorsManagerOpen,
   setIndicatorsManagerOpen,
 }: ToolsRailProps) {
+  const [eventsMenuOpen, setEventsMenuOpen] = useState(false);
+  const eventsMenuAnchorRef = useRef<HTMLButtonElement>(null);
+
   if (!drawingTools) return null;
   return (
     <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
@@ -171,6 +181,45 @@ export function ToolsRail({
         >
           <LockIcon size={14} />
         </button>
+        {/* Per-kind event-marker visibility (Earnings/News/Dividend/Update/…, whatever kinds are
+            actually present in `events` — see eventKinds) — a quick toolbar dropdown for the same
+            toggles the "Paramètres du graphique" modal also exposes, all shown by default. A
+            distinct icon from the hide-drawings eye above, so the two aren't confused for the
+            same toggle. */}
+        {eventKinds.length > 0 && (
+          <>
+            <button
+              ref={eventsMenuAnchorRef}
+              type="button"
+              className={["lq-chart__icon-button", eventsMenuOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setEventsMenuOpen((o) => !o)}
+              aria-label="Visibilité des évènements"
+              aria-pressed={eventsMenuOpen}
+              title="Afficher/masquer les évènements par type"
+            >
+              <BellIcon size={14} />
+            </button>
+            <Popover open={eventsMenuOpen} onClose={() => setEventsMenuOpen(false)} anchorRef={eventsMenuAnchorRef} placement="bottom">
+              <div className="lq-chart__events-menu">
+                {eventKinds.map((kind) => (
+                  <Checkbox
+                    key={kind}
+                    checked={!hiddenEventKinds.has(kind)}
+                    onChange={() =>
+                      setHiddenEventKinds((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(kind)) next.delete(kind);
+                        else next.add(kind);
+                        return next;
+                      })
+                    }
+                    label={kind}
+                  />
+                ))}
+              </div>
+            </Popover>
+          </>
+        )}
         {/* Pinned to the rail's own bottom edge (see .lq-chart__tools-rail-bottom-button),
             separate from every tool/toggle above — opens a flat, grouped list of every
             drawing and indicator currently on the chart (overlay and own-pane alike) with

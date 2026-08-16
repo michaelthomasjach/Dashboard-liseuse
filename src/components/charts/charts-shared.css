@@ -665,6 +665,14 @@
   margin-top: var(--lq-space-2);
 }
 
+.lq-chart__events-menu {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+  padding: var(--lq-space-2);
+  min-width: 170px;
+}
+
 .lq-chart__edit-drawing-row > * {
   flex: 1;
   min-width: 0;

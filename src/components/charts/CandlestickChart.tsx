@@ -337,7 +337,7 @@ export function CandlestickChart({
   const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoProfile } =
     useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
 
-  const { hiddenEventKinds, setHiddenEventKinds, eventsVisible, setEventsVisible, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
+  const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
     useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
 
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
@@ -667,9 +667,6 @@ export function CandlestickChart({
           chartDisplayMode={chartDisplayMode}
           setChartDisplayMode={setChartDisplayMode}
           onChartDisplayModeChange={onChartDisplayModeChange}
-          events={events}
-          eventsVisible={eventsVisible}
-          setEventsVisible={setEventsVisible}
           showIndicators={showIndicators}
           setIndicatorSearchQuery={setIndicatorSearchQuery}
           setIndicatorPickerOpen={setIndicatorPickerOpen}
@@ -738,6 +735,9 @@ export function CandlestickChart({
           setDrawingsHidden={setDrawingsHidden}
           drawingsLocked={drawingsLocked}
           setDrawingsLocked={setDrawingsLocked}
+          eventKinds={eventKinds}
+          hiddenEventKinds={hiddenEventKinds}
+          setHiddenEventKinds={setHiddenEventKinds}
           indicatorsManagerOpen={indicatorsManagerOpen}
           setIndicatorsManagerOpen={setIndicatorsManagerOpen}
         />

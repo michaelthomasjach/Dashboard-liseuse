@@ -3,13 +3,10 @@ import { Popover } from "../../../forms/Popover";
 import {
   ChevronDownIcon,
   ActivityIcon,
-  EyeIcon,
-  EyeOffIcon,
   CalendarIcon,
   MaximizeIcon,
   MinimizeIcon,
 } from "../../../icons";
-import type { ChartEvent } from "../interfaces/ChartEvent.interface";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
 import type { TimeframeEntry } from "../interfaces/TimeframeEntry.interface";
 import { CHART_DISPLAY_MODES, type ChartDisplayModeDef } from "../chartModes";
@@ -31,9 +28,6 @@ export interface ChartHeaderProps {
   chartDisplayMode: ChartDisplayMode;
   setChartDisplayMode: (mode: ChartDisplayMode) => void;
   onChartDisplayModeChange: ((mode: ChartDisplayMode) => void) | undefined;
-  events: ChartEvent[] | undefined;
-  eventsVisible: boolean;
-  setEventsVisible: Dispatch<SetStateAction<boolean>>;
   showIndicators: boolean;
   setIndicatorSearchQuery: (query: string) => void;
   setIndicatorPickerOpen: (open: boolean) => void;
@@ -47,10 +41,10 @@ export interface ChartHeaderProps {
   isFullscreen: boolean;
 }
 
-/** The chart's main (non-seasonality) header: timeframe picker, display-mode picker, event
- *  visibility toggle, "add indicator" button, "reset zoom" button, the seasonality-mode entry
- *  point, and the fullscreen toggle — everything gated by `showHeader && !seasonalityOpen` in
- *  CandlestickChart itself. Purely presentational; every interaction is a callback prop. */
+/** The chart's main (non-seasonality) header: timeframe picker, display-mode picker, "add
+ *  indicator" button, "reset zoom" button, the seasonality-mode entry point, and the fullscreen
+ *  toggle — everything gated by `showHeader && !seasonalityOpen` in CandlestickChart itself.
+ *  Purely presentational; every interaction is a callback prop. */
 export function ChartHeader({
   dims,
   timeframes,
@@ -67,9 +61,6 @@ export function ChartHeader({
   chartDisplayMode,
   setChartDisplayMode,
   onChartDisplayModeChange,
-  events,
-  eventsVisible,
-  setEventsVisible,
   showIndicators,
   setIndicatorSearchQuery,
   setIndicatorPickerOpen,
@@ -167,18 +158,6 @@ export function ChartHeader({
           ))}
         </div>
       </Popover>
-      {events && events.length > 0 && (
-        <button
-          type="button"
-          className={["lq-chart__icon-button", !eventsVisible && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-          onClick={() => setEventsVisible((v) => !v)}
-          aria-label={eventsVisible ? "Masquer les évènements" : "Afficher les évènements"}
-          aria-pressed={!eventsVisible}
-          title="Masquer/afficher tous les évènements"
-        >
-          {eventsVisible ? <EyeIcon size={14} /> : <EyeOffIcon size={14} />}
-        </button>
-      )}
       {showIndicators && (
         <button
           type="button"
