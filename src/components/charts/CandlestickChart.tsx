@@ -131,7 +131,7 @@ export function CandlestickChart({
   onLinkClick,
   showSplitScreen = false,
   splitScreenPanels,
-  onSplitScreenChange,
+  onSplitScreenChange, fillHeight = false,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -252,7 +252,7 @@ export function CandlestickChart({
     : baseMargin;
   const [ref, dims] = useChartDimensions(resolvedMargin, {
     width: isFullscreen ? undefined : width,
-    height: isFullscreen ? undefined : height,
+    height: isFullscreen || fillHeight ? undefined : height,
   });
 
   const showHeader = fullscreenToggle || zoomable || !!timeframes?.length || showIndicators;

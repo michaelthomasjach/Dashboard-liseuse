@@ -156,7 +156,15 @@ export function ChartWorkspace({
           // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
           // every panel down to one shared React instance instead of `panels` independent ones.
           key: i,
-          height: fillHeight ? undefined : panelHeight,
+          // `height: undefined` alone can't express "fill your container" here — CandlestickChart
+          // reads an explicitly-undefined `height` prop identically to an omitted one (both fall
+          // through to its own 380 default via a plain JS default parameter), so passing it
+          // through cloneElement this way silently lost the "fill instead of default to 380"
+          // intent entirely, leaving every panel's own plot area pinned at ~340px inside a
+          // correctly-stretched-but-otherwise-empty grid cell. `fillHeight` is a dedicated flag
+          // for exactly this (see its own doc) that doesn't have that collision.
+          height: panelHeight,
+          fillHeight,
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
           syncedHoverPrice: syncedPriceForPanel(i),

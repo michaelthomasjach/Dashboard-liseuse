@@ -5,11 +5,21 @@
 }
 
 /* Each panel is a plain grid cell — CandlestickChart itself already fills 100% of whatever
-   container it's in (see its own `width` prop doc), so no extra sizing needed here beyond
-   min-width:0, without which a grid track can refuse to shrink below its content's own intrinsic
-   width and blow out the layout. */
+   container it's in (see its own `width`/`fillHeight` prop docs), so no extra sizing needed here
+   beyond min-width/min-height:0, without which a grid track can refuse to shrink below its
+   content's own intrinsic size and blow out the layout. min-height matters just as much as
+   min-width once a row can genuinely need to shrink (fillHeight, not a fixed panelHeight): a
+   panel's own plot area starts from whatever inline height it already had a moment ago (its very
+   first measurement while newly mounted, or — for a panel that already existed before a 1→N
+   panel-count change — its previous, now-stale size), and *that* becomes this grid item's own
+   intrinsic minimum. Without min-height:0, a row can't shrink below that stale/oversized minimum
+   even once its true 1fr share is smaller, which starves every other row of the space it should
+   get and can even stop the panel's own ResizeObserver from ever detecting a change at all — its
+   container's real size never actually changes since the too-large content is what's holding the
+   whole row open in the first place. */
 .lq-chart-workspace > * {
   min-width: 0;
+  min-height: 0;
 }
 
 /* "Graphiques liés" modal tree (see LinkGroupsModal) — groups first, each with its own header row

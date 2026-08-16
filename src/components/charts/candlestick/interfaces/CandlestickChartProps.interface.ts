@@ -18,8 +18,21 @@ export interface CandlestickChartProps {
    *  in fullscreen (the toggle always fills the viewport). */
   width?: number;
   /** Fixed pixel height. Default 380. Ignored while in fullscreen (the toggle always fills the
-   *  viewport). */
+   *  viewport) or when `fillHeight` is set. */
   height?: number;
+  /** Measures and fills whatever height the wrapper's own container actually has instead of
+   *  `height`'s fixed-pixel default — the same mechanism `fullscreenToggle` already switches to
+   *  while active, just driven by this flag instead of that state. `height` alone can't express
+   *  "fill the container" itself: passing `height={undefined}` reads identically to omitting the
+   *  prop entirely (both fall through to its own 380 default), which is exactly right for a
+   *  standalone chart wanting a predictable default size, but wrong for e.g. `ChartWorkspace`,
+   *  which needs every panel to actually stretch to fill its own grid cell — hence this separate
+   *  flag, which `ChartWorkspace` sets internally rather than relying on `height` to do double
+   *  duty. Only meaningful when the wrapper's own parent actually gives it a definite height to
+   *  fill (a CSS grid/flex cell, for instance) — otherwise this falls back to the chart's usual
+   *  320px measurement floor, same as `fullscreenToggle`'s own mechanism would in that situation.
+   *  Default false. */
+  fillHeight?: boolean;
   zoomable?: boolean;
   showVolume?: boolean;
   formatDate?: (d: Date) => string;
