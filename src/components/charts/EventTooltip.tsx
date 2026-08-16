@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { CloseIcon, MaximizeIcon } from "../icons";
+import { CloseIcon } from "../icons";
 import type { ChartEvent } from "./CandlestickChart";
 import "./EventTooltip.css";
 
@@ -10,7 +10,8 @@ export interface ChartEventTooltipProps {
   /** "popover" is the small card anchored to the marker; "modal" fills the whole chart. */
   mode: "popover" | "modal";
   onClose: () => void;
-  /** Renders the expand button when set — omit to hide it. Ignored in "modal" mode. */
+  /** Makes each event card clickable (hover overlay + click opens the modal) when set — omit to
+   *  render them inert. Ignored in "modal" mode. */
   onExpand?: () => void;
   /** Popover mode only: its left edge, in px, relative to its positioned ancestor. */
   left?: number;
@@ -56,7 +57,12 @@ export function ChartEventTooltip({ events, mode, onClose, onExpand, left = 0, b
   const list = (
     <div className="lq-chart-event-tooltip__list">
       {events.map((event, i) => (
-        <article key={i} className="lq-chart-event-tooltip__card" style={{ borderInlineStartColor: event.color }}>
+        <article
+          key={i}
+          className={["lq-chart-event-tooltip__card", onExpand && "lq-chart-event-tooltip__card--clickable"].filter(Boolean).join(" ")}
+          style={{ borderInlineStartColor: event.color }}
+          onClick={onExpand}
+        >
           <h4 className="lq-chart-event-tooltip__title">{event.label}</h4>
           <div className="lq-chart-event-tooltip__date">{dFmt(event.date)}</div>
         </article>
@@ -84,13 +90,6 @@ export function ChartEventTooltip({ events, mode, onClose, onExpand, left = 0, b
       className={["lq-chart-event-tooltip", "lq-chart-event-tooltip--popover", className].filter(Boolean).join(" ")}
       style={{ left, bottom, width }}
     >
-      {onExpand && (
-        <div className="lq-chart-event-tooltip__toolbar">
-          <button type="button" className="lq-chart-event-tooltip__icon-button" onClick={onExpand} aria-label="Agrandir">
-            <MaximizeIcon size={12} />
-          </button>
-        </div>
-      )}
       <div className="lq-chart-event-tooltip__body">{list}</div>
     </div>
   );

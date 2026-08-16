@@ -11,7 +11,7 @@ import type { ChartEvent } from "../interfaces/ChartEvent.interface";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
 import { CROSSHAIR_ADD_INSET, LIVE_COUNTDOWN_OFFSET } from "../constants";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "../eventsCatalog";
-import { formatCountdown } from "../formatting";
+import { formatCountdown, formatCompactNumber } from "../formatting";
 
 export interface ChartHoverBadgesProps {
   hoverY: number | null;
@@ -155,7 +155,7 @@ export function ChartHoverBadges({
               <button type="button" className="lq-chart__axis-value-add" onClick={addIndicatorPaneLine} aria-label="Ajouter une ligne horizontale">
                 <PlusIcon size={9} />
               </button>
-              <span className="lq-chart__axis-value-text">{scale.invert(hoverIndicatorPaneY).toFixed(2)}</span>
+              <span className="lq-chart__axis-value-text">{formatCompactNumber(scale.invert(hoverIndicatorPaneY))}</span>
             </div>
           );
         })()}
@@ -277,7 +277,7 @@ export function ChartHoverBadges({
                 minWidth: dims.margin.right,
               }}
             >
-              <span className="lq-chart__axis-value-text">{isPrice ? priceAxisFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
+              <span className="lq-chart__axis-value-text">{isPrice ? priceAxisFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : formatCompactNumber(dr.y1)}</span>
             </div>
           );
         })}

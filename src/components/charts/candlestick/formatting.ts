@@ -31,6 +31,26 @@ export function formatPercentFromReference(value: number, reference: number): st
   return `${pct >= 0 ? "+" : ""}${pct.toFixed(1)}%`;
 }
 
+/** Plain two-decimal number below 10 000 (i.e. 4 or fewer integer digits) — past that, truncated
+ *  to two decimals with a K/M/B/T suffix (thousand/million/billion/trillion) instead of the raw
+ *  digit string, e.g. 4522582677.17 → "4.52B". Used wherever a pane's own value (an own-pane
+ *  indicator's hover/permanent axis badge, a fundamental's magnitude) could otherwise run long
+ *  enough to overflow its badge. */
+export function formatCompactNumber(value: number): string {
+  const abs = Math.abs(value);
+  if (abs < 10_000) return value.toFixed(2);
+  const units: [number, string][] = [
+    [1_000_000_000_000, "T"],
+    [1_000_000_000, "B"],
+    [1_000_000, "M"],
+    [1_000, "K"],
+  ];
+  for (const [threshold, suffix] of units) {
+    if (abs >= threshold) return `${(value / threshold).toFixed(2)}${suffix}`;
+  }
+  return value.toFixed(2);
+}
+
 export function toDateInputValue(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");

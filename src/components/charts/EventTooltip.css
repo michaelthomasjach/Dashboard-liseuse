@@ -29,13 +29,6 @@
   z-index: 1002;
 }
 
-.lq-chart-event-tooltip__toolbar {
-  display: flex;
-  justify-content: flex-end;
-  flex-shrink: 0;
-  padding: 4px;
-}
-
 .lq-chart-event-tooltip__header {
   display: flex;
   align-items: center;
@@ -101,6 +94,16 @@
   background-color: var(--lq-color-bg);
   border-inline-start: 3px solid var(--lq-color-accent);
   border-radius: var(--lq-radius-sm);
+}
+
+/* Popover mode only (see onExpand) — the whole card opens the modal, replacing what used to be
+   a dedicated "expand" icon in a toolbar above the list. */
+.lq-chart-event-tooltip__card--clickable {
+  cursor: pointer;
+}
+
+.lq-chart-event-tooltip__card--clickable:hover {
+  background-color: var(--lq-color-hover);
 }
 
 .lq-chart-event-tooltip__title {

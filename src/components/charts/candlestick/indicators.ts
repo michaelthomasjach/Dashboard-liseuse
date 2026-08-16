@@ -1,4 +1,3 @@
-import * as d3 from "d3";
 import { VWAP, BollingerBands, RSI, MACD } from "technicalindicators";
 import type { Candle } from "./interfaces/Candle.interface";
 import type { FundamentalDataPoint } from "./interfaces/FundamentalDataPoint.interface";
@@ -6,6 +5,7 @@ import type { IndicatorKind } from "./interfaces/IndicatorKind.interface";
 import type { IndicatorBand } from "./interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./interfaces/IndicatorMACD.interface";
 import type { Indicator } from "./interfaces/Indicator.interface";
+import { formatCompactNumber } from "./formatting";
 
 /** The eight fundamental `IndicatorKind`s, in one place — `computeIndicatorValues` reads
  *  `fundamentals` through this, the picker/axis/hover-readout use it to pick a formatter (see
@@ -28,16 +28,16 @@ export function isFundamentalKind(kind: IndicatorKind): boolean {
   return FUNDAMENTAL_INDICATOR_KINDS.includes(kind);
 }
 
-/** How a fundamental indicator's own value reads — money (compact, e.g. "$1.2B"), a percentage
- *  (one decimal, e.g. "21.5%"), or a plain ratio (two decimals, e.g. "24.30" for a P/E). RSI/CHOP/
- *  MACD keep their own existing plain `.toFixed(2)` wherever they're formatted — this is only
- *  reached for the eight kinds above. */
+/** How a fundamental indicator's own value reads — money (compact, e.g. "$1.20B", see
+ *  `formatCompactNumber`), a percentage (one decimal, e.g. "21.5%"), or a plain ratio (two
+ *  decimals, e.g. "24.30" for a P/E). RSI/CHOP/MACD keep their own existing plain `.toFixed(2)`
+ *  wherever they're formatted — this is only reached for the eight kinds above. */
 export function formatFundamentalValue(kind: IndicatorKind, value: number): string {
   switch (kind) {
     case "freeCashFlow":
     case "netIncome":
     case "totalRevenue":
-      return `$${d3.format(".2s")(value)}`;
+      return `$${formatCompactNumber(value)}`;
     case "netMargin":
     case "grossMargin":
       return `${value.toFixed(1)}%`;
