@@ -162,28 +162,17 @@ export const AllFeatures: Story = {
     const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
     const [currentSymbol, setCurrentSymbol] = useState("MSFT");
     const [displayMode, setDisplayMode] = useState<ChartDisplayMode>("candle");
+    // Storybook's own global decorator (see .storybook/preview.tsx) wraps every story in 32px of
+    // padding, unrelated to ChartWorkspace itself — harmless normally, but it's exactly what
+    // would keep a multi-row split (4/6/8 panels, each already sized to fill 100% of the
+    // viewport on its own) from actually fitting the screen without a scrollbar. A negative
+    // margin here cancels that padding out again, only once a multi-row split is actually
+    // showing (panels > 2 — 1 and 2 panels are a single row, sized by `panelHeight` instead, and
+    // still want that padding).
+    const [panels, setPanels] = useState<1 | 2 | 4 | 6 | 8>(1);
     return (
-      <div style={{ padding: 24 }}>
-        <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-          Tout combiné : outils de dessin (`drawingTools` — lignes, Fibonacci, vagues d'Elliott, formes, mesure,
-          aimant), indicateurs techniques et fondamentaux (`showIndicators`/`fundamentals` — aucun pré-ajouté, tout
-          le catalogue accessible depuis "Ajouter un indicateur"), modes d'affichage
-          (`defaultChartDisplayMode`/`onChartDisplayModeChange`), plein écran (`fullscreenToggle`),
-          sélecteur d'intervalle (`timeframes`), recherche de symbole (`symbolSearch` — <strong>double-clic</strong>{" "}
-          sur "MSFT" ouvre la modale, son bouton "+" ajoute un overlay de comparaison —{" "}
-          <code>onAddSymbolOverlay</code>), rescale automatique de l'axe des prix (`YAutoScaling`, activé par défaut —
-          bascule dans la modale "Paramètres du graphique"), saisonnalité (`seasonality` — bouton calendrier dans
-          l'en-tête), zoom/pan (`zoomable`) et évènements (`events` — bulles en bas du tracé des prix, deux d'entre
-          elles partageant une même date pour montrer la bulle "stack" ; les <strong>cliquer</strong> ouvre une
-          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup), modèles de
-          disposition (`showTemplates` — bouton disquette + dossier tout à droite de l'en-tête : enregistre/
-          recharge la liste d'indicateurs et la disposition des panneaux), et écran divisé (icône grille dans
-          l'en-tête — 1/2/4/6/8 fenêtres ; un seul <code>{"<CandlestickChart>"}</code> passé à{" "}
-          <code>ChartWorkspace</code> ci-dessous, chaque nouvelle fenêtre en est sa propre instance
-          indépendante avec exactement les mêmes options — outils de dessin, indicateurs, modèles, tout — plus
-          l'icône chaîne pour synchroniser leur crosshair entre elles).
-        </p>
-        <ChartWorkspace defaultPanels={1} panelHeight={STORY_HEIGHT}>
+      <div style={panels > 2 ? { margin: -32 } : undefined}>
+        <ChartWorkspace defaultPanels={1} panelHeight={STORY_HEIGHT} onPanelsChange={setPanels}>
           <CandlestickChart
             data={ALL_FEATURES_DATASET}
             symbol={currentSymbol}

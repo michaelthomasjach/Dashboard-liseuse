@@ -5,6 +5,7 @@ import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
 import "./ChartWorkspace.css";
 
 const GRID_COLUMNS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 2, 4: 2, 6: 3, 8: 4 };
+const GRID_ROWS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 1, 4: 2, 6: 2, 8: 2 };
 
 export interface ChartWorkspaceProps {
   /** Uncontrolled initial panel count — also picks the grid: 1 is a plain single chart (no grid
@@ -29,7 +30,10 @@ export interface ChartWorkspaceProps {
   children: ReactElement<CandlestickChartProps> | ReactElement<CandlestickChartProps>[];
   /** Fixed height in px applied to every panel uniformly, overriding each child's own `height`
    *  prop if it set one — a mixed-height grid wouldn't read as one coherent workspace. Default
-   *  320. */
+   *  320. Ignored once the grid wraps into two rows (4/6/8 panels): stacking two panels' worth of
+   *  a height meant for *one* row would run well past the screen, so those instead fit the whole
+   *  workspace to exactly 100% of the viewport height and let each row's own share of that (a
+   *  plain CSS grid fraction) drive every panel's actual height instead. */
   panelHeight?: number;
   /** Uncontrolled initial link groups — each a plain array of panel indices (0-based). */
   defaultLinkGroups?: number[][];
@@ -102,9 +106,22 @@ export function ChartWorkspace({
   const rawChildren = Children.toArray(children) as ReactElement<CandlestickChartProps>[];
   const panelElements = rawChildren.length === 1 ? Array.from({ length: panels }, () => rawChildren[0]) : rawChildren.slice(0, panels);
   const columns = GRID_COLUMNS[panels];
+  const rows = GRID_ROWS[panels];
+  const isMultiRow = rows > 1;
 
   return (
-    <div className={["lq-chart-workspace", className].filter(Boolean).join(" ")} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
+    <div
+      className={["lq-chart-workspace", className].filter(Boolean).join(" ")}
+      style={{
+        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+        // Two-row layouts fit the *whole grid* to the viewport height instead of stacking two
+        // panels' worth of `panelHeight` — gridTemplateRows splits that budget evenly between the
+        // rows, and each panel below gets `height: undefined` (see CandlestickChart's own
+        // useChartDimensions doc) so it measures and fills its own row's actual share via
+        // ResizeObserver rather than a hardcoded pixel figure.
+        ...(isMultiRow ? { gridTemplateRows: `repeat(${rows}, 1fr)`, height: "100vh" } : {}),
+      }}
+    >
       {panelElements.map((child, i) =>
         cloneElement(child, {
           // Always the panel index, never `child.key` — panels don't reorder, so it's already a
@@ -113,7 +130,7 @@ export function ChartWorkspace({
           // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
           // every panel down to one shared React instance instead of `panels` independent ones.
           key: i,
-          height: panelHeight,
+          height: isMultiRow ? undefined : panelHeight,
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
           linkable: true,
