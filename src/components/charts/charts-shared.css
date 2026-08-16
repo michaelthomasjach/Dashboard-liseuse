@@ -7,6 +7,13 @@
   border: 1px solid var(--lq-color-border-subtle);
 }
 
+/* For a chart embedded inside another `.lq-chart` that already provides the outer border (see
+   LineAreaChart's own `embedded` prop, used by SeasonalityView) — without this the two borders
+   would stack into a visibly thicker double line. */
+.lq-chart--embedded {
+  border: none;
+}
+
 .lq-chart__svg {
   display: block;
   width: 100%;
@@ -156,17 +163,10 @@
   font-size: 0.85rem;
 }
 
-.lq-chart__seasonality {
-  padding: var(--lq-space-3);
-}
-
-.lq-chart__seasonality-controls {
-  display: flex;
-  align-items: center;
-  gap: var(--lq-space-2);
-  margin-bottom: var(--lq-space-3);
-}
-
+/* No padding of its own — same "the margin/axes handle spacing, not CSS" principle as
+   .lq-chart__plot: the header row (.lq-chart__header) needs to span edge to edge to match the
+   main chart's own header, and LineAreaChart's own `margin` prop (see SeasonalityView) already
+   reserves the right space around its plot. */
 .lq-chart__seasonality-year-picker {
   display: flex;
   flex-direction: column;
@@ -186,6 +186,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--lq-space-2);
+  padding: var(--lq-space-3);
   text-align: center;
 }
 

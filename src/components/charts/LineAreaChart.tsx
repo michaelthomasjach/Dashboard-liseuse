@@ -40,6 +40,14 @@ export interface LineAreaChartProps {
   showLegend?: boolean;
   /** Shows a fullscreen toggle button in the toolbar. Default true. */
   fullscreenToggle?: boolean;
+  /** Which side the Y axis (and its own drag-to-rescale strip) renders on. Default "left"; pass
+   *  "right" to match `CandlestickChart`'s own price-axis convention when embedding this as a
+   *  sub-chart alongside it (see SeasonalityView). */
+  yAxisOrientation?: "left" | "right";
+  /** Drops this chart's own border/background chrome — for embedding inside another `.lq-chart`
+   *  that already provides it (see SeasonalityView), so the two don't stack into a visible
+   *  double border. Default false (a standalone LineAreaChart keeps its own border). */
+  embedded?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -55,6 +63,8 @@ export function LineAreaChart({
   showGrid = true,
   showLegend = true,
   fullscreenToggle = true,
+  yAxisOrientation = "left",
+  embedded = false,
   margin,
   className,
 }: LineAreaChartProps) {
@@ -174,7 +184,11 @@ export function LineAreaChart({
 
   if (dims.width === 0 || series.length === 0 || series.every((s) => s.data.length === 0)) {
     return (
-      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ height }}>
+      <div
+        ref={ref}
+        className={["lq-chart", isFullscreen && "lq-chart--fullscreen", embedded && "lq-chart--embedded", className].filter(Boolean).join(" ")}
+        style={{ height }}
+      >
         {series.length === 0 && <div className="lq-chart__empty">Aucune donnée</div>}
       </div>
     );
@@ -185,7 +199,7 @@ export function LineAreaChart({
     : null;
 
   return (
-    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")}>
+    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", embedded && "lq-chart--embedded", className].filter(Boolean).join(" ")}>
       <div className="lq-chart__toolbar">
         {zoomable && isZoomed && (
           <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
@@ -212,11 +226,25 @@ export function LineAreaChart({
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
           <ChartAxis
             scale={zoomedYScale}
-            orientation="left"
+            orientation={yAxisOrientation}
+            transform={yAxisOrientation === "right" ? `translate(${dims.boundedWidth}, 0)` : undefined}
             grid={showGrid}
             gridLength={dims.boundedWidth}
             tickFormat={formatY ? (v) => formatY(Number(v)) : undefined}
           />
+          {/* d3's own X-axis domain line only spans its scale's range ([0, boundedWidth]) — with
+              the Y axis moved into a right-side margin column, that left it short of the chart's
+              actual right edge, same gap CandlestickChart's own axis-line-extension already
+              fixes for its date axis. */}
+          {yAxisOrientation === "right" && (
+            <line
+              className="lq-chart__axis-line-extension"
+              x1={dims.boundedWidth}
+              x2={dims.boundedWidth + dims.margin.right}
+              y1={dims.boundedHeight}
+              y2={dims.boundedHeight}
+            />
+          )}
           <ChartAxis
             scale={zoomedXScale}
             orientation="bottom"
@@ -279,9 +307,9 @@ export function LineAreaChart({
           <rect
             ref={yAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--y"
-            x={-dims.margin.left}
+            x={yAxisOrientation === "right" ? dims.boundedWidth : -dims.margin.left}
             y={0}
-            width={dims.margin.left}
+            width={yAxisOrientation === "right" ? dims.margin.right : dims.margin.left}
             height={dims.boundedHeight}
             onPointerDown={yAxisDrag.onPointerDown}
             onPointerMove={yAxisDrag.onPointerMove}

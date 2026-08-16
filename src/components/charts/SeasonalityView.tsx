@@ -5,7 +5,8 @@ import { LineAreaChart } from "./LineAreaChart";
 import { Select } from "../forms/Select";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
-import { ChevronDownIcon } from "../icons";
+import { ChevronDownIcon, ChevronLeftIcon } from "../icons";
+import { DEFAULT_MARGIN } from "./candlestick/constants";
 import "./charts-shared.css";
 
 const GRANULARITY_OPTIONS: { value: SeasonalityGranularity; label: string }[] = [
@@ -17,8 +18,17 @@ const GRANULARITY_OPTIONS: { value: SeasonalityGranularity; label: string }[] = 
 
 export interface SeasonalityViewProps {
   data: Candle[];
-  /** Fixed height in px for the chart area (controls stack above it, adding a little of their
-   *  own). Fills 100% of the container's width regardless. */
+  /** Shown in the header, next to "— Saisonnalité" — same convention as the main chart's own
+   *  symbol label. */
+  symbol?: string;
+  /** Returns to the regular (non-seasonality) chart body. */
+  onBack: () => void;
+  /** Same gate CandlestickChart's own header uses (`showHeader`) — without it there'd be no way
+   *  back out of seasonality mode, so this only ever hides the header in the same edge case the
+   *  main chart's own header would already be hidden in. Default true. */
+  showHeader?: boolean;
+  /** Fixed height in px for the chart area (the header adds a little of its own on top). Fills
+   *  100% of the container's width regardless. */
   height?: number;
   className?: string;
 }
@@ -27,11 +37,15 @@ export interface SeasonalityViewProps {
  * Presentational half of the seasonality feature — `computeSeasonality` (see
  * `internal/seasonality.ts`) does the actual aggregation, kept entirely independent of this
  * component (and of React) so it can be tested, reused, or extended on its own. This component
- * owns only its own controls (granularity, year include/exclude) and renders the result through
- * `LineAreaChart` rather than a bespoke chart of its own — a seasonal path is just one more line
- * series once it's been computed, no reason to re-implement axes/zoom/hover for it.
+ * owns its whole header (back button, title, granularity/years controls — the same row
+ * CandlestickChart's own `ChartHeader` occupies in the non-seasonality view) plus the chart body,
+ * rendered through `LineAreaChart` rather than a bespoke chart of its own — a seasonal path is
+ * just one more line series once it's been computed, no reason to re-implement axes/zoom/hover
+ * for it. `LineAreaChart` is told to match the main chart's own right-side price-axis convention
+ * (`yAxisOrientation="right"`, `margin` equal to `DEFAULT_MARGIN`) and to drop its own border
+ * (`embedded`) since it's nested inside CandlestickChart's own bordered root.
  */
-export function SeasonalityView({ data, height = 380, className }: SeasonalityViewProps) {
+export function SeasonalityView({ data, symbol, onBack, showHeader = true, height = 380, className }: SeasonalityViewProps) {
   const [granularity, setGranularity] = useState<SeasonalityGranularity>("week");
   const availableYears = useMemo(() => Array.from(new Set(data.map((d) => d.date.getUTCFullYear()))).sort((a, b) => a - b), [data]);
   // Excluded, not included: unchecking a handful of years (an election year, a crash) out of a
@@ -56,31 +70,37 @@ export function SeasonalityView({ data, height = 380, className }: SeasonalityVi
 
   return (
     <div className={["lq-chart__seasonality", className].filter(Boolean).join(" ")}>
-      <div className="lq-chart__seasonality-controls">
-        <Select
-          value={granularity}
-          onChange={(v) => setGranularity(v as SeasonalityGranularity)}
-          options={GRANULARITY_OPTIONS}
-          ariaLabel="Granularité de la saisonnalité"
-        />
-        <button
-          ref={yearPickerAnchorRef}
-          type="button"
-          className="lq-chart__timeframe-trigger"
-          onClick={() => setYearPickerOpen((o) => !o)}
-          aria-label={`Années incluses : ${yearsLabel}`}
-        >
-          {yearsLabel}
-          <ChevronDownIcon size={12} />
-        </button>
-        <Popover open={yearPickerOpen} onClose={() => setYearPickerOpen(false)} anchorRef={yearPickerAnchorRef} placement="bottom">
-          <div className="lq-chart__seasonality-year-picker">
-            {availableYears.map((year) => (
-              <Checkbox key={year} checked={!excludedYears.has(year)} onChange={() => toggleYear(year)} label={String(year)} />
-            ))}
-          </div>
-        </Popover>
-      </div>
+      {showHeader && (
+        <div className="lq-chart__header">
+          <button type="button" className="lq-chart__icon-button" onClick={onBack} aria-label="Retour au graphique">
+            <ChevronLeftIcon size={14} />
+          </button>
+          <span className="lq-chart__symbol-info-name">{symbol ? `${symbol} — Saisonnalité` : "Saisonnalité"}</span>
+          <Select
+            value={granularity}
+            onChange={(v) => setGranularity(v as SeasonalityGranularity)}
+            options={GRANULARITY_OPTIONS}
+            ariaLabel="Granularité de la saisonnalité"
+          />
+          <button
+            ref={yearPickerAnchorRef}
+            type="button"
+            className="lq-chart__timeframe-trigger"
+            onClick={() => setYearPickerOpen((o) => !o)}
+            aria-label={`Années incluses : ${yearsLabel}`}
+          >
+            {yearsLabel}
+            <ChevronDownIcon size={12} />
+          </button>
+          <Popover open={yearPickerOpen} onClose={() => setYearPickerOpen(false)} anchorRef={yearPickerAnchorRef} placement="bottom">
+            <div className="lq-chart__seasonality-year-picker">
+              {availableYears.map((year) => (
+                <Checkbox key={year} checked={!excludedYears.has(year)} onChange={() => toggleYear(year)} label={String(year)} />
+              ))}
+            </div>
+          </Popover>
+        </div>
+      )}
 
       {result.buckets.length === 0 ? (
         <div className="lq-chart__empty">Pas assez de données pour calculer une saisonnalité.</div>
@@ -115,6 +135,9 @@ export function SeasonalityView({ data, height = 380, className }: SeasonalityVi
           formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
           showLegend={false}
           fullscreenToggle={false}
+          yAxisOrientation="right"
+          embedded
+          margin={DEFAULT_MARGIN}
           height={height}
         />
       )}

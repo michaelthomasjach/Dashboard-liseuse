@@ -26,7 +26,6 @@ import { ChartSettingsModals } from "./candlestick/components/ChartSettingsModal
 import { SymbolSearchModal } from "./candlestick/components/SymbolSearchModal";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
-import { ChevronLeftIcon } from "../icons";
 import "./charts-shared.css";
 
 import type { Candle } from "./candlestick/interfaces/Candle.interface";
@@ -713,22 +712,8 @@ export function CandlestickChart({
         />
       )}
 
-      {/* Deliberately its own small header rather than trying to keep the regular one's
-          timeframe/display-mode/indicator controls both visible and meaningful over a view none
-          of them actually apply to — a dedicated "back" button here is a clearer way out of
-          seasonality mode than expecting the same button that opened it to also be the one that
-          closes it. */}
-      {showHeader && seasonalityOpen && (
-        <div className="lq-chart__header" style={{ width: dims.width }}>
-          <button type="button" className="lq-chart__icon-button" onClick={() => setSeasonalityOpen(false)} aria-label="Retour au graphique">
-            <ChevronLeftIcon size={14} />
-          </button>
-          <span className="lq-chart__symbol-info-name">{symbol ? `${symbol} — Saisonnalité` : "Saisonnalité"}</span>
-        </div>
-      )}
-
       {seasonalityOpen ? (
-        <SeasonalityView data={data} height={plotHeight} />
+        <SeasonalityView data={data} symbol={symbol} onBack={() => setSeasonalityOpen(false)} showHeader={showHeader} height={plotHeight} />
       ) : (
       <div
         className="lq-chart__plot"
