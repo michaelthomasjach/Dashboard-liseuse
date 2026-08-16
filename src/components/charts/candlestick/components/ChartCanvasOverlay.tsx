@@ -1,0 +1,507 @@
+import type { RefObject, Dispatch, SetStateAction } from "react";
+import type * as React from "react";
+import * as d3 from "d3";
+import { ChartAxis } from "../../ChartAxis";
+import type { Indicator } from "../interfaces/Indicator.interface";
+import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
+import type { DataPoint } from "../interfaces/DataPoint.interface";
+import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
+import type { ChartEvent } from "../interfaces/ChartEvent.interface";
+import { allPointsOf, snapPixel } from "../drawingGeometry";
+import { isFundamentalKind, formatFundamentalValue } from "../indicators";
+import { AXIS_HANDLE_FRACTION_X, AXIS_HANDLE_FRACTION_Y } from "../constants";
+import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS } from "../eventsCatalog";
+
+interface AxisDragHandlers {
+  onPointerDown: (e: React.PointerEvent) => void;
+  onPointerMove: (e: React.PointerEvent) => void;
+  onPointerUp: (e: React.PointerEvent) => void;
+}
+
+export interface ChartCanvasOverlayProps {
+  canvasRef: RefObject<HTMLCanvasElement>;
+  dims: { margin: { top: number; left: number; right: number; bottom: number }; boundedWidth: number; width: number | undefined };
+  plotBoundedHeight: number;
+  plotHeight: number;
+  clipId: string;
+  zoomedPriceScale: d3.ScaleLinear<number, number>;
+  priceAxisFmt: (value: number) => string;
+  volumeVisible: boolean;
+  volumeCollapsed: boolean;
+  priceHeight: number;
+  volumeTop: number;
+  zoomedVolumeScale: d3.ScaleLinear<number, number>;
+  vFmt: (value: number) => string;
+  handlePaneYAxisPointerDown: (paneId: string, size: number) => (e: React.PointerEvent) => void;
+  handlePaneYAxisPointerMove: (e: React.PointerEvent) => void;
+  handlePaneYAxisPointerUp: (e: React.PointerEvent) => void;
+  resetPaneYAxis: (paneId: string) => void;
+  volumeHeight: number;
+  ownPaneIndicators: Indicator[];
+  indicatorPaneTops: number[];
+  indicatorPaneHeights: number[];
+  zoomedOwnPaneScales: Record<string, d3.ScaleLinear<number, number>>;
+  zoomedXScale: d3.ScaleLinear<number, number>;
+  dateTickValues: number[];
+  dateTickFormat: (value: number) => string;
+  zoomRef: RefObject<SVGRectElement>;
+  activeTool: DrawingToolType | null;
+  handleOverlayPointerDown: (e: React.PointerEvent<SVGRectElement>) => void;
+  handlePointerMove: (e: React.PointerEvent<SVGRectElement>) => void;
+  handleOverlayPointerUp: (e: React.PointerEvent<SVGRectElement>) => void;
+  handleOverlayClick: (e: React.MouseEvent<SVGRectElement>) => void;
+  handleOverlayDoubleClick: () => void;
+  yAxisWheelRef: RefObject<SVGRectElement>;
+  yAxisDrag: AxisDragHandlers;
+  resetYAxis: () => void;
+  xAxisWheelRef: RefObject<SVGRectElement>;
+  xAxisDrag: AxisDragHandlers;
+  resetX: () => void;
+  visibleDrawings: TrendLineDrawing[];
+  hoveredDrawingId: string | null;
+  indexForDate: (date: Date) => number;
+  pixelYForDrawing: (dr: TrendLineDrawing) => number;
+  handleAxisHandlePointerDown: (drawingId: string) => (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleAxisHandlePointerMove: (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleAxisHandlePointerUp: (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleEndpointPointerDown: (drawingId: string, pointIndex: number) => (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleEndpointPointerMove: (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleEndpointPointerUp: (e: React.PointerEvent<SVGCircleElement>) => void;
+  measurePoints: { p1: DataPoint; p2: DataPoint } | null;
+  handleMeasureHandlePointerDown: (point: "p1" | "p2") => (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleMeasureHandlePointerMove: (e: React.PointerEvent<SVGCircleElement>) => void;
+  handleMeasureHandlePointerUp: (e: React.PointerEvent<SVGCircleElement>) => void;
+  eventStacks: { i: number; events: ChartEvent[] }[];
+  dFmt: (date: Date) => string;
+  setEventModalOpen: Dispatch<SetStateAction<boolean>>;
+  setActiveEventStack: Dispatch<SetStateAction<{ i: number; events: ChartEvent[] } | null>>;
+}
+
+/** The chart's canvas (candles/volume/indicators/drawings, all pixel-drawn — see the render
+ *  effect) plus the SVG layer stacked on top of it: axes, the pan/zoom overlay rect, per-pane
+ *  Y-axis drag/wheel strips, drawing/measure handles, and event markers. Purely presentational —
+ *  every interaction is a callback prop from useZoomAndScales/useIndicatorPaneScales/
+ *  useDrawingInteractions/useChartEvents. */
+export function ChartCanvasOverlay({
+  canvasRef,
+  dims,
+  plotBoundedHeight,
+  plotHeight,
+  clipId,
+  zoomedPriceScale,
+  priceAxisFmt,
+  volumeVisible,
+  volumeCollapsed,
+  priceHeight,
+  volumeTop,
+  zoomedVolumeScale,
+  vFmt,
+  handlePaneYAxisPointerDown,
+  handlePaneYAxisPointerMove,
+  handlePaneYAxisPointerUp,
+  resetPaneYAxis,
+  volumeHeight,
+  ownPaneIndicators,
+  indicatorPaneTops,
+  indicatorPaneHeights,
+  zoomedOwnPaneScales,
+  zoomedXScale,
+  dateTickValues,
+  dateTickFormat,
+  zoomRef,
+  activeTool,
+  handleOverlayPointerDown,
+  handlePointerMove,
+  handleOverlayPointerUp,
+  handleOverlayClick,
+  handleOverlayDoubleClick,
+  yAxisWheelRef,
+  yAxisDrag,
+  resetYAxis,
+  xAxisWheelRef,
+  xAxisDrag,
+  resetX,
+  visibleDrawings,
+  hoveredDrawingId,
+  indexForDate,
+  pixelYForDrawing,
+  handleAxisHandlePointerDown,
+  handleAxisHandlePointerMove,
+  handleAxisHandlePointerUp,
+  handleEndpointPointerDown,
+  handleEndpointPointerMove,
+  handleEndpointPointerUp,
+  measurePoints,
+  handleMeasureHandlePointerDown,
+  handleMeasureHandlePointerMove,
+  handleMeasureHandlePointerUp,
+  eventStacks,
+  dFmt,
+  setEventModalOpen,
+  setActiveEventStack,
+}: ChartCanvasOverlayProps) {
+  return (
+    <>
+      <canvas
+        ref={canvasRef}
+        className="lq-chart__canvas"
+        style={{
+          left: dims.margin.left,
+          top: dims.margin.top,
+          width: dims.boundedWidth,
+          height: plotBoundedHeight,
+        }}
+      />
+      <svg className="lq-chart__svg" width={dims.width} height={plotHeight} role="img">
+        <defs>
+          <clipPath id={clipId}>
+            <rect x={0} y={0} width={dims.boundedWidth} height={plotBoundedHeight} />
+          </clipPath>
+        </defs>
+        <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
+          <ChartAxis
+            scale={zoomedPriceScale}
+            orientation="right"
+            transform={`translate(${dims.boundedWidth}, 0)`}
+            tickFormat={(v) => priceAxisFmt(Number(v))}
+          />
+
+          {volumeVisible && (
+            <>
+              {!volumeCollapsed && (
+                <g transform={`translate(0, ${priceHeight + volumeTop})`}>
+                  <ChartAxis
+                    scale={zoomedVolumeScale}
+                    orientation="right"
+                    transform={`translate(${dims.boundedWidth}, 0)`}
+                    ticks={2}
+                    tickFormat={(v) => vFmt(Number(v))}
+                  />
+                  {/* Drag (or double-click to reset) the volume pane's own axis to rescale just
+                      this pane vertically — same convention as the price axis's own strip,
+                      independent of it and of every other pane's own rescale. */}
+                  <rect
+                    className="lq-chart__axis-drag lq-chart__axis-drag--y"
+                    x={dims.boundedWidth}
+                    y={0}
+                    width={dims.margin.right}
+                    height={volumeHeight}
+                    onPointerDown={handlePaneYAxisPointerDown("volume", volumeHeight)}
+                    onPointerMove={handlePaneYAxisPointerMove}
+                    onPointerUp={handlePaneYAxisPointerUp}
+                    onDoubleClick={() => resetPaneYAxis("volume")}
+                  />
+                </g>
+              )}
+              {/* Continues the canvas-drawn divider above volume (which only covers
+                  [0, boundedWidth], the canvas's own extent) across the price axis's
+                  tick-label column so the divider reaches the full chart width and visually
+                  separates volume's own ticks from whatever's above it — priceHeight + volumeTop,
+                  not always priceHeight, now that volume isn't necessarily right after price. */}
+              <line
+                className="lq-chart__price-volume-divider"
+                x1={dims.boundedWidth}
+                x2={dims.boundedWidth + dims.margin.right}
+                y1={snapPixel(priceHeight + volumeTop)}
+                y2={snapPixel(priceHeight + volumeTop)}
+              />
+            </>
+          )}
+
+          {/* Same pair (a few ticks + a divider extension into the price-axis label column) as
+              volume above, once per "own"-pane indicator — zoomedOwnPaneScales is shared with
+              the canvas draw effect so these ticks always land exactly on what's actually
+              drawn, manual rescale included. A drag strip over the ticks lets that rescale
+              happen in the first place, same convention as the price/volume axes. */}
+          {ownPaneIndicators.map((ind, idx) => {
+            const paneTop = priceHeight + indicatorPaneTops[idx];
+            const paneHeight = indicatorPaneHeights[idx];
+            const scale = zoomedOwnPaneScales[ind.id];
+            if (!scale) return null;
+            return (
+              <g key={ind.id}>
+                {!ind.paneCollapsed && (
+                  <g transform={`translate(0, ${paneTop})`}>
+                    <ChartAxis
+                      scale={scale}
+                      orientation="right"
+                      transform={`translate(${dims.boundedWidth}, 0)`}
+                      ticks={3}
+                      tickFormat={isFundamentalKind(ind.kind) ? (v) => formatFundamentalValue(ind.kind, Number(v)) : undefined}
+                    />
+                    <rect
+                      className="lq-chart__axis-drag lq-chart__axis-drag--y"
+                      x={dims.boundedWidth}
+                      y={0}
+                      width={dims.margin.right}
+                      height={paneHeight}
+                      onPointerDown={handlePaneYAxisPointerDown(ind.id, paneHeight)}
+                      onPointerMove={handlePaneYAxisPointerMove}
+                      onPointerUp={handlePaneYAxisPointerUp}
+                      onDoubleClick={() => resetPaneYAxis(ind.id)}
+                    />
+                  </g>
+                )}
+                <line
+                  className="lq-chart__price-volume-divider"
+                  x1={dims.boundedWidth}
+                  x2={dims.boundedWidth + dims.margin.right}
+                  y1={snapPixel(paneTop)}
+                  y2={snapPixel(paneTop)}
+                />
+              </g>
+            );
+          })}
+
+          <ChartAxis
+            scale={zoomedXScale}
+            orientation="bottom"
+            transform={`translate(0, ${plotBoundedHeight})`}
+            tickValues={dateTickValues}
+            tickFormat={dateTickFormat}
+          />
+          {/* The date axis's own domain line only spans [0, boundedWidth] — its own scale's
+              range, i.e. the canvas/plot area — so it stopped short of the chart's actual
+              right edge, leaving the price-axis label column above it without a matching
+              line underneath. Same fix as the price/volume divider above: continue it across
+              that column with a plain SVG line. */}
+          <line
+            className="lq-chart__axis-line-extension"
+            x1={dims.boundedWidth}
+            x2={dims.boundedWidth + dims.margin.right}
+            y1={snapPixel(plotBoundedHeight)}
+            y2={snapPixel(plotBoundedHeight)}
+          />
+
+          <rect
+            ref={zoomRef}
+            className={["lq-chart__overlay", activeTool && "lq-chart__overlay--drawing"].filter(Boolean).join(" ")}
+            width={dims.boundedWidth}
+            height={plotBoundedHeight}
+            onPointerDown={handleOverlayPointerDown}
+            onPointerMove={handlePointerMove}
+            onPointerUp={handleOverlayPointerUp}
+            onClick={handleOverlayClick}
+            onDoubleClick={handleOverlayDoubleClick}
+          />
+
+          <rect
+            ref={yAxisWheelRef}
+            className="lq-chart__axis-drag lq-chart__axis-drag--y"
+            x={dims.boundedWidth}
+            y={0}
+            width={dims.margin.right}
+            height={priceHeight}
+            onPointerDown={yAxisDrag.onPointerDown}
+            onPointerMove={yAxisDrag.onPointerMove}
+            onPointerUp={yAxisDrag.onPointerUp}
+            onDoubleClick={resetYAxis}
+          />
+          <rect
+            ref={xAxisWheelRef}
+            className="lq-chart__axis-drag lq-chart__axis-drag--x"
+            x={0}
+            y={plotBoundedHeight}
+            width={dims.boundedWidth}
+            height={dims.margin.bottom}
+            onPointerDown={xAxisDrag.onPointerDown}
+            onPointerMove={xAxisDrag.onPointerMove}
+            onPointerUp={xAxisDrag.onPointerUp}
+            onDoubleClick={resetX}
+          />
+
+          {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
+              actually receive pointer events instead of the overlay swallowing them first. */}
+          <g clipPath={`url(#${clipId})`}>
+            {visibleDrawings.map((dr) => {
+              const isHovered = hoveredDrawingId === dr.id;
+              if (!isHovered) return null;
+              // A freehand stroke can have dozens of sampled points — individually draggable
+              // handles for each would be impractical clutter, so it only moves as a whole
+              // (the generic whole-body drag in handlePointerMove already covers that, no
+              // per-type code needed there since it shifts every point — extraPoints included —
+              // by the same pixel delta regardless of how many there are).
+              if (dr.lineType === "brush") return null;
+              // Data-driven (see onAddSymbolOverlay) — x1/y1/x2/y2 aren't real coordinates for
+              // it (see its own doc comment), so there's nothing meaningful to drag by point or
+              // as a whole (see handlePointerMove's own exclusion). Still hoverable/selectable/
+              // deletable via Suppr and editable via double-click, same as brush above.
+              if (dr.lineType === "symbolOverlay") return null;
+              // Axis-constrained lines get a single handle at a fixed point along the axis
+              // they don't move on (never at their data endpoints, which aren't meaningful
+              // drag targets here — the whole line only has one degree of freedom).
+              if (dr.lineType === "horizontal") {
+                const cy = pixelYForDrawing(dr);
+                return (
+                  <circle
+                    key={dr.id}
+                    className="lq-chart__drawing-handle"
+                    cx={dims.boundedWidth * AXIS_HANDLE_FRACTION_X}
+                    cy={cy}
+                    r={5}
+                    onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                    onPointerMove={handleAxisHandlePointerMove}
+                    onPointerUp={handleAxisHandlePointerUp}
+                  />
+                );
+              }
+              if (dr.lineType === "vertical") {
+                return (
+                  <circle
+                    key={dr.id}
+                    className="lq-chart__drawing-handle"
+                    cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
+                    cy={plotBoundedHeight * AXIS_HANDLE_FRACTION_Y}
+                    r={5}
+                    onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                    onPointerMove={handleAxisHandlePointerMove}
+                    onPointerUp={handleAxisHandlePointerUp}
+                  />
+                );
+              }
+              // A ray's one handle sits right at its actual anchor point (unlike
+              // horizontal/vertical's fixed-fraction handle) since that anchor is itself
+              // meaningful and draggable in both axes.
+              if (dr.lineType === "ray") {
+                const cy = pixelYForDrawing(dr);
+                return (
+                  <circle
+                    key={dr.id}
+                    className="lq-chart__drawing-handle"
+                    cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
+                    cy={cy}
+                    r={5}
+                    onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                    onPointerMove={handleAxisHandlePointerMove}
+                    onPointerUp={handleAxisHandlePointerUp}
+                  />
+                );
+              }
+              // An arrow marker's one handle sits at its own point, same as a ray's anchor
+              // above — x2/y2 mirrors x1/y1 automatically (see handleAxisHandlePointerMove).
+              if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
+                return (
+                  <circle
+                    key={dr.id}
+                    className="lq-chart__drawing-handle"
+                    cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
+                    cy={zoomedPriceScale(dr.y1)}
+                    r={5}
+                    onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                    onPointerMove={handleAxisHandlePointerMove}
+                    onPointerUp={handleAxisHandlePointerUp}
+                  />
+                );
+              }
+              // Every point (x1/y1, x2/y2, and any extraPoints) gets its own independently
+              // draggable handle via the same generic pointIndex-based handler — covers a
+              // regular trend line/extended/fibonacci's two points and
+              // fibonacciExtension/elliottCorrection/elliottImpulse's extra ones alike, with no
+              // per-tool-specific handle code needed beyond channel's own 3rd (below), which
+              // adjusts channelOffset instead of a raw point.
+              const points = allPointsOf(dr);
+              const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+              const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+              return (
+                <g key={dr.id}>
+                  {points.map((p, i) => (
+                    <circle
+                      key={i}
+                      className="lq-chart__drawing-handle"
+                      cx={zoomedXScale(indexForDate(p.x) + 0.5)}
+                      cy={zoomedPriceScale(p.y)}
+                      r={5}
+                      onPointerDown={handleEndpointPointerDown(dr.id, i)}
+                      onPointerMove={handleEndpointPointerMove}
+                      onPointerUp={handleEndpointPointerUp}
+                    />
+                  ))}
+                  {dr.lineType === "channel" && (
+                    <circle
+                      className="lq-chart__drawing-handle"
+                      cx={(x1 + x2) / 2}
+                      cy={zoomedPriceScale((dr.y1 + dr.y2) / 2 + (dr.channelOffset ?? 0))}
+                      r={5}
+                      onPointerDown={handleAxisHandlePointerDown(dr.id)}
+                      onPointerMove={handleAxisHandlePointerMove}
+                      onPointerUp={handleAxisHandlePointerUp}
+                    />
+                  )}
+                </g>
+              );
+            })}
+            {/* The measure tool's own two points, draggable to redefine the measurement after
+                the tool has already deselected itself (see the "measure" branch of
+                handleOverlayClick) — always shown while a measurement exists rather than
+                hover-gated like the drawing handles above, since there's only ever at most one
+                measurement on screen at a time. */}
+            {measurePoints && (
+              <>
+                <circle
+                  className="lq-chart__drawing-handle"
+                  cx={zoomedXScale(indexForDate(measurePoints.p1.x) + 0.5)}
+                  cy={zoomedPriceScale(measurePoints.p1.y)}
+                  r={5}
+                  onPointerDown={handleMeasureHandlePointerDown("p1")}
+                  onPointerMove={handleMeasureHandlePointerMove}
+                  onPointerUp={handleMeasureHandlePointerUp}
+                />
+                <circle
+                  className="lq-chart__drawing-handle"
+                  cx={zoomedXScale(indexForDate(measurePoints.p2.x) + 0.5)}
+                  cy={zoomedPriceScale(measurePoints.p2.y)}
+                  r={5}
+                  onPointerDown={handleMeasureHandlePointerDown("p2")}
+                  onPointerMove={handleMeasureHandlePointerMove}
+                  onPointerUp={handleMeasureHandlePointerUp}
+                />
+              </>
+            )}
+          </g>
+
+          {/* Rendered last, same reasoning as the drawing handles above — needs to sit on top
+              of the pan/zoom overlay to receive the pointer events its own <title> tooltip
+              (and, now, its click) depends on. Anchored to the price/volume divider (not the
+              tallest/shortest visible candle) so the row stays put while panning/zooming. One
+              marker per `eventStacks` entry, not per raw event — several events sharing a
+              candle index render as a single "stack" marker (count as its glyph, neutral
+              accent color instead of any one event's own) rather than fully overlapping,
+              indistinguishable circles. */}
+          {eventStacks.length > 0 && (
+            <g className="lq-chart__events">
+              {eventStacks.map((stack) => {
+                const cx = zoomedXScale(stack.i + 0.5);
+                const cy = priceHeight - EVENT_MARKER_OFFSET;
+                const stacked = stack.events.length > 1;
+                const color = stacked ? "var(--lq-color-accent)" : stack.events[0].color;
+                const glyph = stacked ? String(stack.events.length) : (stack.events[0].symbol ?? stack.events[0].kind.charAt(0)).slice(0, 2).toUpperCase();
+                const title = stacked
+                  ? `${stack.events.length} évènements — cliquer pour les afficher`
+                  : `${dFmt(stack.events[0].date)} — ${stack.events[0].label}`;
+                return (
+                  <g
+                    key={stack.i}
+                    className="lq-chart__event-marker"
+                    transform={`translate(${cx}, ${cy})`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEventModalOpen(false);
+                      setActiveEventStack({ i: stack.i, events: stack.events });
+                    }}
+                  >
+                    <title>{title}</title>
+                    <line x1={0} x2={0} y1={EVENT_MARKER_RADIUS} y2={priceHeight - cy} stroke={color} strokeDasharray="2,2" />
+                    <circle r={EVENT_MARKER_RADIUS} fill={color} />
+                    <text textAnchor="middle" dominantBaseline="central">
+                      {glyph}
+                    </text>
+                  </g>
+                );
+              })}
+            </g>
+          )}
+        </g>
+      </svg>
+    </>
+  );
+}
