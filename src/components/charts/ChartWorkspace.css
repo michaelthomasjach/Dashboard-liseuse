@@ -1,0 +1,60 @@
+.lq-chart-workspace {
+  display: grid;
+  gap: var(--lq-space-4);
+  width: 100%;
+}
+
+/* Each panel is a plain grid cell — CandlestickChart itself already fills 100% of whatever
+   container it's in (see its own `width` prop doc), so no extra sizing needed here beyond
+   min-width:0, without which a grid track can refuse to shrink below its content's own intrinsic
+   width and blow out the layout. */
+.lq-chart-workspace > * {
+  min-width: 0;
+}
+
+/* "Graphiques liés" modal tree (see LinkGroupsModal) — groups first, each with its own header row
+   and indented members, then any ungrouped panels as plain flat rows below. */
+.lq-link-groups__tree {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-2);
+}
+
+.lq-link-groups__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-1);
+  padding: var(--lq-space-2);
+  background-color: var(--lq-color-hover);
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-link-groups__group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+}
+
+.lq-link-groups__unlink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-link-groups__unlink:hover {
+  color: var(--lq-color-down);
+  background-color: var(--lq-color-panel);
+}
+
+.lq-link-groups__nested {
+  padding-left: var(--lq-space-4);
+}

@@ -6,6 +6,7 @@ import {
   CalendarIcon,
   MaximizeIcon,
   MinimizeIcon,
+  LinkIcon,
 } from "../../../icons";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
 import type { TimeframeEntry } from "../interfaces/TimeframeEntry.interface";
@@ -49,6 +50,9 @@ export interface ChartHeaderProps {
   onSaveTemplateAs: (name: string) => void;
   onLoadTemplate: (id: string) => void;
   onDeleteTemplate: (id: string) => void;
+  linkable: boolean;
+  isLinked: boolean;
+  onLinkClick: (() => void) | undefined;
 }
 
 /** The chart's main (non-seasonality) header: timeframe picker, display-mode picker, "add
@@ -90,6 +94,9 @@ export function ChartHeader({
   onSaveTemplateAs,
   onLoadTemplate,
   onDeleteTemplate,
+  linkable,
+  isLinked,
+  onLinkClick,
 }: ChartHeaderProps) {
   return (
     <div className="lq-chart__header" style={{ width: dims.width }}>
@@ -215,16 +222,36 @@ export function ChartHeader({
           {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
         </button>
       )}
-      {showTemplates && (
-        <TemplateControls
-          templates={templates}
-          activeTemplateId={activeTemplateId}
-          isDirty={templatesDirty}
-          onSave={onSaveTemplate}
-          onSaveAs={onSaveTemplateAs}
-          onLoad={onLoadTemplate}
-          onDelete={onDeleteTemplate}
-        />
+      {/* `margin-left: auto` lives on this one wrapper, not the individual pieces inside it — see
+          .lq-chart__header-right's own CSS comment — so a link button and TemplateControls both
+          land flush together at the bar's far right edge instead of each fighting the other for
+          the same leftover space. */}
+      {(linkable || showTemplates) && (
+        <div className="lq-chart__header-right">
+          {linkable && (
+            <button
+              type="button"
+              className={["lq-chart__icon-button", isLinked && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={onLinkClick}
+              aria-label={isLinked ? "Graphiques liés (gérer les groupes)" : "Lier ce graphique à d'autres"}
+              aria-pressed={isLinked}
+              title={isLinked ? "Graphiques liés (gérer les groupes)" : "Lier ce graphique à d'autres"}
+            >
+              <LinkIcon size={14} />
+            </button>
+          )}
+          {showTemplates && (
+            <TemplateControls
+              templates={templates}
+              activeTemplateId={activeTemplateId}
+              isDirty={templatesDirty}
+              onSave={onSaveTemplate}
+              onSaveAs={onSaveTemplateAs}
+              onLoad={onLoadTemplate}
+              onDelete={onDeleteTemplate}
+            />
+          )}
+        </div>
       )}
     </div>
   );

@@ -23,6 +23,9 @@ export type {
 export { ChartEventTooltip } from "./EventTooltip";
 export type { ChartEventTooltipProps } from "./EventTooltip";
 
+export { ChartWorkspace } from "./ChartWorkspace";
+export type { ChartWorkspaceProps } from "./ChartWorkspace";
+
 export { SeasonalityView } from "./SeasonalityView";
 export type { SeasonalityViewProps } from "./SeasonalityView";
 export { computeSeasonality } from "./internal/seasonality";

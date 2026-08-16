@@ -158,6 +158,29 @@ export interface CandlestickChartProps {
    *  static historical data the countdown will just sit at 00:00 once it reaches it, since
    *  nothing here fetches new candles on its own. Default false. */
   livePrice?: boolean;
+  /** An externally-driven hover date — e.g. from `ChartWorkspace` syncing the crosshair across a
+   *  group of linked charts. While set, this chart draws its own crosshair (vertical line, date
+   *  badge, OHLC readout) at whichever of its own candles is nearest that date, exactly as if the
+   *  cursor were there — *unless* the cursor is actually, physically over this chart right now,
+   *  which always wins. Only the time axis syncs this way: the horizontal price line and the
+   *  price/volume/indicator-pane value badges stay tied to the real cursor's own Y position,
+   *  since a pixel Y from one chart's price scale means nothing on another's. Pass `null`/omit
+   *  for a chart that isn't part of any sync group. */
+  syncedHoverDate?: Date | null;
+  /** Fires whenever *this* chart's own real (not synced-in) hover changes — the date of whichever
+   *  candle the cursor is over, or `null` once it leaves. This is what a `ChartWorkspace` reads to
+   *  compute `syncedHoverDate` for every other chart in the same link group. */
+  onHoverDateChange?: (date: Date | null) => void;
+  /** Shows a chain-link button in the header (top right, alongside Save/templates if those are
+   *  also on) — click reports back via `onLinkClick` rather than doing anything on its own, since
+   *  linking charts together is inherently a multi-chart concept this component has no way to
+   *  know about by itself (see `ChartWorkspace`, which sets this — a standalone chart has no
+   *  reason to set it). Default false. */
+  linkable?: boolean;
+  /** Highlights the link button to show this chart is currently part of a link group. Purely
+   *  cosmetic — `ChartWorkspace` is what actually knows the group membership. Default false. */
+  isLinked?: boolean;
+  onLinkClick?: () => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }

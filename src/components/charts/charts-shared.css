@@ -1320,14 +1320,24 @@
   animation: lq-chart-spin 0.8s linear infinite;
 }
 
-/* Pushes the Save button + templates dropdown trigger (see TemplateControls) to the header bar's
-   own far right edge — .lq-chart__header is a plain packed-left flex row with no
-   space-between/other push-right mechanism, so this margin is what actually does it. */
-.lq-chart__header-templates {
+/* Pushes everything meant to sit at the header bar's own far right edge (the link button, the
+   Save button + templates dropdown trigger) there as one unit — .lq-chart__header is a plain
+   packed-left flex row with no space-between/other push-right mechanism, so this margin is what
+   actually does it. Kept on this single shared wrapper (see ChartHeader) rather than on each
+   piece individually: multiple `margin-left: auto` siblings in the same flex row split the
+   leftover space *between* them instead of gluing them together, which would open a visible gap
+   between the link button and the Save/templates group. */
+.lq-chart__header-right {
   display: flex;
   align-items: center;
   gap: 6px;
   margin-left: auto;
+}
+
+.lq-chart__header-templates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 /* Saved-templates dropdown (see TemplateControls) — one row per template, name on the left

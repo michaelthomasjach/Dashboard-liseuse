@@ -1,3 +1,18 @@
+import type { Candle } from "./interfaces/Candle.interface";
+
+/** The live OHLC readout, top-left of the price plot — the hovered candle while hovering, the
+ *  most recent one otherwise (so the readout is never blank). % is against the *previous*
+ *  candle's close (not this candle's own open), matching how a trading platform's own top-bar
+ *  readout reads "change since last close" rather than "change within this bar". */
+export function computeOhlcReadout(data: Candle[], hoverIndex: number | null) {
+  const index = hoverIndex !== null ? hoverIndex : data.length - 1;
+  const candle = data[index];
+  const prevClose = index > 0 ? data[index - 1].close : candle.open;
+  const delta = candle.close - prevClose;
+  const deltaPct = prevClose !== 0 ? (delta / prevClose) * 100 : 0;
+  return { candle, delta, deltaPct, sign: delta >= 0 ? "+" : "" };
+}
+
 /** Picks whichever of black/white reads better against `hex` (a "#rrggbb" background), by
  *  perceived luminance (ITU-R BT.601 weights) rather than a plain average — the eye is far more
  *  sensitive to green than red/blue, so that's the split that actually predicts legibility. Used

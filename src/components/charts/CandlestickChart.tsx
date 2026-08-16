@@ -9,6 +9,7 @@ import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
 import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
 import { useChartTemplates } from "./candlestick/hooks/useChartTemplates";
+import { useHoverSync } from "./candlestick/hooks/useHoverSync";
 import { usePaneDragReorder } from "./candlestick/hooks/usePaneDragReorder";
 import { useThemePaletteTick } from "./candlestick/hooks/useThemePaletteTick";
 import { useDefaultDrawingColor } from "./candlestick/hooks/useDefaultDrawingColor";
@@ -78,7 +79,7 @@ import {
   HEADER_HEIGHT,
   SUB_PANE_COLLAPSED_HEIGHT,
 } from "./candlestick/constants";
-import { formatPercentFromReference } from "./candlestick/formatting";
+import { formatPercentFromReference, computeOhlcReadout } from "./candlestick/formatting";
 
 export function CandlestickChart({
   data,
@@ -120,6 +121,11 @@ export function CandlestickChart({
   defaultFavoriteSymbolIds,
   onFavoriteSymbolIdsChange,
   livePrice = false,
+  syncedHoverDate,
+  onHoverDateChange,
+  linkable = false,
+  isLinked = false,
+  onLinkClick,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -356,6 +362,8 @@ export function CandlestickChart({
     initialVisibleCandles,
   });
 
+  const { effectiveHoverIndex, effectiveHovered } = useHoverSync({ data, hoverIndex, indexForDate, dateForIndex, syncedHoverDate, onHoverDateChange });
+
   usePaneDragReorder({
     draggingPaneId,
     setDraggingPaneId,
@@ -539,12 +547,12 @@ export function CandlestickChart({
       indicators,
       overlayProjections,
       symbolOverlays,
-      hovered,
+      hovered: effectiveHovered,
       hoverY,
       hoverVolumeY,
       hoverIndicatorPaneId,
       hoverIndicatorPaneY,
-      hoverIndex,
+      hoverIndex: effectiveHoverIndex,
       visibleDrawings,
       hoveredDrawingId,
       activeTool,
@@ -587,12 +595,12 @@ export function CandlestickChart({
     indicators,
     overlayProjections,
     symbolOverlays,
-    hovered,
+    effectiveHovered,
     hoverY,
     hoverVolumeY,
     hoverIndicatorPaneId,
     hoverIndicatorPaneY,
-    hoverIndex,
+    effectiveHoverIndex,
     visibleDrawings,
     hoveredDrawingId,
     activeTool,
@@ -634,16 +642,7 @@ export function CandlestickChart({
   // MACD) already have their own pane header and don't belong here too.
   const overlayIndicators = indicators.filter((ind) => indicatorCatalogEntry(ind.kind).pane === "price");
 
-  // Live OHLC readout, top-left of the price plot — the hovered candle while hovering, the most
-  // recent one otherwise (so the readout is never blank). % is against the *previous* candle's
-  // close (not this candle's own open), matching how a trading platform's own top-bar readout
-  // reads "change since last close" rather than "change within this bar".
-  const ohlcIndex = hoverIndex !== null ? hoverIndex : data.length - 1;
-  const ohlcCandle = data[ohlcIndex];
-  const ohlcPrevClose = ohlcIndex > 0 ? data[ohlcIndex - 1].close : ohlcCandle.open;
-  const ohlcDelta = ohlcCandle.close - ohlcPrevClose;
-  const ohlcDeltaPct = ohlcPrevClose !== 0 ? (ohlcDelta / ohlcPrevClose) * 100 : 0;
-  const ohlcSign = ohlcDelta >= 0 ? "+" : "";
+  const { candle: ohlcCandle, delta: ohlcDelta, deltaPct: ohlcDeltaPct, sign: ohlcSign } = computeOhlcReadout(data, effectiveHoverIndex);
 
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
@@ -683,6 +682,9 @@ export function CandlestickChart({
           onSaveTemplateAs={saveTemplateAs}
           onLoadTemplate={loadTemplate}
           onDeleteTemplate={deleteTemplate}
+          linkable={linkable}
+          isLinked={isLinked}
+          onLinkClick={onLinkClick}
         />
       )}
 
@@ -779,7 +781,7 @@ export function CandlestickChart({
           setVolumePaneState={setVolumePaneState}
           setVolumeSettingsOpen={setVolumeSettingsOpen}
           data={data}
-          hoverIndex={hoverIndex}
+          hoverIndex={effectiveHoverIndex}
           vFmt={vFmt}
           ownPaneIndicators={ownPaneIndicators}
           indicatorPaneTops={indicatorPaneTops}
@@ -864,9 +866,9 @@ export function CandlestickChart({
           hoverIndicatorPaneY={hoverIndicatorPaneY}
           addIndicatorPaneLine={addIndicatorPaneLine}
           paneScaleAndOffset={paneScaleAndOffset}
-          hovered={hovered}
+          hovered={effectiveHovered}
           zoomedXScale={zoomedXScale}
-          hoverIndex={hoverIndex}
+          hoverIndex={effectiveHoverIndex}
           plotBoundedHeight={plotBoundedHeight}
           dFmt={dFmt}
           addDateLine={addDateLine}

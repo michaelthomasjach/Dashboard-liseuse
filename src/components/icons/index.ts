@@ -44,6 +44,7 @@ export {
   MenuIcon,
   BellIcon,
   SettingsIcon,
+  LinkIcon,
   CreditCardIcon,
   PhoneIcon,
   RefreshIcon,

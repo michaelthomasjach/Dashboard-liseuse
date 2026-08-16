@@ -160,10 +160,9 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
 
   return (
     <>
-      {/* `margin-left: auto` on this wrapper, not the individual buttons — .lq-chart__header is a
-          plain packed-left flex row (no space-between/other push-right mechanism of its own), so
-          this is what actually lands the pair at the bar's far right edge instead of just after
-          whichever button happens to render last. */}
+      {/* Just a plain flex group here — pushing this to the header's own far right edge is
+          .lq-chart__header-right's job (see ChartHeader), shared with the link button so both
+          land flush together instead of each claiming their own leftover space. */}
       <div className="lq-chart__header-templates">
         <button
           type="button"

@@ -334,6 +334,13 @@ export const SettingsIcon = (props: IconProps) => (
   </IconBase>
 );
 
+export const LinkIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M10 14a5 5 0 0 0 7.07 0l2.83-2.83a5 5 0 0 0-7.07-7.07l-1.5 1.5" />
+    <path d="M14 10a5 5 0 0 0-7.07 0L4.1 12.83a5 5 0 0 0 7.07 7.07l1.5-1.5" />
+  </IconBase>
+);
+
 export const CreditCardIcon = (props: IconProps) => (
   <IconBase {...props}>
     <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
