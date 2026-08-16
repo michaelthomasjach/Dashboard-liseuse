@@ -8,6 +8,8 @@ import { useChartEvents } from "./candlestick/hooks/useChartEvents";
 import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
 import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
+import { usePaneDragReorder } from "./candlestick/hooks/usePaneDragReorder";
+import { useThemePaletteTick } from "./candlestick/hooks/useThemePaletteTick";
 import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
@@ -221,9 +223,6 @@ export function CandlestickChart({
     if (categoryId === "elliott") return elliottMenuAnchorRef;
     return linesMenuAnchorRef;
   }
-  const [themeTick, setThemeTick] = useState(0);
-
-
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
@@ -239,18 +238,7 @@ export function CandlestickChart({
   const plotHeight = Math.max(0, dims.height - headerSpace);
   const plotBoundedHeight = Math.max(0, plotHeight - dims.margin.top - dims.margin.bottom);
 
-  // The candles/volume/crosshair/drawings are drawn on a <canvas> for performance with large
-  // datasets (versus one SVG node per candle). Canvas has no live binding to CSS custom
-  // properties, so redraws re-read them from the DOM — this observer just triggers that redraw
-  // whenever the active palette/surface actually changes.
-  useEffect(() => {
-    const el = ref.current;
-    const root = el?.closest(".lq-root");
-    if (!root) return;
-    const observer = new MutationObserver(() => setThemeTick((t) => t + 1));
-    observer.observe(root, { attributes: true, attributeFilter: ["data-lq-palette", "data-lq-surface"] });
-    return () => observer.disconnect();
-  }, [ref]);
+  const themeTick = useThemePaletteTick(ref);
 
   const {
     indicators,
@@ -261,12 +249,9 @@ export function CandlestickChart({
     editingIndicatorId,
     indicatorDraft,
     setIndicatorDraft,
-    hoveredIndicatorId,
     setHoveredIndicatorId,
     indicatorsManagerOpen,
     setIndicatorsManagerOpen,
-    copiedIndicatorRef,
-    indicatorIdRef,
     draggingPaneId,
     setDraggingPaneId,
     setVolumePaneState,
@@ -335,70 +320,9 @@ export function CandlestickChart({
     initialVisibleCandles,
   });
 
-  // Drag-to-reorder via a dedicated grip handle (not the whole header — that already carries
-  // resize/double-click/other buttons). Deliberately *not* the usual setPointerCapture-on-the-
-  // handle pattern every other drag in this file uses: a reorder mid-drag causes React to
-  // physically move this very handle's DOM node to its new sibling position, and that move can
-  // drop the browser's own pointer capture on it — losing the pointerup this handle was supposed
-  // to receive, which left the drag "stuck" (dragging visual pinned on, further mouse movement
-  // still reordering things with no button held). A window-level effect isn't tied to any one
-  // element's identity, so it survives the handle moving under it — and re-subscribing whenever
-  // the pane order actually changes (not just once at drag start) keeps its own targetIdx maths
-  // reading the *current* layout instead of a stale one frozen from before this drag's first
-  // reorder, so a single continuous drag can hop across more than one neighbor correctly.
-  useEffect(() => {
-    if (!draggingPaneId) return;
-    const draggedId = draggingPaneId;
-    function paneTopOf(id: string): number {
-      if (id === "volume") return volumeTop;
-      const idx = ownPaneIndicators.findIndex((ind) => ind.id === id);
-      return idx !== -1 ? indicatorPaneTops[idx] : 0;
-    }
-    function paneHeightOf(id: string): number {
-      if (id === "volume") return volumeHeight;
-      const idx = ownPaneIndicators.findIndex((ind) => ind.id === id);
-      return idx !== -1 ? indicatorPaneHeights[idx] : 0;
-    }
-    function onMove(ev: PointerEvent) {
-      const rect = zoomRef.current!.getBoundingClientRect();
-      const relY = ev.clientY - rect.top - priceHeight;
-      // Closest pane by its own vertical *midpoint*, not "whichever pane's full range contains
-      // the cursor" — the latter needed the drag to travel almost the whole height of a taller
-      // neighbor before triggering at all, which read as unresponsive (effectively broken for an
-      // ordinary drag distance) once panes had any real height difference between them. Comparing
-      // midpoints swaps as soon as the cursor crosses halfway into a neighboring pane instead,
-      // matching the usual list-reorder feel regardless of how tall that neighbor is — and always
-      // resolves to *some* index (clamped to the nearest pane), so dragging above the topmost or
-      // below the bottommost pane's own strip still works instead of doing nothing. Works over
-      // `allPanesOrder` (volume included) rather than indicators alone, so volume is just as
-      // draggable — and just as much a target to drop an indicator onto — as any of them.
-      let targetIdx = 0;
-      let bestDist = Infinity;
-      allPanesOrder.forEach((id, i) => {
-        const dist = Math.abs(relY - (paneTopOf(id) + paneHeightOf(id) / 2));
-        if (dist < bestDist) {
-          bestDist = dist;
-          targetIdx = i;
-        }
-      });
-      const currentIds = [...allPanesOrder];
-      const fromIdx = currentIds.indexOf(draggedId);
-      if (fromIdx === -1 || fromIdx === targetIdx) return;
-      currentIds.splice(fromIdx, 1);
-      currentIds.splice(targetIdx, 0, draggedId);
-      reorderPanesRef.current(currentIds);
-    }
-    function onUp() {
-      setDraggingPaneId(null);
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [
+  usePaneDragReorder({
     draggingPaneId,
+    setDraggingPaneId,
     allPanesOrder,
     ownPaneIndicators,
     indicatorPaneTops,
@@ -408,36 +332,7 @@ export function CandlestickChart({
     priceHeight,
     zoomRef,
     reorderPanesRef,
-    setDraggingPaneId,
-  ]);
-
-  // Ctrl/Cmd+C over a hovered legend item copies that indicator (copiedIndicatorRef); Ctrl/Cmd+V
-  // pastes a duplicate of whatever was last copied (new id, everything else — kind/period/
-  // color/etc. — unchanged) appended to the list. Mirrors the browser's own shortcuts rather than
-  // inventing new ones, so it's skipped while a text input has focus for the same reason the
-  // drawing-delete effect above is.
-  useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if (!(e.ctrlKey || e.metaKey)) return;
-      const key = e.key.toLowerCase();
-      if (key !== "c" && key !== "v") return;
-      const active = document.activeElement;
-      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
-      if (isEditableFocused) return;
-      if (key === "c") {
-        if (!hoveredIndicatorId) return;
-        const indicator = indicators.find((i) => i.id === hoveredIndicatorId);
-        if (indicator) copiedIndicatorRef.current = indicator;
-        return;
-      }
-      if (!copiedIndicatorRef.current) return;
-      e.preventDefault();
-      const next = [...indicators, { ...copiedIndicatorRef.current, id: `indicator-${indicatorIdRef.current++}` }];
-      commitIndicators(next);
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [hoveredIndicatorId, indicators, commitIndicators, copiedIndicatorRef, indicatorIdRef]);
+  });
 
   const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoProfile } =
     useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });

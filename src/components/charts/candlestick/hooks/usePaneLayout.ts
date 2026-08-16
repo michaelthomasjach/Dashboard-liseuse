@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorCatalogEntry } from "../indicators";
@@ -162,6 +162,34 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
   function removeIndicator(id: string) {
     commitIndicators(indicators.filter((i) => i.id !== id));
   }
+
+  // Ctrl/Cmd+C over a hovered legend item copies that indicator (copiedIndicatorRef); Ctrl/Cmd+V
+  // pastes a duplicate of whatever was last copied (new id, everything else — kind/period/
+  // color/etc. — unchanged) appended to the list. Mirrors the browser's own shortcuts rather than
+  // inventing new ones, so it's skipped while a text input has focus for the same reason the
+  // drawing-delete effect (see useDrawingState) is.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const active = document.activeElement;
+      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocused) return;
+      if (key === "c") {
+        if (!hoveredIndicatorId) return;
+        const indicator = indicators.find((i) => i.id === hoveredIndicatorId);
+        if (indicator) copiedIndicatorRef.current = indicator;
+        return;
+      }
+      if (!copiedIndicatorRef.current) return;
+      e.preventDefault();
+      const next = [...indicators, { ...copiedIndicatorRef.current, id: `indicator-${indicatorIdRef.current++}` }];
+      commitIndicators(next);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hoveredIndicatorId, indicators, commitIndicators, copiedIndicatorRef, indicatorIdRef]);
 
   const volumeVisible = showVolume && volumePaneState !== "hidden";
   const volumeCollapsed = volumeVisible && volumePaneState === "collapsed";
