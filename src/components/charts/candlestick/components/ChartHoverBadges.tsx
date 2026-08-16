@@ -21,9 +21,14 @@ export interface ChartHoverBadgesProps {
   priceAxisFmt: (value: number) => string;
   hoverVolumeY: number | null;
   priceHeight: number;
+  volumeTop: number;
   addVolumeLine: () => void;
   zoomedVolumeScale: d3.ScaleLinear<number, number>;
   vFmt: (value: number) => string;
+  hoverIndicatorPaneId: string | null;
+  hoverIndicatorPaneY: number | null;
+  addIndicatorPaneLine: () => void;
+  paneScaleAndOffset: (valueAxis: string | undefined) => { scale: d3.ScaleLinear<number, number>; offset: number };
   hovered: Candle | null;
   zoomedXScale: d3.ScaleLinear<number, number>;
   hoverIndex: number | null;
@@ -63,9 +68,14 @@ export function ChartHoverBadges({
   priceAxisFmt,
   hoverVolumeY,
   priceHeight,
+  volumeTop,
   addVolumeLine,
   zoomedVolumeScale,
   vFmt,
+  hoverIndicatorPaneId,
+  hoverIndicatorPaneY,
+  addIndicatorPaneLine,
+  paneScaleAndOffset,
   hovered,
   zoomedXScale,
   hoverIndex,
@@ -114,7 +124,7 @@ export function ChartHoverBadges({
         <div
           className="lq-chart__axis-value lq-chart__axis-value--y"
           style={{
-            top: dims.margin.top + priceHeight + hoverVolumeY,
+            top: dims.margin.top + priceHeight + volumeTop + hoverVolumeY,
             left: dims.margin.left + dims.boundedWidth,
             minWidth: dims.margin.right,
           }}
@@ -125,6 +135,30 @@ export function ChartHoverBadges({
           <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
         </div>
       )}
+      {/* Same "+"-to-add badge as price/volume above, generalized to whichever "own"-pane
+          indicator (RSI/CHOP/MACD/fundamentals) is currently hovered — hoverIndicatorPaneY is
+          relative to that pane's own top (see useDrawingInteractions), so its absolute position
+          needs that pane's own offset added back via paneScaleAndOffset. */}
+      {hoverIndicatorPaneId !== null &&
+        hoverIndicatorPaneY !== null &&
+        (() => {
+          const { scale, offset } = paneScaleAndOffset(hoverIndicatorPaneId);
+          return (
+            <div
+              className="lq-chart__axis-value lq-chart__axis-value--y"
+              style={{
+                top: dims.margin.top + offset + hoverIndicatorPaneY,
+                left: dims.margin.left + dims.boundedWidth,
+                minWidth: dims.margin.right,
+              }}
+            >
+              <button type="button" className="lq-chart__axis-value-add" onClick={addIndicatorPaneLine} aria-label="Ajouter une ligne horizontale">
+                <PlusIcon size={9} />
+              </button>
+              <span className="lq-chart__axis-value-text">{scale.invert(hoverIndicatorPaneY).toFixed(2)}</span>
+            </div>
+          );
+        })()}
       {hovered && (
         <>
           <div

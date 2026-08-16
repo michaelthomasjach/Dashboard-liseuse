@@ -185,13 +185,17 @@ export function ToolsRail({
             actually present in `events` — see eventKinds) — a quick toolbar dropdown for the same
             toggles the "Paramètres du graphique" modal also exposes, all shown by default. A
             distinct icon from the hide-drawings eye above, so the two aren't confused for the
-            same toggle. */}
+            same toggle. Pinned to the rail's own bottom edge (see
+            .lq-chart__tools-rail-bottom-button), alongside "Dessins et indicateurs" right below
+            it, rather than living inline with the magnet/hide/lock toggles above. */}
         {eventKinds.length > 0 && (
           <>
             <button
               ref={eventsMenuAnchorRef}
               type="button"
-              className={["lq-chart__icon-button", eventsMenuOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", eventsMenuOpen && "lq-chart__icon-button--active"]
+                .filter(Boolean)
+                .join(" ")}
               onClick={() => setEventsMenuOpen((o) => !o)}
               aria-label="Visibilité des évènements"
               aria-pressed={eventsMenuOpen}
@@ -213,24 +217,28 @@ export function ToolsRail({
                         return next;
                       })
                     }
-                    label={kind}
+                    label={kind.charAt(0).toUpperCase() + kind.slice(1)}
                   />
                 ))}
               </div>
             </Popover>
           </>
         )}
-        {/* Pinned to the rail's own bottom edge (see .lq-chart__tools-rail-bottom-button),
-            separate from every tool/toggle above — opens a flat, grouped list of every
-            drawing and indicator currently on the chart (overlay and own-pane alike) with
-            a settings/delete action per row, instead of having to hunt each one down on
-            the chart itself (hovering a legend entry, or a collapsed pane that hides its
-            own actions). Shown whenever the rail itself is (drawingTools) regardless of
-            showIndicators — even drawings-only usage benefits from a single place to see
-            and clear everything drawn. */}
+        {/* Opens a flat, grouped list of every drawing and indicator currently on the chart
+            (overlay and own-pane alike) with a settings/delete action per row, instead of having
+            to hunt each one down on the chart itself (hovering a legend entry, or a collapsed
+            pane that hides its own actions). Shown whenever the rail itself is (drawingTools)
+            regardless of showIndicators — even drawings-only usage benefits from a single place
+            to see and clear everything drawn. Only needs the bottom-pin class itself when the
+            events button right above it isn't rendered (no event kinds present) — otherwise
+            that button's own auto margin already pushes both of them down together. */}
         <button
           type="button"
-          className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", indicatorsManagerOpen && "lq-chart__icon-button--active"]
+          className={[
+            "lq-chart__icon-button",
+            eventKinds.length === 0 && "lq-chart__tools-rail-bottom-button",
+            indicatorsManagerOpen && "lq-chart__icon-button--active",
+          ]
             .filter(Boolean)
             .join(" ")}
           onClick={() => setIndicatorsManagerOpen((o) => !o)}

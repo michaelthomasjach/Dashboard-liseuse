@@ -48,6 +48,8 @@ export interface RenderCandlestickChartParams {
   hovered: Candle | null;
   hoverY: number | null;
   hoverVolumeY: number | null;
+  hoverIndicatorPaneId: string | null;
+  hoverIndicatorPaneY: number | null;
   hoverIndex: number | null;
   visibleDrawings: TrendLineDrawing[];
   hoveredDrawingId: string | null;

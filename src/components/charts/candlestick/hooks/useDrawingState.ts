@@ -75,6 +75,13 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
   const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null);
   const [hoverY, setHoverY] = useState<number | null>(null);
   const [hoverVolumeY, setHoverVolumeY] = useState<number | null>(null);
+  // Same idea as hoverVolumeY, generalized to whichever "own"-pane indicator (RSI/CHOP/MACD/
+  // fundamentals) is currently hovered — id of that pane plus the pixel Y relative to *its own*
+  // top (not the plot's), matching hoverVolumeY's own local-coordinate convention (the canvas
+  // crosshair/badge for a given pane always reads relative to that pane's own top). Only one can
+  // be hovered at a time, hence a single pair rather than one per indicator.
+  const [hoverIndicatorPaneId, setHoverIndicatorPaneId] = useState<string | null>(null);
+  const [hoverIndicatorPaneY, setHoverIndicatorPaneY] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TrendLineDrawing | null>(null);
   const [editModalTab, setEditModalTab] = useState<"coords" | "text" | "style">("coords");
@@ -316,6 +323,10 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     setHoverY,
     hoverVolumeY,
     setHoverVolumeY,
+    hoverIndicatorPaneId,
+    setHoverIndicatorPaneId,
+    hoverIndicatorPaneY,
+    setHoverIndicatorPaneY,
     editingId,
     setEditingId,
     draft,

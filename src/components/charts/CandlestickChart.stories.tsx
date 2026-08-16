@@ -3,7 +3,6 @@ import type { Meta, StoryObj } from "@storybook/react";
 import {
   CandlestickChart,
   type TimeframeEntry,
-  type Indicator,
   type ChartEvent,
   type FundamentalDataPoint,
   type SymbolSearchResult,
@@ -85,16 +84,6 @@ const ALL_FEATURES_FUNDAMENTALS: FundamentalDataPoint[] = [
   },
 ];
 
-// One price-overlay (SMA), one own-pane technical (RSI) and one own-pane fundamental (Free Cash
-// Flow) pre-added — the rest of each catalog (EMA/WMA/VWAP/Bollinger/CHOP/MACD and the other
-// seven fundamentals) stays reachable from "Ajouter un indicateur" without cluttering the chart
-// by default.
-const ALL_FEATURES_DEFAULT_INDICATORS: Indicator[] = [
-  { id: "af-sma", kind: "sma", period: 20 },
-  { id: "af-rsi", kind: "rsi", period: 14 },
-  { id: "af-fcf", kind: "freeCashFlow", period: 0 },
-];
-
 // Taller than the `height` prop's own default (380) — a more realistic size for these demos,
 // which otherwise felt cramped compared to how the chart gets used in a real dashboard.
 const STORY_HEIGHT = 640;
@@ -169,9 +158,9 @@ export const AllFeatures: Story = {
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
           Tout combiné : outils de dessin (`drawingTools` — lignes, Fibonacci, vagues d'Elliott, formes, mesure,
-          aimant), indicateurs techniques et fondamentaux (`showIndicators`/`fundamentals` — SMA, RSI et Free Cash
-          Flow pré-ajoutés, le reste de chaque catalogue accessible depuis "Ajouter un indicateur"), modes
-          d'affichage (`defaultChartDisplayMode`/`onChartDisplayModeChange`), plein écran (`fullscreenToggle`),
+          aimant), indicateurs techniques et fondamentaux (`showIndicators`/`fundamentals` — aucun pré-ajouté, tout
+          le catalogue accessible depuis "Ajouter un indicateur"), modes d'affichage
+          (`defaultChartDisplayMode`/`onChartDisplayModeChange`), plein écran (`fullscreenToggle`),
           sélecteur d'intervalle (`timeframes`), recherche de symbole (`symbolSearch` — <strong>double-clic</strong>{" "}
           sur "MSFT" ouvre la modale, son bouton "+" ajoute un overlay de comparaison —{" "}
           <code>onAddSymbolOverlay</code>), rescale automatique de l'axe des prix (`YAutoScaling`, case à cocher
@@ -189,7 +178,6 @@ export const AllFeatures: Story = {
           events={ALL_FEATURES_EVENTS}
           drawingTools
           showIndicators
-          defaultIndicators={ALL_FEATURES_DEFAULT_INDICATORS}
           fundamentals={ALL_FEATURES_FUNDAMENTALS}
           fullscreenToggle
           zoomable

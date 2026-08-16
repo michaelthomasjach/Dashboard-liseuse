@@ -154,6 +154,10 @@ export function CandlestickChart({
     setHoverY,
     hoverVolumeY,
     setHoverVolumeY,
+    hoverIndicatorPaneId,
+    setHoverIndicatorPaneId,
+    hoverIndicatorPaneY,
+    setHoverIndicatorPaneY,
     setEditingId,
     draft,
     setDraft,
@@ -437,6 +441,27 @@ export function CandlestickChart({
     commitDrawings([...drawings, { id: `drawing-${drawingIdRef.current++}`, x1: hovered.date, y1: p0, x2: hovered.date, y2: p1, lineType: "vertical" }]);
   }
 
+  // Same idea as addPriceLine/addVolumeLine, generalized to whichever "own"-pane indicator
+  // (RSI/CHOP/MACD/fundamentals) is currently hovered — hoverIndicatorPaneY is relative to that
+  // pane's own top, so paneScaleAndOffset's own scale (not the offset, already baked into the
+  // hover Y itself) is all that's needed to invert it back to a data value.
+  function addIndicatorPaneLine() {
+    if (hoverIndicatorPaneId === null || hoverIndicatorPaneY === null) return;
+    const value = paneScaleAndOffset(hoverIndicatorPaneId).scale.invert(hoverIndicatorPaneY);
+    commitDrawings([
+      ...drawings,
+      {
+        id: `drawing-${drawingIdRef.current++}`,
+        x1: data[0].date,
+        y1: value,
+        x2: data[data.length - 1].date,
+        y2: value,
+        lineType: "horizontal",
+        valueAxis: hoverIndicatorPaneId,
+      },
+    ]);
+  }
+
   const {
     handleOverlayClick,
     handleOverlayDoubleClick,
@@ -464,6 +489,9 @@ export function CandlestickChart({
     setHoverIndex,
     setHoverY,
     setHoverVolumeY,
+    setHoverIndicatorPaneId,
+    setHoverIndicatorPaneY,
+    ownPaneIndicators,
     drawings,
     commitDrawings,
     drawingIdRef,
@@ -549,6 +577,8 @@ export function CandlestickChart({
       hovered,
       hoverY,
       hoverVolumeY,
+      hoverIndicatorPaneId,
+      hoverIndicatorPaneY,
       hoverIndex,
       visibleDrawings,
       hoveredDrawingId,
@@ -595,6 +625,8 @@ export function CandlestickChart({
     hovered,
     hoverY,
     hoverVolumeY,
+    hoverIndicatorPaneId,
+    hoverIndicatorPaneY,
     hoverIndex,
     visibleDrawings,
     hoveredDrawingId,
@@ -705,6 +737,8 @@ export function CandlestickChart({
           setHoverIndex(null);
           setHoverY(null);
           setHoverVolumeY(null);
+          setHoverIndicatorPaneId(null);
+          setHoverIndicatorPaneY(null);
         }}
       >
         {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
@@ -863,9 +897,14 @@ export function CandlestickChart({
           priceAxisFmt={priceAxisFmt}
           hoverVolumeY={hoverVolumeY}
           priceHeight={priceHeight}
+          volumeTop={volumeTop}
           addVolumeLine={addVolumeLine}
           zoomedVolumeScale={zoomedVolumeScale}
           vFmt={vFmt}
+          hoverIndicatorPaneId={hoverIndicatorPaneId}
+          hoverIndicatorPaneY={hoverIndicatorPaneY}
+          addIndicatorPaneLine={addIndicatorPaneLine}
+          paneScaleAndOffset={paneScaleAndOffset}
           hovered={hovered}
           zoomedXScale={zoomedXScale}
           hoverIndex={hoverIndex}

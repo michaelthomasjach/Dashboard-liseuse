@@ -1,6 +1,7 @@
 import * as d3 from "d3";
 import type { ScaleLinear } from "d3";
 import type { Candle } from "../interfaces/Candle.interface";
+import type { Indicator } from "../interfaces/Indicator.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DataPoint } from "../interfaces/DataPoint.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
@@ -28,6 +29,9 @@ export interface UseDrawingInteractionsArgs {
   setHoverIndex: (v: number | null) => void;
   setHoverY: (v: number | null) => void;
   setHoverVolumeY: (v: number | null) => void;
+  setHoverIndicatorPaneId: (v: string | null) => void;
+  setHoverIndicatorPaneY: (v: number | null) => void;
+  ownPaneIndicators: Indicator[];
   drawings: TrendLineDrawing[];
   commitDrawings: (next: TrendLineDrawing[]) => void;
   drawingIdRef: MutableRef<number>;
@@ -95,6 +99,9 @@ export function useDrawingInteractions({
   setHoverIndex,
   setHoverY,
   setHoverVolumeY,
+  setHoverIndicatorPaneId,
+  setHoverIndicatorPaneY,
+  ownPaneIndicators,
   drawings,
   commitDrawings,
   drawingIdRef,
@@ -607,6 +614,24 @@ export function useDrawingInteractions({
         ? mouseY - priceHeight - volumeTop
         : null
     );
+    // Same idea, generalized to whichever "own"-pane indicator (RSI/CHOP/MACD/fundamentals) the
+    // pointer is currently over — resolveValueAxisAtY already knows every pane's own bounds, so
+    // this only needs to filter its answer down to "an indicator, and it isn't collapsed" (a
+    // collapsed pane is just its own header strip, same reasoning as volumeCollapsed above).
+    if (mouseY > priceHeight) {
+      const valueAxis = resolveValueAxisAtY(mouseY);
+      const ind = valueAxis !== "price" && valueAxis !== "volume" ? ownPaneIndicators.find((i) => i.id === valueAxis) : undefined;
+      if (ind && !ind.paneCollapsed) {
+        setHoverIndicatorPaneId(ind.id);
+        setHoverIndicatorPaneY(mouseY - paneScaleAndOffset(ind.id).offset);
+      } else {
+        setHoverIndicatorPaneId(null);
+        setHoverIndicatorPaneY(null);
+      }
+    } else {
+      setHoverIndicatorPaneId(null);
+      setHoverIndicatorPaneY(null);
+    }
 
     if (activeTool && pendingPoint) {
       setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });

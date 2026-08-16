@@ -21,6 +21,8 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
     visibleIndicators,
     hovered,
     hoverVolumeY,
+    hoverIndicatorPaneId,
+    hoverIndicatorPaneY,
     hoverIndex,
     visibleDrawings,
     hoveredDrawingId,
@@ -117,8 +119,9 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
     // "own"-pane indicators (RSI/CHOP/MACD) — one clipped section each, stacked below volume in
     // the order they were added, each with its own scale (RSI/CHOP are always 0-100 by
     // definition; MACD auto-fits to whatever's currently visible, same spirit as YAutoScaling
-    // for price). No hover-value badge for these (unlike price/volume) — not asked for, and
-    // wiring up N more of them was a lot of additional plumbing for its own sake.
+    // for price). Same hover crosshair + "+"-to-add badge as price/volume (see
+    // hoverIndicatorPaneId/hoverIndicatorPaneY), generalized across however many of these panes
+    // exist.
     ownPaneIndicators.forEach((ind, idx) => {
       // volumeHeight is no longer added here — indicatorPaneTops already reserves room for
       // volume's own height wherever it currently falls in the order (see its own memo).
@@ -247,6 +250,16 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
           if (k === 0) ctx.moveTo(x, y);
           else ctx.lineTo(x, y);
         });
+        ctx.stroke();
+      }
+
+      if (hoverIndicatorPaneId === ind.id && hoverIndicatorPaneY !== null) {
+        ctx.strokeStyle = colorMuted;
+        ctx.lineWidth = 1;
+        ctx.setLineDash([3, 3]);
+        ctx.beginPath();
+        ctx.moveTo(0, hoverIndicatorPaneY);
+        ctx.lineTo(dims.boundedWidth, hoverIndicatorPaneY);
         ctx.stroke();
       }
 
