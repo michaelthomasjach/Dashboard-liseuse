@@ -6,6 +6,7 @@ import type { DataPoint } from "./DataPoint.interface";
 import type { Indicator } from "./Indicator.interface";
 import type { IndicatorBand } from "./IndicatorBand.interface";
 import type { IndicatorMACD } from "./IndicatorMACD.interface";
+import type { IndicatorZigZagPoint } from "./IndicatorZigZagPoint.interface";
 import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
 import type { DrawingToolType } from "./DrawingToolType.interface";
 import type { PriceBrick, TpoProfile } from "../chartModes";
@@ -75,6 +76,6 @@ export interface RenderCandlestickChartParams {
   brushPreview: DataPoint[] | null;
   measurePoints: { p1: DataPoint; p2: DataPoint } | null;
   livePrice: boolean;
-  visibleIndicators: { indicator: Indicator; points: { i: number; value: number | IndicatorBand | IndicatorMACD }[] }[];
+  visibleIndicators: { indicator: Indicator; points: { i: number; value: number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint }[] }[];
   indexForDate: (d: Date) => number;
 }

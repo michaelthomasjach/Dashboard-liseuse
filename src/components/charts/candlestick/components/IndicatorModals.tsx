@@ -1,4 +1,5 @@
 import { Modal } from "../../../primitives/Modal";
+import { Checkbox } from "../../../forms/Checkbox";
 import { TextField } from "../../../forms/TextField";
 import { NumberField } from "../../../forms/NumberField";
 import { SearchIcon, SettingsIcon, TrashIcon, OverlayBadgeIcon, PaneBadgeIcon } from "../../../icons";
@@ -305,6 +306,23 @@ export function IndicatorModals({
                 onChange={(v) => setIndicatorDraft({ ...indicatorDraft, signalPeriod: v === "" ? indicatorDraft.signalPeriod : v })}
               />
             </div>
+          )}
+          {indicatorDraft.kind === "zigzag" && (
+            <>
+              <NumberField
+                label="Déviation (%)"
+                min={0.5}
+                max={50}
+                step={0.5}
+                value={indicatorDraft.zigzagDeviation ?? 5}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, zigzagDeviation: v === "" ? indicatorDraft.zigzagDeviation : v })}
+              />
+              <Checkbox
+                label="Afficher les labels HH / HL / LH / LL"
+                checked={indicatorDraft.zigzagShowLabels ?? true}
+                onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, zigzagShowLabels: checked })}
+              />
+            </>
           )}
           <div className="lq-field">
             <label className="lq-field__label">Couleur</label>

@@ -4,6 +4,7 @@ import type { FundamentalDataPoint } from "./interfaces/FundamentalDataPoint.int
 import type { IndicatorKind } from "./interfaces/IndicatorKind.interface";
 import type { IndicatorBand } from "./interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./interfaces/IndicatorMACD.interface";
+import type { IndicatorZigZagPoint } from "./interfaces/IndicatorZigZagPoint.interface";
 import type { Indicator } from "./interfaces/Indicator.interface";
 import { formatCompactNumber } from "./formatting";
 
@@ -78,7 +79,7 @@ export interface IndicatorCatalogEntry {
   pane: "price" | "own";
   /** Grouping shown in the picker modal — purely a display grouping, doesn't affect anything
    *  about how the indicator itself behaves. */
-  category: "Moyennes mobiles" | "Volatilité" | "Momentum" | "Fondamentaux";
+  category: "Moyennes mobiles" | "Volatilité" | "Momentum" | "Tendance" | "Fondamentaux";
 }
 
 export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
@@ -153,6 +154,19 @@ export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     category: "Volatilité",
   },
   { kind: "macd", label: "MACD", shortLabel: "MACD", defaultPeriod: 0, hasPeriod: false, hasStdDev: false, pane: "own", category: "Momentum" },
+  // Its own value shape (IndicatorZigZagPoint, not a plain number/IndicatorBand) and its own
+  // settings (zigzagDeviation/zigzagShowLabels on Indicator, not period/stdDev) — hasPeriod/
+  // hasStdDev both false the same way vwap/macd's own extra settings sit outside them.
+  {
+    kind: "zigzag",
+    label: "Zig Zag",
+    shortLabel: "ZigZag",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "price",
+    category: "Tendance",
+  },
   // Fundamentals: reported-period figures (see `FundamentalDataPoint`), not computed from `data`
   // at all — `hasPeriod`/`hasStdDev` both false, same as VWAP/MACD, since there's no rolling
   // window to configure on a raw reported number.
@@ -245,6 +259,7 @@ export function indicatorCatalogEntry(kind: IndicatorKind): IndicatorCatalogEntr
 export function indicatorLabel(indicator: Indicator): string {
   const entry = indicatorCatalogEntry(indicator.kind);
   if (indicator.kind === "macd") return `MACD(${indicator.fastPeriod ?? 12},${indicator.slowPeriod ?? 26},${indicator.signalPeriod ?? 9})`;
+  if (indicator.kind === "zigzag") return `${entry.shortLabel}(${indicator.zigzagDeviation ?? 5}%)`;
   if (!entry.hasPeriod) return entry.shortLabel;
   if (entry.hasStdDev) return `${entry.shortLabel}(${indicator.period},${indicator.stdDev ?? 2})`;
   return `${entry.shortLabel}(${indicator.period})`;
@@ -373,11 +388,105 @@ export function computeMACDValues(data: Candle[], fastPeriod: number, slowPeriod
   return result.concat(values.map((v) => ({ macd: v.MACD ?? 0, signal: v.signal ?? null, histogram: v.histogram ?? null })));
 }
 
+// Percentage-deviation ZigZag, computed off closes (not high/low wicks — a simpler, still
+// standard variant that avoids the two-tracker bookkeeping a wick-based version would need, and
+// reads cleanly against a line chart of closes too). Confirms a pivot only once price has
+// reversed by at least `deviationPercent` from the current provisional extreme — the most recent,
+// still-unconfirmed leg is left off entirely rather than drawn as a repainting last segment, so
+// the line only ever reaches the last *confirmed* pivot.
+export function computeZigZagValues(data: Candle[], deviationPercent: number): (IndicatorZigZagPoint | null)[] {
+  const n = data.length;
+  const result: (IndicatorZigZagPoint | null)[] = new Array(n).fill(null);
+  if (n < 2) return result;
+  const threshold = Math.max(0.01, deviationPercent) / 100;
+
+  let lastHighPrice: number | null = null;
+  let lastLowPrice: number | null = null;
+  function labelFor(kind: "high" | "low", price: number): IndicatorZigZagPoint["label"] {
+    const prev = kind === "high" ? lastHighPrice : lastLowPrice;
+    if (prev === null) return null;
+    if (kind === "high") return price > prev ? "HH" : "LH";
+    return price > prev ? "HL" : "LL";
+  }
+  function confirm(index: number, price: number, kind: "high" | "low") {
+    result[index] = { price, kind, label: labelFor(kind, price) };
+    if (kind === "high") lastHighPrice = price;
+    else lastLowPrice = price;
+  }
+
+  // Phase 1: direction undetermined yet — track the running max and min simultaneously from the
+  // very start. Whichever one first reverses by `threshold` from the other becomes the first
+  // confirmed pivot (reversing *off* a high confirms that high as a pivot, and vice versa); the
+  // index comparison guards against the rare case where both thresholds are crossed on the same
+  // bar, preferring whichever extreme is chronologically the more recent of the two.
+  let runningMaxPrice = data[0].close;
+  let runningMaxIndex = 0;
+  let runningMinPrice = data[0].close;
+  let runningMinIndex = 0;
+  let firstPivotKind: "high" | "low" | null = null;
+  let i = 1;
+  for (; i < n; i++) {
+    const price = data[i].close;
+    if (price > runningMaxPrice) {
+      runningMaxPrice = price;
+      runningMaxIndex = i;
+    }
+    if (price < runningMinPrice) {
+      runningMinPrice = price;
+      runningMinIndex = i;
+    }
+    if ((runningMaxPrice - price) / runningMaxPrice >= threshold && runningMaxIndex > runningMinIndex) {
+      confirm(runningMaxIndex, runningMaxPrice, "high");
+      firstPivotKind = "high";
+      break;
+    }
+    if ((price - runningMinPrice) / runningMinPrice >= threshold && runningMinIndex > runningMaxIndex) {
+      confirm(runningMinIndex, runningMinPrice, "low");
+      firstPivotKind = "low";
+      break;
+    }
+  }
+  if (firstPivotKind === null) return result; // Never even reversed enough to confirm a first pivot.
+
+  // Phase 2: alternate, hunting a pivot of the opposite kind each time, until the data ends. The
+  // new pending leg starts from the *current* bar `i` (where the reversal was detected), not from
+  // runningMaxIndex/runningMinIndex (where the just-confirmed pivot actually sits) — those are
+  // two different bars whenever the reversal wasn't confirmed on the very next bar after the peak.
+  let pendingKind: "high" | "low" = firstPivotKind === "high" ? "low" : "high";
+  let pendingIndex = i;
+  let pendingPrice = data[i].close;
+  for (i = i + 1; i < n; i++) {
+    const price = data[i].close;
+    if (pendingKind === "low") {
+      if (price < pendingPrice) {
+        pendingPrice = price;
+        pendingIndex = i;
+      } else if ((price - pendingPrice) / pendingPrice >= threshold) {
+        confirm(pendingIndex, pendingPrice, "low");
+        pendingKind = "high";
+        pendingPrice = price;
+        pendingIndex = i;
+      }
+    } else {
+      if (price > pendingPrice) {
+        pendingPrice = price;
+        pendingIndex = i;
+      } else if ((pendingPrice - price) / pendingPrice >= threshold) {
+        confirm(pendingIndex, pendingPrice, "high");
+        pendingKind = "low";
+        pendingPrice = price;
+        pendingIndex = i;
+      }
+    }
+  }
+  return result;
+}
+
 export function computeIndicatorValues(
   data: Candle[],
   indicator: Indicator,
   fundamentals: FundamentalDataPoint[] | undefined
-): (number | IndicatorBand | IndicatorMACD | null)[] {
+): (number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint | null)[] {
   const period = Math.max(1, Math.round(indicator.period));
   if (isFundamentalKind(indicator.kind)) return computeFundamentalValues(data, fundamentals, indicator.kind);
   switch (indicator.kind) {
@@ -395,6 +504,8 @@ export function computeIndicatorValues(
       return computeCHOPValues(data, period);
     case "macd":
       return computeMACDValues(data, indicator.fastPeriod ?? 12, indicator.slowPeriod ?? 26, indicator.signalPeriod ?? 9);
+    case "zigzag":
+      return computeZigZagValues(data, indicator.zigzagDeviation ?? 5);
     case "sma":
     default:
       return computeSMAValues(data, period);

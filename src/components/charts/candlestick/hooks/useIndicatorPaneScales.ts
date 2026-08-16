@@ -5,6 +5,7 @@ import type { FundamentalDataPoint } from "../interfaces/FundamentalDataPoint.in
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
+import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import { computeIndicatorValues, indicatorLabel } from "../indicators";
 
@@ -59,7 +60,7 @@ export function useIndicatorPaneScales({
     const start = Math.max(0, visibleRange.start - 2);
     const end = Math.min(data.length, visibleRange.end + 2);
     return indicatorValues.map(({ indicator, values }) => {
-      const points: { i: number; value: number | IndicatorBand | IndicatorMACD }[] = [];
+      const points: { i: number; value: number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint }[] = [];
       for (let i = start; i < end; i++) {
         const v = values[i];
         if (v !== null) points.push({ i, value: v });

@@ -7,6 +7,7 @@ export type IndicatorKind =
   | "rsi"
   | "chop"
   | "macd"
+  | "zigzag"
   | "freeCashFlow"
   | "netIncome"
   | "totalRevenue"

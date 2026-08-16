@@ -5,6 +5,7 @@ import type { Candle } from "../interfaces/Candle.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
+import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
 import { isFundamentalKind, formatFundamentalValue } from "../indicators";
 
 export interface PaneHeadersProps {
@@ -30,7 +31,7 @@ export interface PaneHeadersProps {
   indicatorLabel: (indicator: Indicator) => string;
   openIndicatorSettings: (id: string) => void;
   removeIndicator: (id: string) => void;
-  indicatorValues: { indicator: Indicator; values: (number | IndicatorBand | IndicatorMACD | null)[] }[];
+  indicatorValues: { indicator: Indicator; values: (number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint | null)[] }[];
 }
 
 /** Header strip for the volume pane, then one more per "own"-pane indicator (RSI/CHOP/MACD) —

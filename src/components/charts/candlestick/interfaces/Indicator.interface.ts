@@ -12,6 +12,12 @@ export interface Indicator {
   fastPeriod?: number;
   slowPeriod?: number;
   signalPeriod?: number;
+  /** "zigzag" only — minimum swing size, as a percentage move from the last confirmed pivot,
+   *  before the next one confirms. Default 5. */
+  zigzagDeviation?: number;
+  /** "zigzag" only — shows each confirmed pivot's HH/HL/LH/LL label (see
+   *  `IndicatorZigZagPoint.label`) next to it. Default true. */
+  zigzagShowLabels?: boolean;
   /** CSS color. Defaults to a color cycled from a small built-in palette. */
   color?: string;
   /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the

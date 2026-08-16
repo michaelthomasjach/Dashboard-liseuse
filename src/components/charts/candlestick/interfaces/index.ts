@@ -8,6 +8,7 @@ export type { DataPoint } from "./DataPoint.interface";
 export type { IndicatorKind } from "./IndicatorKind.interface";
 export type { IndicatorBand } from "./IndicatorBand.interface";
 export type { IndicatorMACD } from "./IndicatorMACD.interface";
+export type { IndicatorZigZagPoint } from "./IndicatorZigZagPoint.interface";
 export type { Indicator } from "./Indicator.interface";
 export type { ChartDisplayMode } from "./ChartDisplayMode.interface";
 export type { TimeframeOption } from "./TimeframeOption.interface";

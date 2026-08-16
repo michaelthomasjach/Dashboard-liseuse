@@ -6,6 +6,7 @@ import type { Candle } from "../interfaces/Candle.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
+import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { ChartEvent } from "../interfaces/ChartEvent.interface";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
@@ -40,7 +41,7 @@ export interface ChartHoverBadgesProps {
   clampToPriceAxis: (y: number) => number;
   now: number;
   showIndicators: boolean;
-  indicatorValues: { indicator: Indicator; values: (number | IndicatorBand | IndicatorMACD | null)[] }[];
+  indicatorValues: { indicator: Indicator; values: (number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint | null)[] }[];
   visibleDrawings: TrendLineDrawing[];
   volumeVisible: boolean;
   pixelYForDrawing: (dr: TrendLineDrawing) => number;
@@ -230,7 +231,12 @@ export function ChartHoverBadges({
           line). */}
       {showIndicators &&
         indicatorValues.map(({ indicator, values }, idx) => {
-          if (indicator.hidden || indicatorCatalogEntry(indicator.kind).pane !== "price") return null;
+          // ZigZag excluded here too — its "latest value" is the last *confirmed* pivot, often
+          // several bars behind the current price (see computeZigZagValues) rather than a
+          // meaningful "right now" reading the way a moving average's own latest value is, so it
+          // isn't given a badge at all (the pivots themselves already get their own HH/HL/LH/LL
+          // labels directly on the chart).
+          if (indicator.hidden || indicatorCatalogEntry(indicator.kind).pane !== "price" || indicator.kind === "zigzag") return null;
           const last = values[values.length - 1];
           if (last === null) return null;
           // Only ever a plain number (SMA/EMA/WMA/VWAP) or a band (Bollinger, use its middle

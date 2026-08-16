@@ -1,6 +1,7 @@
 import type { RenderCandlestickChartParams } from "../interfaces/RenderCandlestickChartParams.interface";
 import type { ChartCanvasStyle } from "../interfaces/ChartCanvasStyle.interface";
 import type { IndicatorBand } from "../interfaces/IndicatorBand.interface";
+import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.interface";
 import { snapPixel } from "../drawingGeometry";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
 
@@ -190,8 +191,8 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       ctx.restore();
     }
 
-    // Only price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger) draw here — "own"-pane ones
-    // (RSI/CHOP/MACD) get their own clipped section further down, alongside volume.
+    // Only price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger/ZigZag) draw here — "own"-pane
+    // ones (RSI/CHOP/MACD) get their own clipped section further down, alongside volume.
     visibleIndicators.forEach(({ indicator, points }, index) => {
       if (indicator.hidden || points.length < 2 || indicatorCatalogEntry(indicator.kind).pane !== "price") return;
       const color = indicator.color ?? defaultIndicatorColor(index);
@@ -199,7 +200,37 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       ctx.strokeStyle = color;
       ctx.setLineDash([]);
 
-      if (typeof points[0].value === "number") {
+      if (indicator.kind === "zigzag") {
+        // A straight line through each confirmed pivot only (points is already compacted down to
+        // just those — see computeZigZagValues/visibleIndicators), not a value at every candle —
+        // this reuses the same moveTo/lineTo shape as the plain-number branch below, just walking
+        // far fewer points since everything in between two pivots is skipped entirely.
+        const zzPoints = points as { i: number; value: IndicatorZigZagPoint }[];
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        zzPoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.value.price);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+
+        if (indicator.zigzagShowLabels ?? true) {
+          ctx.font = `600 10px ${fontFamily}`;
+          ctx.textAlign = "center";
+          ctx.fillStyle = color;
+          for (const p of zzPoints) {
+            if (!p.value.label) continue; // First high/first low: nothing to compare against yet.
+            const x = zoomedXScale(p.i + 0.5);
+            const y = zoomedPriceScale(p.value.price);
+            // Above a high pivot, below a low one, so the label never sits on top of the line
+            // itself or the candle wick right at the pivot.
+            ctx.textBaseline = p.value.kind === "high" ? "bottom" : "top";
+            ctx.fillText(p.value.label, x, y + (p.value.kind === "high" ? -5 : 5));
+          }
+        }
+      } else if (typeof points[0].value === "number") {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         points.forEach((p, k) => {
