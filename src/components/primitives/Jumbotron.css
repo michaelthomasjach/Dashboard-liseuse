@@ -26,16 +26,30 @@
   color: var(--lq-color-accent-contrast);
 }
 
-.lq-jumbotron__bg {
+.lq-jumbotron__bg-wrap {
+  position: absolute;
+  inset: 0;
+  /* Set directly on this node from JS (see Jumbotron's blurOnScroll effect) rather than through
+     React state/props — the custom property lets that effect skip a re-render on every scroll
+     tick, this rule is just what turns it into an actual filter. */
+  filter: blur(var(--lq-jumbotron-blur, 0px));
+}
+
+.lq-jumbotron__bg,
+.lq-jumbotron__bg-grayscale {
   position: absolute;
   inset: 0;
   background-size: cover;
   background-position: center;
-  transition: filter 200ms ease;
 }
 
-.lq-jumbotron__bg--grayscale {
+.lq-jumbotron__bg-grayscale {
   filter: grayscale(1);
+  /* Same gradient stops as .lq-jumbotron__scrim below, so the photo itself fades to black & white
+     over exactly the area the scrim already darkens for text legibility, staying full color
+     everywhere else — a duotone gradient rather than a flat grayscale(1) across the whole image. */
+  -webkit-mask-image: linear-gradient(90deg, black 30%, transparent 90%);
+  mask-image: linear-gradient(90deg, black 30%, transparent 90%);
 }
 
 .lq-jumbotron__scrim {
