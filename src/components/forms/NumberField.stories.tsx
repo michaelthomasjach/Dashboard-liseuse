@@ -41,3 +41,16 @@ export const Quantity: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [value, setValue] = useState<number | "">(1000);
+    return (
+      <div style={{ maxWidth: 220, display: "flex", flexDirection: "column", gap: 16 }}>
+        <NumberField size="small" label="Small" value={value} onChange={setValue} prefix="€" min={0} step={100} />
+        <NumberField label="Normal (défaut)" value={value} onChange={setValue} prefix="€" min={0} step={100} />
+      </div>
+    );
+  },
+};

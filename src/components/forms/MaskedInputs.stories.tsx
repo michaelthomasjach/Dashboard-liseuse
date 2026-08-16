@@ -56,3 +56,22 @@ export const CustomMaskChar: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [phone, setPhone] = useState("0612345678");
+    const [card, setCard] = useState("4242");
+    const [date, setDate] = useState("");
+    return (
+      <div style={{ maxWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}>
+        <PhoneInput size="small" label="Téléphone — small" value={phone} onChange={setPhone} />
+        <PhoneInput label="Téléphone — normal (défaut)" value={phone} onChange={setPhone} />
+        <CreditCardInput size="small" label="Carte — small" value={card} onChange={setCard} />
+        <CreditCardInput label="Carte — normal (défaut)" value={card} onChange={setCard} />
+        <DateInput size="small" label="Date — small" value={date} onChange={setDate} />
+        <DateInput label="Date — normal (défaut)" value={date} onChange={setDate} />
+      </div>
+    );
+  },
+};

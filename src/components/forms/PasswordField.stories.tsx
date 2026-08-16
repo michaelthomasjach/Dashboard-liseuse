@@ -34,3 +34,16 @@ export const Empty: Story = {
     );
   },
 };
+
+export const Sizes: Story = {
+  name: "Tailles (small / normal)",
+  render: () => {
+    const [value, setValue] = useState("MonMotDePasse123");
+    return (
+      <div style={{ maxWidth: 280, display: "flex", flexDirection: "column", gap: 16 }}>
+        <PasswordField size="small" label="Small" value={value} onChange={(e) => setValue(e.target.value)} />
+        <PasswordField label="Normal (défaut)" value={value} onChange={(e) => setValue(e.target.value)} />
+      </div>
+    );
+  },
+};
