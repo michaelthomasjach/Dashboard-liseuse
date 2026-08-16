@@ -59,6 +59,12 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         dr.lineType === "brush" ||
         dr.lineType === "arrowUp" ||
         dr.lineType === "arrowDown" ||
+        // Its x1/y1/x2/y2 aren't real coordinates (see the lineType's own doc comment) — just
+        // the overlay's own first/last raw points, unrelated to the main series' price space.
+        // Drawn separately, correctly rebased, by the dedicated symbol-overlay loop further
+        // down — without this exclusion it also fell through to here and got drawn a second
+        // time, as a straight line connecting those two raw (wrongly-scaled) points.
+        dr.lineType === "symbolOverlay" ||
         ((dr.lineType === "horizontal" || dr.lineType === "ray") && dr.valueAxis && dr.valueAxis !== "price")
       )
         continue;
