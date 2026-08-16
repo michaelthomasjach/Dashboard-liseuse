@@ -16,12 +16,17 @@ export interface ChartWorkspaceProps {
   defaultPanels?: 1 | 2 | 4 | 6 | 8;
   /** Fires whenever the panel count changes via any panel's own split-screen menu. */
   onPanelsChange?: (panels: 1 | 2 | 4 | 6 | 8) => void;
-  /** One pre-configured `<CandlestickChart>` per panel, in order ("Fenêtre 1" = the first child,
-   *  etc.) — same "compose, don't configure" shape as everywhere else a caller hands this library
-   *  a data source of their own; `ChartWorkspace` only adds layout and cross-chart sync on top,
-   *  it never owns what each panel actually shows. Extra children past `panels` are ignored;
-   *  fewer just leaves the remaining grid cells empty. */
-  children: ReactElement<CandlestickChartProps>[] | ReactElement<CandlestickChartProps>;
+  /** A single pre-configured `<CandlestickChart {...allTheOptions} />` — the same "compose, don't
+   *  configure" shape as everywhere else a caller hands this library a data source of their own,
+   *  `ChartWorkspace` only adds layout and cross-chart sync on top. Every panel gets its own
+   *  independent *instance* of exactly this configuration (own drawings, own indicators, own
+   *  zoom, own templates — everything `CandlestickChart` itself owns internally), not a cut-down
+   *  version of it, so splitting from one window to several never loses toolbar/drawing-tool/
+   *  indicator access in the new ones. Pass an array instead (one element per panel, in order —
+   *  "Fenêtre 1" = the first) if different panels should show genuinely different data/symbols;
+   *  extra array entries past the current panel count are ignored, fewer leave the remaining grid
+   *  cells empty. */
+  children: ReactElement<CandlestickChartProps> | ReactElement<CandlestickChartProps>[];
   /** Fixed height in px applied to every panel uniformly, overriding each child's own `height`
    *  prop if it set one — a mixed-height grid wouldn't read as one coherent workspace. Default
    *  320. */
@@ -89,14 +94,25 @@ export function ChartWorkspace({
     return null;
   }
 
-  const panelElements = (Children.toArray(children) as ReactElement<CandlestickChartProps>[]).slice(0, panels);
+  // A single child is a *template*, repeated to fill every panel — each still becomes its own
+  // independent component instance below (cloneElement gives each a distinct `key`, and React
+  // mounts a fresh instance per distinct key regardless of them all starting from the same
+  // element), it's only the initial props that are shared. Multiple children keep the older
+  // "one config per panel" behavior unchanged.
+  const rawChildren = Children.toArray(children) as ReactElement<CandlestickChartProps>[];
+  const panelElements = rawChildren.length === 1 ? Array.from({ length: panels }, () => rawChildren[0]) : rawChildren.slice(0, panels);
   const columns = GRID_COLUMNS[panels];
 
   return (
     <div className={["lq-chart-workspace", className].filter(Boolean).join(" ")} style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}>
       {panelElements.map((child, i) =>
         cloneElement(child, {
-          key: child.key ?? i,
+          // Always the panel index, never `child.key` — panels don't reorder, so it's already a
+          // stable, unique identity on its own, and in the single-child "repeat as a template"
+          // case above every entry in `panelElements` is literally the *same* element (same key,
+          // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
+          // every panel down to one shared React instance instead of `panels` independent ones.
+          key: i,
           height: panelHeight,
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),

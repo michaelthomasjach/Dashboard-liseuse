@@ -1,6 +1,6 @@
 .lq-chart-workspace {
   display: grid;
-  gap: var(--lq-space-4);
+  gap: 0;
   width: 100%;
 }
 

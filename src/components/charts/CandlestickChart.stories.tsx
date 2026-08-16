@@ -154,19 +154,6 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   }));
 }
 
-// Extra panels for the split-screen demo (see ChartWorkspace) — simple, distinct instruments so
-// splitting into more windows actually shows something different in each one, unlike the fully
-// interactive/configurable main panel below.
-const SPLIT_PANEL_DATASETS: { symbol: string; data: Candle[] }[] = [
-  { symbol: "NVDA", data: generateCandles(600, 120, 15) },
-  { symbol: "AAPL", data: generateCandles(600, 190, 27) },
-  { symbol: "SPX", data: generateCandles(600, 5200, 3) },
-  { symbol: "BTCUSD", data: generateCandles(600, 62000, 61) },
-  { symbol: "ETHUSD", data: generateCandles(600, 3400, 52) },
-  { symbol: "WTI", data: generateCandles(600, 78, 84) },
-  { symbol: "EURUSD", data: generateCandles(600, 1.08, 9) },
-];
-
 export const AllFeatures: Story = {
   name: "Toutes les options",
   render: () => {
@@ -191,9 +178,10 @@ export const AllFeatures: Story = {
           tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup), modèles de
           disposition (`showTemplates` — bouton disquette + dossier tout à droite de l'en-tête : enregistre/
           recharge la liste d'indicateurs et la disposition des panneaux), et écran divisé (icône grille dans
-          l'en-tête — 1/2/4/6/8 fenêtres, chacune avec sa propre icône chaîne pour synchroniser leur crosshair ;
-          ce panneau reste le seul entièrement configurable, les autres sont de simples graphiques de
-          démonstration).
+          l'en-tête — 1/2/4/6/8 fenêtres ; un seul <code>{"<CandlestickChart>"}</code> passé à{" "}
+          <code>ChartWorkspace</code> ci-dessous, chaque nouvelle fenêtre en est sa propre instance
+          indépendante avec exactement les mêmes options — outils de dessin, indicateurs, modèles, tout — plus
+          l'icône chaîne pour synchroniser leur crosshair entre elles).
         </p>
         <ChartWorkspace defaultPanels={1} panelHeight={STORY_HEIGHT}>
           <CandlestickChart
@@ -224,9 +212,6 @@ export const AllFeatures: Story = {
             seasonality
             showTemplates
           />
-          {SPLIT_PANEL_DATASETS.map(({ symbol, data }) => (
-            <CandlestickChart key={symbol} data={data} symbol={symbol} zoomable />
-          ))}
         </ChartWorkspace>
       </div>
     );
