@@ -1,4 +1,4 @@
-import { useId, useMemo, useState } from "react";
+import { forwardRef, useCallback, useEffect, useId, useImperativeHandle, useMemo, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions, type ChartMargin } from "./internal/useChartDimensions";
 import { useD3Zoom } from "./internal/useD3Zoom";
@@ -48,11 +48,28 @@ export interface LineAreaChartProps {
    *  that already provides it (see SeasonalityView), so the two don't stack into a visible
    *  double border. Default false (a standalone LineAreaChart keeps its own border). */
   embedded?: boolean;
+  /** A solid, slightly darker horizontal line at this Y value — same "meaningful threshold, not
+   *  just a scale tick" treatment as the main CandlestickChart's own 0% compare-mode line (see
+   *  SeasonalityView, which passes 0 to mark flat/breakeven performance). Omit for no line. */
+  referenceLineY?: number;
+  /** Hides the built-in "Réinitialiser le zoom" button from this chart's own toolbar — for a
+   *  caller that renders its own reset button elsewhere (its own header, say) driven by
+   *  `onZoomChange`/the imperative `resetZoom()` handle instead. Default true (shown). */
+  showZoomReset?: boolean;
+  /** Fires whenever the zoomed-in/panned state changes — lets a caller that set `showZoomReset`
+   *  to false know when to show its own reset control. */
+  onZoomChange?: (isZoomed: boolean) => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
 
-export function LineAreaChart({
+export interface LineAreaChartHandle {
+  /** Same as clicking the built-in "Réinitialiser le zoom" button — for a caller that hid it via
+   *  `showZoomReset={false}` and rendered its own trigger elsewhere. */
+  resetZoom: () => void;
+}
+
+export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>(function LineAreaChart({
   series,
   height = 320,
   area = false,
@@ -65,9 +82,12 @@ export function LineAreaChart({
   fullscreenToggle = true,
   yAxisOrientation = "left",
   embedded = false,
+  referenceLineY,
+  showZoomReset = true,
+  onZoomChange,
   margin,
   className,
-}: LineAreaChartProps) {
+}, handleRef) {
   const clipId = useId();
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
@@ -147,14 +167,20 @@ export function LineAreaChart({
 
   const isZoomed = transform.k !== 1 || transform.x !== 0 || yTransform.k !== 1 || yTransform.y !== 0;
 
-  function resetZoom() {
+  const resetZoom = useCallback(() => {
     resetX();
     setYTransform(d3.zoomIdentity);
-  }
+  }, [resetX]);
 
   function resetYAxis() {
     setYTransform(d3.zoomIdentity);
   }
+
+  useImperativeHandle(handleRef, () => ({ resetZoom }), [resetZoom]);
+
+  useEffect(() => {
+    onZoomChange?.(isZoomed);
+  }, [isZoomed, onZoomChange]);
 
   const lineGen = d3
     .line<ChartPoint>()
@@ -201,7 +227,7 @@ export function LineAreaChart({
   return (
     <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", embedded && "lq-chart--embedded", className].filter(Boolean).join(" ")}>
       <div className="lq-chart__toolbar">
-        {zoomable && isZoomed && (
+        {zoomable && isZoomed && showZoomReset && (
           <button type="button" className="lq-chart__reset-button" onClick={resetZoom}>
             Réinitialiser le zoom
           </button>
@@ -253,6 +279,16 @@ export function LineAreaChart({
           />
 
           <g clipPath={`url(#${clipId})`}>
+            {referenceLineY !== undefined && (
+              <line
+                className="lq-chart__reference-line"
+                x1={0}
+                x2={dims.boundedWidth}
+                y1={zoomedYScale(referenceLineY)}
+                y2={zoomedYScale(referenceLineY)}
+              />
+            )}
+
             {visibleSeries.map((s, i) => {
               const color = colorFor(s, i);
               const fillArea = s.area ?? area;
@@ -382,4 +418,4 @@ export function LineAreaChart({
       )}
     </div>
   );
-}
+});

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Candle } from "./CandlestickChart";
 import { computeSeasonality, type SeasonalityGranularity } from "./internal/seasonality";
-import { LineAreaChart } from "./LineAreaChart";
+import { LineAreaChart, type LineAreaChartHandle } from "./LineAreaChart";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
@@ -61,6 +61,13 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const yearPickerAnchorRef = useRef<HTMLButtonElement>(null);
   const [granularityMenuOpen, setGranularityMenuOpen] = useState(false);
   const granularityAnchorRef = useRef<HTMLButtonElement>(null);
+  // The chart's own built-in reset button (`LineAreaChart`'s `showZoomReset`) is hidden in favor
+  // of this one, rendered in the header instead — same spot the main (non-seasonality) chart's
+  // own "Réinitialiser le zoom" lives, rather than floating over the plot's own top-right corner
+  // (where LineAreaChart's default toolbar sits, fine standalone but visually stranded once this
+  // rail/header layout wraps around it).
+  const lineChartRef = useRef<LineAreaChartHandle>(null);
+  const [isZoomed, setIsZoomed] = useState(false);
 
   const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
@@ -95,6 +102,15 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             <ChevronLeftIcon size={14} />
           </button>
           <span className="lq-chart__symbol-info-name">{symbol ? `${symbol} — Saisonnalité` : "Saisonnalité"}</span>
+          {/* Gated on the chart branch too, not just `isZoomed` — switching to "Année" granularity
+              (the single-bucket summary below, no LineAreaChart at all) unmounts the chart without
+              a chance to report itself back to `isZoomed=false`, which would otherwise leave a
+              dead button in the header with nothing left for it to reset. */}
+          {isZoomed && result.buckets.length > 1 && (
+            <button type="button" className="lq-chart__reset-button" onClick={() => lineChartRef.current?.resetZoom()}>
+              Réinitialiser le zoom
+            </button>
+          )}
         </div>
       )}
 
@@ -214,6 +230,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
           </div>
         ) : (
           <LineAreaChart
+            ref={lineChartRef}
             series={[
               {
                 id: "seasonality",
@@ -228,6 +245,9 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             fullscreenToggle={false}
             yAxisOrientation="right"
             embedded
+            referenceLineY={0}
+            showZoomReset={false}
+            onZoomChange={setIsZoomed}
             margin={{ ...DEFAULT_MARGIN, left: TOOLS_RAIL_WIDTH }}
             height={height}
           />

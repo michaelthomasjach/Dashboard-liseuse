@@ -104,6 +104,16 @@
   stroke-width: 1;
 }
 
+/* A meaningful reference threshold (e.g. LineAreaChart's own `referenceLineY`, SeasonalityView's
+   0% line) — same solid, slightly-darker-than-the-grid treatment as CandlestickChart's own
+   compare-mode 0% baseline (see drawPriceCandles.ts), not the dashed .lq-chart__crosshair-line
+   above (that one's transient, hover-only). */
+.lq-chart__reference-line {
+  stroke: var(--lq-color-text-muted);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
 .lq-chart__axis-drag--x {
   cursor: ew-resize;
 }
