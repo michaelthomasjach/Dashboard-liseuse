@@ -116,18 +116,13 @@ export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon },
       { type: "arrowDown", label: "Flèche bas", icon: ArrowDownIcon },
       { type: "arrowLine", label: "Ligne fléchée", icon: ArrowLineIcon },
+      { type: "headShoulders", label: "ETE (Épaule-Tête-Épaule)", icon: HeadShouldersIcon },
+      { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
     ],
   },
   {
     id: "measure",
     tools: [{ type: "measure", label: "Mesure", icon: MeasureIcon }],
-  },
-  {
-    id: "patterns",
-    tools: [
-      { type: "headShoulders", label: "ETE (Épaule-Tête-Épaule)", icon: HeadShouldersIcon },
-      { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
-    ],
   },
 ];
 

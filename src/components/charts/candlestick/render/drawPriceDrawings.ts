@@ -9,7 +9,7 @@ import {
   HEAD_SHOULDERS_VERTEX_LABELS,
   MULTI_POINT_TOOLS,
 } from "../drawingCatalog";
-import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick } from "../drawingGeometry";
+import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastDownCurvePoints } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender";
 import { defaultIndicatorColor } from "../indicators";
 
@@ -390,9 +390,12 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     }
 
     // "forecast": a curved (not straight) arrow from x1/y1 to x2/y2 — a price-projection
-    // annotation, not a support/resistance line — bowed via a quadratic curve through a control
-    // point offset perpendicular to the straight A-B segment, each end labeled with its own
-    // price/date, and the end additionally with the price change and elapsed time from the start.
+    // annotation, not a support/resistance line — each end labeled with its own price/date, and
+    // the end additionally with the price change and elapsed time from the start. A rise (B's
+    // price at or above A's) bows via a quadratic curve through a control point offset
+    // perpendicular to the straight A-B segment; a decline instead follows
+    // `forecastDownCurvePoints`' own asymmetric shape (see its doc) — the two read as different
+    // kinds of move on purpose, not mirror images of the same arc.
     for (const dr of visibleDrawings) {
       if (dr.lineType !== "forecast") continue;
       const lineColor = dr.color ?? colorAccent;
@@ -400,12 +403,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       const ay = zoomedPriceScale(dr.y1);
       const bx = zoomedXScale(indexForDate(dr.x2) + 0.5);
       const by = zoomedPriceScale(dr.y2);
-      const dx = bx - ax;
-      const dy = by - ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const bow = len * 0.28;
-      const cx = (ax + bx) / 2 - (dy / len) * bow;
-      const cy = (ay + by) / 2 + (dx / len) * bow;
+      const declining = dr.y2 < dr.y1;
 
       ctx.save();
       ctx.strokeStyle = lineColor;
@@ -413,13 +411,30 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       ctx.setLineDash(lineDashArray(dr));
       ctx.beginPath();
       ctx.moveTo(ax, ay);
-      ctx.quadraticCurveTo(cx, cy, bx, by);
+      let tangentFromX: number, tangentFromY: number;
+      if (declining) {
+        const curvePoints = forecastDownCurvePoints(ax, ay, bx, by);
+        for (const p of curvePoints) ctx.lineTo(p.x, p.y);
+        const tangentFrom = curvePoints[curvePoints.length - 2] ?? { x: ax, y: ay };
+        tangentFromX = tangentFrom.x;
+        tangentFromY = tangentFrom.y;
+      } else {
+        const dx = bx - ax;
+        const dy = by - ay;
+        const len = Math.hypot(dx, dy) || 1;
+        const bow = len * 0.28;
+        const cx = (ax + bx) / 2 - (dy / len) * bow;
+        const cy = (ay + by) / 2 + (dx / len) * bow;
+        ctx.quadraticCurveTo(cx, cy, bx, by);
+        tangentFromX = cx;
+        tangentFromY = cy;
+      }
       ctx.stroke();
       ctx.restore();
-      // Arrowhead direction follows the curve's own tangent at B (the control point -> B
-      // segment), not the straight A->B direction, so it visually continues the arc instead of
-      // pointing slightly off from where the curve actually arrives.
-      drawArrowhead(ctx, cx, cy, bx, by, lineColor);
+      // Arrowhead direction follows the curve's own tangent at B (its last segment, whichever
+      // shape drew it), not the straight A->B direction, so it visually continues the curve
+      // instead of pointing slightly off from where it actually arrives.
+      drawArrowhead(ctx, tangentFromX, tangentFromY, bx, by, lineColor);
 
       ctx.beginPath();
       ctx.arc(ax, ay, 3, 0, Math.PI * 2);
@@ -562,22 +577,26 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
         ctx.stroke();
       } else if (activeTool === "forecast") {
-        // Same bow-via-quadratic-curve shape as the committed render (see the "forecast" loop
-        // below), so the preview doesn't visually snap from a straight line to a curved one the
-        // instant the 2nd click commits it.
+        // Same direction-dependent shape as the committed render (see the "forecast" loop
+        // below), so the preview doesn't visually snap to a different curve the instant the 2nd
+        // click commits it.
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
         const y1 = zoomedPriceScale(pendingPoint.y);
         const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
         const y2 = zoomedPriceScale(previewPoint.y);
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const len = Math.hypot(dx, dy) || 1;
-        const bow = len * 0.28;
-        const cx = (x1 + x2) / 2 - (dy / len) * bow;
-        const cy = (y1 + y2) / 2 + (dx / len) * bow;
         ctx.beginPath();
         ctx.moveTo(x1, y1);
-        ctx.quadraticCurveTo(cx, cy, x2, y2);
+        if (previewPoint.y < pendingPoint.y) {
+          for (const p of forecastDownCurvePoints(x1, y1, x2, y2)) ctx.lineTo(p.x, p.y);
+        } else {
+          const dx = x2 - x1;
+          const dy = y2 - y1;
+          const len = Math.hypot(dx, dy) || 1;
+          const bow = len * 0.28;
+          const cx = (x1 + x2) / 2 - (dy / len) * bow;
+          const cy = (y1 + y2) / 2 + (dx / len) * bow;
+          ctx.quadraticCurveTo(cx, cy, x2, y2);
+        }
         ctx.stroke();
       } else {
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
