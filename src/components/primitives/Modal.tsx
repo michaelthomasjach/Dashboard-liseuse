@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
+import { CloseIcon } from "../icons";
 import "./Modal.css";
 
 export interface ModalProps {
@@ -87,6 +88,19 @@ export function Modal({ open, onClose, title, children, footer, closeLabel = "Fe
           {title && (
             <header className="lq-modal__header lq-modal__header--draggable" onPointerDown={onHeaderPointerDown}>
               <h2 className="lq-modal__title">{title}</h2>
+              {/* Own pointerdown never reaches the header's drag handler above — otherwise a
+                  plain click here would first arm a (zero-distance, harmless) drag before the
+                  click itself closes the modal, which is pointless overhead for what should be
+                  the single most direct way to back out without saving. */}
+              <button
+                type="button"
+                className="lq-modal__close-icon"
+                onPointerDown={(e) => e.stopPropagation()}
+                onClick={onClose}
+                aria-label="Fermer"
+              >
+                <CloseIcon size={16} />
+              </button>
             </header>
           )}
           <div className="lq-modal__body">{children}</div>

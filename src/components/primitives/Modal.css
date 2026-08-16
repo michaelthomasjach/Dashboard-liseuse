@@ -50,6 +50,10 @@
 }
 
 .lq-modal__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--lq-space-3);
   border-bottom: none;
 }
 
@@ -70,6 +74,24 @@
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--lq-color-text);
+}
+
+.lq-modal__close-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 2px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-modal__close-icon:hover {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
 }
 
 .lq-modal__body {
