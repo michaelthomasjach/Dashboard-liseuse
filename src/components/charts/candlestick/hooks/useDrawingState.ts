@@ -261,6 +261,36 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [hoveredDrawingId, editingId, drawings, onDrawingsChange]);
 
+  // Ctrl/Cmd+C over a hovered drawing copies it (copiedDrawingRef, not state — never read during
+  // render, same reasoning usePaneLayout's own copiedIndicatorRef isn't); Ctrl/Cmd+V pastes a
+  // duplicate (new id, everything else — geometry, style, text — unchanged, no offset applied)
+  // appended to `drawings`. Mirrors indicators' own Ctrl+C/Ctrl+V exactly (see usePaneLayout),
+  // just keyed off `hoveredDrawingId` instead of `hoveredIndicatorId` — the two never fire
+  // together since a legend entry and a canvas drawing can't both be hovered at once, so both
+  // hooks' own `window` listeners coexist without stepping on each other.
+  const copiedDrawingRef = useRef<TrendLineDrawing | null>(null);
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "c" && key !== "v") return;
+      const active = document.activeElement;
+      const isEditableFocused = active instanceof HTMLElement && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isEditableFocused) return;
+      if (key === "c") {
+        if (!hoveredDrawingId) return;
+        const drawing = drawings.find((d) => d.id === hoveredDrawingId);
+        if (drawing) copiedDrawingRef.current = drawing;
+        return;
+      }
+      if (!copiedDrawingRef.current) return;
+      e.preventDefault();
+      commitDrawings([...drawings, { ...copiedDrawingRef.current, id: `drawing-${drawingIdRef.current++}` }]);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [hoveredDrawingId, drawings, commitDrawings, copiedDrawingRef, drawingIdRef]);
+
   // Snaps a raw price to whichever of the nearest candle's open/high/low/close sits closest —
   // the magnet toggle's whole effect, applied wherever a new point gets placed (see toDataPoint).
   // No-op when the magnet is off, so every call site stays correct without its own branch.
