@@ -3,7 +3,7 @@ import { TextField } from "../../../forms/TextField";
 import { SearchIcon, CloseIcon, RefreshIcon, CheckIcon, PlusIcon, StarIcon } from "../../../icons";
 import type { SymbolSearchCategory } from "../interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../interfaces/SymbolSearchResult.interface";
-import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
+import type { TrendLineDrawing, OverlayDataPoint } from "../interfaces/TrendLineDrawing.interface";
 import { SYMBOL_SEARCH_CATEGORIES, defaultSymbolLogoColor } from "../symbolSearchCatalog";
 
 export interface SymbolSearchModalProps {
@@ -17,7 +17,7 @@ export interface SymbolSearchModalProps {
   favoriteSymbolIds: string[];
   toggleFavoriteSymbol: (id: string) => void;
   onSymbolSelect: ((result: SymbolSearchResult) => void) | undefined;
-  onAddSymbolOverlay: ((result: SymbolSearchResult) => { date: Date; value: number }[] | Promise<{ date: Date; value: number }[]>) | undefined;
+  onAddSymbolOverlay: ((result: SymbolSearchResult) => OverlayDataPoint[] | Promise<OverlayDataPoint[]>) | undefined;
   symbolOverlays: TrendLineDrawing[];
   addingOverlaySymbols: Set<string>;
   handleAddSymbolOverlay: (result: SymbolSearchResult) => void;

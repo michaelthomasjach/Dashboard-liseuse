@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react";
 import { Modal } from "../../../primitives/Modal";
 import { Checkbox } from "../../../forms/Checkbox";
+import { capitalize } from "../formatting";
 
 export interface ChartSettingsModalsProps {
   settingsOpen: boolean;
@@ -106,7 +107,7 @@ export function ChartSettingsModals({
                       return next;
                     })
                   }
-                  label={kind}
+                  label={capitalize(kind)}
                 />
               ))}
             </div>

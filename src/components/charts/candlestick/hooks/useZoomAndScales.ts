@@ -132,7 +132,8 @@ export function useZoomAndScales({
     const refTime = data[refIdx].date.getTime();
     return symbolOverlays.map((dr) => {
       const series = [...(dr.overlayData ?? [])].sort((a, b) => a.date.getTime() - b.date.getTime());
-      if (series.length === 0) return { drawing: dr, mainReference, points: [] as { i: number; price: number }[] };
+      if (series.length === 0)
+        return { drawing: dr, mainReference, points: [] as { i: number; price: number; open?: number; high?: number; low?: number }[] };
       // The overlay's own reference: its last point on or before the main series' first-visible
       // date, falling back to the overlay's own first point when its history starts later (its
       // comparison then simply begins wherever its own data actually does).
@@ -141,9 +142,17 @@ export function useZoomAndScales({
         if (p.date.getTime() > refTime) break;
         overlayReference = p.value;
       }
+      // Same "rebase to a % change from overlayReference, project onto mainReference" formula as
+      // `price` below, applied to open/high/low too (when the caller actually supplied them —
+      // see overlayDisplayMode's own doc) so a candle-mode overlay's whole OHLC bar lands
+      // consistently in the same projected price space its close already does.
+      const rebase = (v: number) => (overlayReference !== 0 ? mainReference * (v / overlayReference) : mainReference);
       const points = series.map((p) => ({
         i: indexForDate(p.date),
-        price: overlayReference !== 0 ? mainReference * (p.value / overlayReference) : mainReference,
+        price: rebase(p.value),
+        open: p.open !== undefined ? rebase(p.open) : undefined,
+        high: p.high !== undefined ? rebase(p.high) : undefined,
+        low: p.low !== undefined ? rebase(p.low) : undefined,
       }));
       return { drawing: dr, mainReference, points };
     });
@@ -199,8 +208,11 @@ export function useZoomAndScales({
       for (const { points } of overlayProjections) {
         for (const p of points) {
           if (p.i >= visibleRange.start && p.i <= visibleRange.end) {
-            highs.push(p.price);
-            lows.push(p.price);
+            // A candle-mode overlay's own high/low, when present, fit the axis to its whole bar
+            // rather than just its close — otherwise a tall wick could render clipped against a
+            // range that only ever accounted for `price` (the close).
+            highs.push(p.high ?? p.price);
+            lows.push(p.low ?? p.price);
           }
         }
       }

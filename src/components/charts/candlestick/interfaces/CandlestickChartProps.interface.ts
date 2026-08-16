@@ -1,6 +1,6 @@
 import type { ChartMargin } from "../../internal/useChartDimensions";
 import type { Candle } from "./Candle.interface";
-import type { TrendLineDrawing } from "./TrendLineDrawing.interface";
+import type { TrendLineDrawing, OverlayDataPoint } from "./TrendLineDrawing.interface";
 import type { Indicator } from "./Indicator.interface";
 import type { TimeframeEntry } from "./TimeframeEntry.interface";
 import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
@@ -55,7 +55,7 @@ export interface CandlestickChartProps {
    *  static domain sized to the whole dataset — until the user manually zooms/pans the Y axis
    *  themselves (wheel or drag on the axis, or dragging the plot vertically), at which point
    *  auto-fit stops so their adjustment isn't immediately overwritten. Clicking "Réinitialiser
-   *  le zoom" re-engages it. Default false. Also toggleable live from the chart-settings modal
+   *  le zoom" re-engages it. Default true. Also toggleable live from the chart-settings modal
    *  (double-click the symbol/chart-type label, top-left of the price plot) — that toggle owns
    *  an internal copy seeded from this prop, same uncontrolled pattern as `drawings`/
    *  `indicators`, reported back via `onYAutoScalingChange`. */
@@ -125,10 +125,11 @@ export interface CandlestickChartProps {
    *  `onDrawingsChange` same as any other new drawing. The "+" shows a small spinner while the
    *  promise is pending, and turns into a checkmark (click to remove) once that symbol is already
    *  an active overlay — a plain fire-and-forget callback couldn't support either without the
-   *  library tracking pending/active state itself, which returning the data instead sidesteps. */
-  onAddSymbolOverlay?: (
-    result: SymbolSearchResult
-  ) => { date: Date; value: number }[] | Promise<{ date: Date; value: number }[]>;
+   *  library tracking pending/active state itself, which returning the data instead sidesteps.
+   *  Each point's `value` (its close) is all a plain line comparison needs; include `open`/
+   *  `high`/`low` too (see OverlayDataPoint) if the source data has them and the comparison
+   *  should also be selectable as candles (`overlayDisplayMode` in the edit modal's Style tab). */
+  onAddSymbolOverlay?: (result: SymbolSearchResult) => OverlayDataPoint[] | Promise<OverlayDataPoint[]>;
   /** Uncontrolled set of favorited result ids — the star toggle at the far right of each result
    *  row (visible on hover, or always once favorited). Persisted the same way as `drawings`/
    *  `indicators`: seeds initial state, changes reported back via `onFavoriteSymbolIdsChange`. */

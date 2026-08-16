@@ -43,7 +43,11 @@ export interface RenderCandlestickChartParams {
   indicatorPaneTops: number[];
   zoomedOwnPaneScales: Record<string, ScaleLinear<number, number>>;
   indicators: Indicator[];
-  overlayProjections: { drawing: TrendLineDrawing; mainReference: number; points: { i: number; price: number }[] }[];
+  overlayProjections: {
+    drawing: TrendLineDrawing;
+    mainReference: number;
+    points: { i: number; price: number; open?: number; high?: number; low?: number }[];
+  }[];
   symbolOverlays: TrendLineDrawing[];
   hovered: Candle | null;
   hoverY: number | null;

@@ -8,8 +8,8 @@ import {
   type SymbolSearchResult,
   type Candle,
   type ChartDisplayMode,
+  type OverlayDataPoint,
 } from "./CandlestickChart";
-import { Checkbox } from "../forms/Checkbox";
 import { generateCandles } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -140,9 +140,17 @@ const OVERLAY_SEED_BY_TICKER: Record<string, number> = {
   BTCUSD: 61,
   ETHUSD: 52,
 };
-function generateOverlaySeries(ticker: string): { date: Date; value: number }[] {
+// Full OHLC (not just the close) so the "Mode d'affichage" selector in the edit modal has
+// something to offer "Bougies" from — see OverlayDataPoint's own doc.
+function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   const seed = OVERLAY_SEED_BY_TICKER[ticker] ?? 7;
-  return generateCandles(ALL_FEATURES_DATASET.length, 100 + seed * 3, seed).map((c, i) => ({ date: ALL_FEATURES_DATASET[i].date, value: c.close }));
+  return generateCandles(ALL_FEATURES_DATASET.length, 100 + seed * 3, seed).map((c, i) => ({
+    date: ALL_FEATURES_DATASET[i].date,
+    value: c.close,
+    open: c.open,
+    high: c.high,
+    low: c.low,
+  }));
 }
 
 export const AllFeatures: Story = {
@@ -153,7 +161,6 @@ export const AllFeatures: Story = {
     const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
     const [currentSymbol, setCurrentSymbol] = useState("MSFT");
     const [displayMode, setDisplayMode] = useState<ChartDisplayMode>("candle");
-    const [yAutoScaling, setYAutoScaling] = useState(false);
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
@@ -163,15 +170,12 @@ export const AllFeatures: Story = {
           (`defaultChartDisplayMode`/`onChartDisplayModeChange`), plein écran (`fullscreenToggle`),
           sélecteur d'intervalle (`timeframes`), recherche de symbole (`symbolSearch` — <strong>double-clic</strong>{" "}
           sur "MSFT" ouvre la modale, son bouton "+" ajoute un overlay de comparaison —{" "}
-          <code>onAddSymbolOverlay</code>), rescale automatique de l'axe des prix (`YAutoScaling`, case à cocher
-          ci-dessous), saisonnalité (`seasonality` — bouton calendrier dans l'en-tête), zoom/pan (`zoomable`) et
-          évènements (`events` — bulles en bas du tracé des prix, deux d'entre elles partageant une même date pour
-          montrer la bulle "stack" ; les <strong>cliquer</strong> ouvre une tooltip détaillée, le bouton œil dans
-          l'en-tête masque/affiche toutes les bulles d'un coup).
+          <code>onAddSymbolOverlay</code>), rescale automatique de l'axe des prix (`YAutoScaling`, activé par défaut —
+          bascule dans la modale "Paramètres du graphique"), saisonnalité (`seasonality` — bouton calendrier dans
+          l'en-tête), zoom/pan (`zoomable`) et évènements (`events` — bulles en bas du tracé des prix, deux d'entre
+          elles partageant une même date pour montrer la bulle "stack" ; les <strong>cliquer</strong> ouvre une
+          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup).
         </p>
-        <div style={{ marginBottom: 12 }}>
-          <Checkbox checked={yAutoScaling} onChange={setYAutoScaling} label="YAutoScaling" />
-        </div>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
           symbol={currentSymbol}
@@ -198,8 +202,6 @@ export const AllFeatures: Story = {
             return generateOverlaySeries(result.ticker);
           }}
           seasonality
-          YAutoScaling={yAutoScaling}
-          onYAutoScalingChange={setYAutoScaling}
           height={STORY_HEIGHT}
         />
       </div>

@@ -447,11 +447,28 @@ export function DrawingEditModal({
             </>
           )}
           {draft.lineType === "symbolOverlay" && (
-            <Checkbox
-              checked={!draft.hidden}
-              onChange={(visible) => setDraft({ ...draft, hidden: !visible })}
-              label="Visible"
-            />
+            <>
+              {/* Only offered once every point actually carries open/high/low — a plain
+                  close-only overlay (see OverlayDataPoint's own doc) has nothing a candle body
+                  could be drawn from. */}
+              {(draft.overlayData?.length ?? 0) > 0 &&
+                draft.overlayData!.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined) && (
+                  <Select
+                    label="Mode d'affichage"
+                    value={draft.overlayDisplayMode ?? "line"}
+                    onChange={(v) => setDraft({ ...draft, overlayDisplayMode: v })}
+                    options={[
+                      { value: "line", label: "Ligne" },
+                      { value: "candle", label: "Bougies" },
+                    ]}
+                  />
+                )}
+              <Checkbox
+                checked={!draft.hidden}
+                onChange={(visible) => setDraft({ ...draft, hidden: !visible })}
+                label="Visible"
+              />
+            </>
           )}
         </>
       )}

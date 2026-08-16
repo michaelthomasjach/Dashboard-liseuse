@@ -11,6 +11,14 @@ export function contrastingTextColor(hex: string): string {
   return luminance > 0.55 ? "#000000" : "#ffffff";
 }
 
+/** Event kinds (`ChartEvent.kind`) are freeform app-supplied strings ("earnings", "dividend"…),
+ *  always rendered Title Case wherever they're shown as a label — the events-visibility toggle in
+ *  the toolbar (see ToolsRail) and its twin list in the chart-settings modal (see
+ *  ChartSettingsModals) both read through this rather than each formatting it their own way. */
+export function capitalize(text: string): string {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
 /** MM:SS, rounded up so a fresh 5-minute candle reads "05:00" (not "04:59") the instant it
  *  starts — ceil(ms / 1000) rather than floor. Negative/zero clamps to "00:00" rather than
  *  going negative, since nothing here forces a new candle to actually arrive on schedule. */

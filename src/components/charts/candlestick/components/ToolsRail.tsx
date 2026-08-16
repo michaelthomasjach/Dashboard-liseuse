@@ -5,6 +5,7 @@ import { Checkbox } from "../../../forms/Checkbox";
 import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon } from "../../../icons";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { DRAWING_TOOL_CATEGORIES } from "../drawingCatalog";
+import { capitalize } from "../formatting";
 
 export interface ToolsRailProps {
   drawingTools: boolean;
@@ -217,7 +218,7 @@ export function ToolsRail({
                         return next;
                       })
                     }
-                    label={kind.charAt(0).toUpperCase() + kind.slice(1)}
+                    label={capitalize(kind)}
                   />
                 ))}
               </div>

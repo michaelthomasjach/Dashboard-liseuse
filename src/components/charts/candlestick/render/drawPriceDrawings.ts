@@ -38,6 +38,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     overlayProjections,
     symbolOverlays,
     indexForDate,
+    candleWidth,
   } = params;
   const { colorUp, colorDown, colorBg, colorMuted, colorAccent, fontFamily } = style;
 
@@ -590,10 +591,13 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       ctx.restore();
     }
 
-    // Symbol-comparison overlays (see onAddSymbolOverlay/compareMode) — each drawn as a plain
-    // line through its own overlayProjections (already rebased onto the main series' own price
-    // space, see that memo's own doc comment), same clip as everything else in this section since
-    // it's conceptually "another line over price", same as SMA/EMA above.
+    // Symbol-comparison overlays (see onAddSymbolOverlay/compareMode) — drawn through their own
+    // overlayProjections (already rebased onto the main series' own price space, see that memo's
+    // own doc comment), same clip as everything else in this section since it's conceptually
+    // "another series over price", same as SMA/EMA above. Two shapes: a plain line through each
+    // point's rebased close (the default, and the only option when `overlayData` doesn't carry
+    // open/high/low), or full OHLC bars when `overlayDisplayMode: "candle"` opted in and every
+    // visible point actually has them.
     for (const { drawing: dr, points } of overlayProjections) {
       if (dr.hidden) continue;
       const windowStart = Math.max(0, visibleRange.start - 2);
@@ -601,19 +605,42 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       const visiblePoints = points.filter((p) => p.i >= windowStart && p.i <= windowEnd);
       if (visiblePoints.length < 2) continue;
       const color = dr.color ?? defaultIndicatorColor(symbolOverlays.indexOf(dr));
-      ctx.save();
-      ctx.strokeStyle = color;
-      ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
-      ctx.setLineDash(lineDashArray(dr));
-      ctx.beginPath();
-      visiblePoints.forEach((p, k) => {
-        const x = zoomedXScale(p.i + 0.5);
-        const y = zoomedPriceScale(p.price);
-        if (k === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      });
-      ctx.stroke();
-      ctx.restore();
+      const canDrawCandles = visiblePoints.every((p) => p.open !== undefined && p.high !== undefined && p.low !== undefined);
+
+      if (dr.overlayDisplayMode === "candle" && canDrawCandles) {
+        // Hollow (stroke-only, never filled) in the overlay's own color rather than the theme's
+        // up/down hues — reads as "a comparison instrument" instead of a second primary series
+        // competing with `data`'s own filled candles, and keeps multiple candle-mode overlays
+        // visually distinct from each other by outline color alone.
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+        for (const p of visiblePoints) {
+          const cx = zoomedXScale(p.i + 0.5);
+          const bodyTop = zoomedPriceScale(Math.max(p.open!, p.price));
+          const bodyBottom = zoomedPriceScale(Math.min(p.open!, p.price));
+          ctx.beginPath();
+          ctx.moveTo(cx, zoomedPriceScale(p.high!));
+          ctx.lineTo(cx, zoomedPriceScale(p.low!));
+          ctx.stroke();
+          ctx.strokeRect(cx - candleWidth / 2, bodyTop, candleWidth, Math.max(1, bodyBottom - bodyTop));
+        }
+        ctx.restore();
+      } else {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.lineWidth = (dr.strokeWidth ?? 1.5) + (hoveredDrawingId === dr.id ? 1 : 0);
+        ctx.setLineDash(lineDashArray(dr));
+        ctx.beginPath();
+        visiblePoints.forEach((p, k) => {
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(p.price);
+          if (k === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     ctx.restore(); // end price-section clip

@@ -35,7 +35,7 @@ import type { ChartEvent } from "./candlestick/interfaces/ChartEvent.interface";
 import type { FundamentalDataPoint } from "./candlestick/interfaces/FundamentalDataPoint.interface";
 import type { SymbolSearchCategory } from "./candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "./candlestick/interfaces/SymbolSearchResult.interface";
-import type { TrendLineDrawing } from "./candlestick/interfaces/TrendLineDrawing.interface";
+import type { TrendLineDrawing, OverlayDataPoint } from "./candlestick/interfaces/TrendLineDrawing.interface";
 import type { IndicatorKind } from "./candlestick/interfaces/IndicatorKind.interface";
 import type { IndicatorBand } from "./candlestick/interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./candlestick/interfaces/IndicatorMACD.interface";
@@ -53,6 +53,7 @@ export type {
   SymbolSearchCategory,
   SymbolSearchResult,
   TrendLineDrawing,
+  OverlayDataPoint,
   IndicatorKind,
   IndicatorBand,
   IndicatorMACD,
@@ -95,7 +96,7 @@ export function CandlestickChart({
   defaultIndicators,
   onIndicatorsChange,
   initialVisibleCandles = 500,
-  YAutoScaling = false,
+  YAutoScaling = true,
   onYAutoScalingChange,
   timeframes,
   timeframe,

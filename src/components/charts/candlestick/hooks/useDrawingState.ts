@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Candle } from "../interfaces/Candle.interface";
-import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
+import type { TrendLineDrawing, OverlayDataPoint } from "../interfaces/TrendLineDrawing.interface";
 import type { DataPoint } from "../interfaces/DataPoint.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import type { SymbolSearchResult } from "../interfaces/SymbolSearchResult.interface";
@@ -12,7 +12,9 @@ export interface UseDrawingStateArgs {
   data: Candle[];
   defaultDrawings: TrendLineDrawing[] | undefined;
   onDrawingsChange: ((drawings: TrendLineDrawing[]) => void) | undefined;
-  onAddSymbolOverlay: ((result: SymbolSearchResult) => { date: Date; value: number }[] | Promise<{ date: Date; value: number }[]>) | undefined;
+  onAddSymbolOverlay:
+    | ((result: SymbolSearchResult) => OverlayDataPoint[] | Promise<OverlayDataPoint[]>)
+    | undefined;
 }
 
 /** Every drawing (trend lines, shapes, symbol-comparison overlays…) — state, tool selection,

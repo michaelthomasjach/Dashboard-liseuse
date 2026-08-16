@@ -1,5 +1,5 @@
 export { LineAreaChart } from "./LineAreaChart";
-export type { LineAreaChartProps, ChartSeries, ChartPoint } from "./LineAreaChart";
+export type { LineAreaChartProps, LineAreaChartHandle, ChartSeries, ChartPoint } from "./LineAreaChart";
 
 export { BarChart } from "./BarChart";
 export type { BarChartProps, BarDatum } from "./BarChart";
@@ -9,6 +9,7 @@ export type {
   CandlestickChartProps,
   Candle,
   TrendLineDrawing,
+  OverlayDataPoint,
   Indicator,
   IndicatorKind,
   ChartEvent,
