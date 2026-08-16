@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions } from "./internal/useChartDimensions";
 import { useFullscreen } from "./internal/useFullscreen";
@@ -13,6 +13,9 @@ import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScal
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
 import { ChartHeader } from "./candlestick/components/ChartHeader";
+import { ToolsRail } from "./candlestick/components/ToolsRail";
+import { ChartLegend } from "./candlestick/components/ChartLegend";
+import { PaneHeaders } from "./candlestick/components/PaneHeaders";
 import { DrawingEditModal } from "./candlestick/components/DrawingEditModal";
 import { IndicatorModals } from "./candlestick/components/IndicatorModals";
 import { ChartSettingsModals } from "./candlestick/components/ChartSettingsModals";
@@ -20,21 +23,7 @@ import { SymbolSearchModal } from "./candlestick/components/SymbolSearchModal";
 import { ChartAxis } from "./ChartAxis";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
-import { Popover } from "../forms/Popover";
-import {
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ChevronLeftIcon,
-  PlusIcon,
-  SettingsIcon,
-  EyeIcon,
-  EyeOffIcon,
-  TrashIcon,
-  MagnetIcon,
-  LockIcon,
-  GripIcon,
-  LayersIcon,
-} from "../icons";
+import { ChevronLeftIcon, PlusIcon } from "../icons";
 import "./charts-shared.css";
 
 import type { Candle } from "./candlestick/interfaces/Candle.interface";
@@ -71,7 +60,7 @@ export type {
   CandlestickChartProps,
 };
 
-import { DRAWING_TOOL_CATEGORIES, drawingLabel } from "./candlestick/drawingCatalog";
+import { drawingLabel } from "./candlestick/drawingCatalog";
 import { allPointsOf, snapPixel } from "./candlestick/drawingGeometry";
 import { isFundamentalKind, formatFundamentalValue, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "./candlestick/indicators";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "./candlestick/eventsCatalog";
@@ -842,571 +831,82 @@ export function CandlestickChart({
             constant alone left an unstyled gap equal to the base margin between the rail
             and the first candle. Height spans the full plot (candles + volume + the date-axis
             label strip below them), reaching all the way down to the chart's own bottom border. */}
-        {drawingTools && (
-          <div className="lq-chart__tools-rail" style={{ width: dims.margin.left, height: plotHeight }}>
-            <div className="lq-chart__tools-rail-items">
-              {/* One group per category (Lignes/Fibonacci/Vagues d'Elliott) — each button
-                  represents whichever of its own tools was picked last (defaulting to the
-                  first). The chevron is invisible until its own group (button or chevron) is
-                  hovered — see .lq-chart__tool-chevron in charts-shared.css. Picking a tool from
-                  a category's menu both changes what its button represents *and* activates it
-                  immediately (see handleSelectToolType) — clicking the button itself afterward
-                  just toggles that same tool on/off, same as any other tool selection. */}
-              {DRAWING_TOOL_CATEGORIES.map((category) => {
-                const selectedType = selectedToolByCategory[category.id] ?? category.tools[0].type;
-                const selectedInCategory = category.tools.find((t) => t.type === selectedType) ?? category.tools[0];
-                const CategoryIcon = selectedInCategory.icon;
-                const menuOpen = openToolMenu === category.id;
-                return (
-                  <Fragment key={category.id}>
-                    {/* A thin rule ahead of "Mesure" only — visually separates the shape/marker
-                        tools above from the standalone measuring tool, which doesn't add a
-                        drawing to the chart the way every category above it does. */}
-                    {category.id === "measure" && <div className="lq-chart__tool-separator" aria-hidden="true" />}
-                    <div className="lq-chart__tool-group">
-                    <button
-                      type="button"
-                      className={["lq-chart__icon-button", activeTool === selectedInCategory.type && "lq-chart__icon-button--active"]
-                        .filter(Boolean)
-                        .join(" ")}
-                      onClick={() => handleToolClick(selectedInCategory.type)}
-                      aria-label={selectedInCategory.label}
-                      aria-pressed={activeTool === selectedInCategory.type}
-                    >
-                      <CategoryIcon size={14} />
-                    </button>
-                    {/* Only worth a dropdown once there's actually something to pick between —
-                        a single-tool category (e.g. "Mesure" today) has nowhere else for the
-                        chevron to lead, so it stays off entirely instead of opening an empty-ish
-                        one-item menu. Adding a 2nd tool to that category later makes this
-                        reappear on its own, no extra wiring needed. */}
-                    {category.tools.length > 1 && (
-                      <>
-                        <button
-                          ref={menuAnchorRefFor(category.id)}
-                          type="button"
-                          className={["lq-chart__tool-chevron", menuOpen && "lq-chart__tool-chevron--visible"].filter(Boolean).join(" ")}
-                          onClick={() => setOpenToolMenu((o) => (o === category.id ? null : category.id))}
-                          aria-label={`Autres outils — ${category.id}`}
-                        >
-                          <ChevronDownIcon size={8} />
-                        </button>
-                        <Popover
-                          open={menuOpen}
-                          onClose={() => setOpenToolMenu(null)}
-                          anchorRef={menuAnchorRefFor(category.id)}
-                          placement="bottom"
-                        >
-                          <div className="lq-chart__tool-menu">
-                            {category.tools.map((opt) => {
-                              const OptionIcon = opt.icon;
-                              return (
-                                <button
-                                  key={opt.type}
-                                  type="button"
-                                  className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
-                                    .filter(Boolean)
-                                    .join(" ")}
-                                  onClick={() => handleSelectToolType(opt.type)}
-                                >
-                                  <OptionIcon size={14} />
-                                  {opt.label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </Popover>
-                      </>
-                    )}
-                    </div>
-                  </Fragment>
-                );
-              })}
-              {/* A persistent modifier, not a tool of its own — stays on across tool switches
-                  (see toDataPoint/magnetSnapPrice) until toggled off again, so it lives outside
-                  DRAWING_TOOL_CATEGORIES' button+chevron+menu pattern as a plain toggle. */}
-              <button
-                type="button"
-                className={["lq-chart__icon-button", magnetActive && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => setMagnetActive((a) => !a)}
-                aria-label="Aimant"
-                aria-pressed={magnetActive}
-                title="Aimant : accroche les nouveaux points au prix (O/H/L/C) le plus proche"
-              >
-                <MagnetIcon size={14} />
-              </button>
-              {/* Hides every drawing without deleting any of them — same eye/eye-off convention
-                  the indicator legend already uses for a single indicator, applied here to all
-                  of `drawings` at once. */}
-              <button
-                type="button"
-                className={["lq-chart__icon-button", drawingsHidden && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => setDrawingsHidden((h) => !h)}
-                aria-label={drawingsHidden ? "Afficher les dessins" : "Masquer les dessins"}
-                aria-pressed={drawingsHidden}
-                title="Masquer/afficher tous les dessins"
-              >
-                {drawingsHidden ? <EyeOffIcon size={14} /> : <EyeIcon size={14} />}
-              </button>
-              {/* Blocks dragging (body, endpoints, and axis handles all check this before
-                  starting) without touching selectability — hover, Delete, and double-click to
-                  edit all keep working on a locked drawing, only click-and-drag is refused. */}
-              <button
-                type="button"
-                className={["lq-chart__icon-button", drawingsLocked && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => setDrawingsLocked((l) => !l)}
-                aria-label={drawingsLocked ? "Déverrouiller les dessins" : "Verrouiller les dessins"}
-                aria-pressed={drawingsLocked}
-                title="Verrouiller/déverrouiller le déplacement des dessins"
-              >
-                <LockIcon size={14} />
-              </button>
-              {/* Pinned to the rail's own bottom edge (see .lq-chart__tools-rail-bottom-button),
-                  separate from every tool/toggle above — opens a flat, grouped list of every
-                  drawing and indicator currently on the chart (overlay and own-pane alike) with
-                  a settings/delete action per row, instead of having to hunt each one down on
-                  the chart itself (hovering a legend entry, or a collapsed pane that hides its
-                  own actions). Shown whenever the rail itself is (drawingTools) regardless of
-                  showIndicators — even drawings-only usage benefits from a single place to see
-                  and clear everything drawn. */}
-              <button
-                type="button"
-                className={["lq-chart__icon-button", "lq-chart__tools-rail-bottom-button", indicatorsManagerOpen && "lq-chart__icon-button--active"]
-                  .filter(Boolean)
-                  .join(" ")}
-                onClick={() => setIndicatorsManagerOpen((o) => !o)}
-                aria-label="Dessins et indicateurs"
-                aria-pressed={indicatorsManagerOpen}
-                title="Voir et gérer tous les dessins et indicateurs actifs"
-              >
-                <LayersIcon size={14} />
-              </button>
-            </div>
-          </div>
-        )}
-        {/* Symbol/chart-type label + live OHLC readout, then the indicator legend right below it
-            — one shared top-left column instead of two independently-positioned corners, so
-            neither has to guess the other's height to avoid overlapping it. */}
-        <div className="lq-chart__plot-topleft" style={{ top: dims.margin.top + 6, left: dims.margin.left + 6 }}>
-          <div className="lq-chart__symbol-info">
-            {/* Its own hoverable zone (background on hover) only once `symbolSearch` opts in —
-                otherwise `symbol` still renders, just as inert text, same as before this
-                existed. Double-click only (not single), matching the chart-type label right
-                next to it — deliberately NOT also wired to onClick: Modal's own overlay closes
-                on click, covering the full viewport once open, so a single click that opened it
-                would leave the *second* click of the same double-click gesture landing on that
-                overlay instead of this button, closing the modal again immediately. */}
-            {symbol &&
-              (symbolSearch ? (
-                <button
-                  type="button"
-                  className="lq-chart__symbol-info-name lq-chart__symbol-info-name--clickable"
-                  onDoubleClick={() => setSymbolSearchOpen(true)}
-                  aria-label="Rechercher un symbole"
-                  title="Double-clic : rechercher un symbole"
-                >
-                  {symbol}
-                </button>
-              ) : (
-                <span className="lq-chart__symbol-info-name">{symbol}</span>
-              ))}
-            {symbol && <span className="lq-chart__symbol-info-sep">·</span>}
-            <button
-              type="button"
-              className="lq-chart__symbol-info-name lq-chart__symbol-info-name--clickable"
-              onDoubleClick={() => setSettingsOpen(true)}
-              title="Double-clic : paramètres du graphique"
-            >
-              {currentModeEntry.label}
-            </button>
-            <span className={["lq-chart__symbol-info-ohlc", ohlcDelta >= 0 ? "lq-chart__symbol-info-ohlc--up" : "lq-chart__symbol-info-ohlc--down"].join(" ")}>
-              O {pFmt(ohlcCandle.open)} H {pFmt(ohlcCandle.high)} L {pFmt(ohlcCandle.low)} C {pFmt(ohlcCandle.close)} {ohlcSign}
-              {pFmt(ohlcDelta)} ({ohlcSign}
-              {ohlcDeltaPct.toFixed(2)}%)
-            </span>
-          </div>
-          {/* Price-overlay indicators (SMA/EMA/WMA/VWAP/Bollinger) only — "own"-pane ones
-              (RSI/CHOP/MACD) already get their own pane header with the same
-              gear/trash/collapse actions, and don't belong on top of the price section they're
-              not even plotted on. Filtering unconditionally on `indicators` here used to list
-              every indicator regardless of `pane`, which put RSI/CHOP/MACD's labels in this
-              corner overlapping the OHLC readout above them — and made their "eye" button here a
-              silent no-op, since an own-pane indicator's visibility reads `paneCollapsed`, not
-              `hidden` (see `Indicator.hidden`'s own doc comment). */}
-          {((showIndicators && overlayIndicators.length > 0) || symbolOverlays.length > 0) && (
-          <div className="lq-chart__indicator-legend">
-            {overlayIndicators.map((indicator) => {
-              // The *full* indicators array's own index, not this filtered map's — the canvas
-              // draw effect cycles defaultIndicatorColor off that same full-array position (see
-              // visibleIndicators.forEach a bit further up), so this has to match it exactly or
-              // an indicator's legend swatch and its actual line would disagree on its color the
-              // moment an own-pane indicator (filtered out of this list) sits before it.
-              const i = indicators.indexOf(indicator);
-              return (
-              <div
-                key={indicator.id}
-                className="lq-chart__indicator-legend-item"
-                style={{ color: indicator.color ?? defaultIndicatorColor(i) }}
-                onDoubleClick={() => openIndicatorSettings(indicator.id)}
-                onMouseEnter={() => setHoveredIndicatorId(indicator.id)}
-                onMouseLeave={() => setHoveredIndicatorId((id) => (id === indicator.id ? null : id))}
-              >
-                <span
-                  className={["lq-chart__indicator-legend-label", indicator.hidden && "lq-chart__indicator-legend-label--hidden"]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  {indicatorLabel(indicator)}
-                </span>
-                {/* Invisible until this item is hovered (see charts-shared.css) — double-click
-                    the label itself opens the settings modal too, so the gear is a discoverable
-                    shortcut, not the only way in. */}
-                <div className="lq-chart__indicator-legend-actions">
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => toggleIndicatorHidden(indicator.id)}
-                    aria-label={indicator.hidden ? `Afficher ${indicatorLabel(indicator)}` : `Masquer ${indicatorLabel(indicator)}`}
-                  >
-                    {indicator.hidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => removeIndicator(indicator.id)}
-                    aria-label={`Supprimer ${indicatorLabel(indicator)}`}
-                  >
-                    <TrashIcon size={11} />
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => openIndicatorSettings(indicator.id)}
-                    aria-label={`Paramètres ${indicatorLabel(indicator)}`}
-                  >
-                    <SettingsIcon size={11} />
-                  </button>
-                </div>
-              </div>
-              );
-            })}
-            {/* Symbol-comparison overlays (see onAddSymbolOverlay) — same legend, same hover-
-                revealed eye/trash/gear actions as a price-overlay indicator's own entry above,
-                but wired to the drawing this one actually is: the gear/double-click open its
-                edit modal (Style tab only, see there), the eye toggles its own `hidden` field,
-                the trash removes it from `drawings` directly (no confirmation round-trip through
-                the app needed, unlike adding one — removing never needs new data). Hovering it
-                also sets `hoveredDrawingId`, the same state a mouse actually over its line on the
-                canvas would — so the line highlights while its legend entry is hovered, and
-                Suppr/Retour arrière removes it from here too, exactly like hovering the line
-                itself would. */}
-            {symbolOverlays.map((dr) => (
-              <div
-                key={dr.id}
-                className="lq-chart__indicator-legend-item"
-                style={{ color: dr.color ?? defaultIndicatorColor(symbolOverlays.indexOf(dr)) }}
-                onDoubleClick={() => {
-                  setEditingId(dr.id);
-                  setDraft(dr);
-                  setEditModalTab("style");
-                }}
-                onMouseEnter={() => setHoveredDrawingId(dr.id)}
-                onMouseLeave={() => setHoveredDrawingId((id) => (id === dr.id ? null : id))}
-              >
-                <span className={["lq-chart__indicator-legend-label", dr.hidden && "lq-chart__indicator-legend-label--hidden"].filter(Boolean).join(" ")}>
-                  {drawingLabel(dr)}
-                </span>
-                <div className="lq-chart__indicator-legend-actions">
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => commitDrawings(drawings.map((d) => (d.id === dr.id ? { ...d, hidden: !d.hidden } : d)))}
-                    aria-label={dr.hidden ? `Afficher ${drawingLabel(dr)}` : `Masquer ${drawingLabel(dr)}`}
-                  >
-                    {dr.hidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />}
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => removeSymbolOverlay(dr.overlaySymbol ?? "")}
-                    aria-label={`Supprimer ${drawingLabel(dr)}`}
-                  >
-                    <TrashIcon size={11} />
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__indicator-legend-action"
-                    onClick={() => {
-                      setEditingId(dr.id);
-                      setDraft(dr);
-                      setEditModalTab("style");
-                    }}
-                    aria-label={`Paramètres ${drawingLabel(dr)}`}
-                  >
-                    <SettingsIcon size={11} />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-          )}
-        </div>
-        {/* Header strip for the volume pane — a fixed-height row pinned to the top of the pane
-            (whether expanded or collapsed, hence sharing SUB_PANE_COLLAPSED_HEIGHT: when
-            collapsed the pane *is* this row, when expanded it's just the top slice of it). Name
-            always visible; the remove/collapse actions only reveal on hover of the pane itself
-            (hoverVolumeY, already tracked by handlePointerMove — reused here instead of a CSS
-            :hover, since the hoverable zone is the whole pane, much bigger than this row).
-            pointer-events: none on the row itself so it never blocks the zoom/pan overlay or
-            drawing-tool clicks underneath — same pattern as .lq-chart__indicator-legend. */}
-        {volumeVisible && (
-          <div
-            className={[
-              "lq-chart__pane-header",
-              volumeCollapsed && "lq-chart__pane-header--collapsed",
-              draggingPaneId === "volume" && "lq-chart__pane-header--dragging",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            style={{ top: dims.margin.top + priceHeight + volumeTop, left: dims.margin.left, width: dims.boundedWidth, height: SUB_PANE_COLLAPSED_HEIGHT }}
-          >
-            {/* Drag-to-resize: a thin strip straddling the divider above this pane, only while
-                expanded (collapsed panes are a fixed height, nothing to resize). */}
-            {!volumeCollapsed && (
-              <div
-                className="lq-chart__pane-resize-handle"
-                onPointerDown={(e) => startPaneResize("volume", e)}
-                aria-hidden="true"
-              />
-            )}
-            <div className="lq-chart__pane-header-primary">
-              {/* Same drag-to-reorder grip as every indicator pane's own header — volume is just
-                  another entry in the same unified order now (see `allPanesOrder`/
-                  `volumePaneOrder`), not a pane fixed permanently under price. */}
-              <button
-                type="button"
-                className="lq-chart__pane-drag-handle"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setDraggingPaneId("volume");
-                }}
-                aria-label="Réordonner Volume"
-                title="Glisser pour réordonner les panneaux"
-              >
-                <GripIcon size={12} />
-              </button>
-              {/* The collapse/expand chevron sits right after the grip, before the name — a
-                  "twisty" convention, and no longer pushed to the pane's far right edge via
-                  space-between: that placement read as detached from the row it actually
-                  controlled. Always visible collapsed (it's the only way back to expanded);
-                  hover-revealed alongside the other actions otherwise, same as before. */}
-              <div
-                className={["lq-chart__pane-header-actions", (volumeCollapsed || hoverVolumeY !== null) && "lq-chart__pane-header-actions--visible"]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {volumeCollapsed ? (
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumePaneState("expanded")}
-                    aria-label="Agrandir le panneau Volume"
-                  >
-                    <ChevronUpIcon size={12} />
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumePaneState("collapsed")}
-                    aria-label="Réduire le panneau Volume"
-                  >
-                    <ChevronDownIcon size={12} />
-                  </button>
-                )}
-              </div>
-              {/* The header itself is pointer-events: none (see .lq-chart__pane-header-label's
-                  own CSS) so double-clicking has to target the label specifically, not the
-                  header div as a whole. Collapsed: expands. Expanded: opens the volume settings
-                  modal, matching every other pane's double-click-on-name convention. */}
-              <span
-                className="lq-chart__pane-header-label"
-                onDoubleClick={() => (volumeCollapsed ? setVolumePaneState("expanded") : setVolumeSettingsOpen(true))}
-              >
-                Volume
-              </span>
-              {/* The volume equivalent of the price pane's own OHLC readout — the hovered
-                  candle's volume, falling back to the most recent one, same convention. Colored
-                  by that candle's own up/down direction, matching the bars themselves. */}
-              {!volumeCollapsed &&
-                data.length > 0 &&
-                (() => {
-                  const candle = data[hoverIndex !== null ? hoverIndex : data.length - 1];
-                  const up = candle.close >= candle.open;
-                  return (
-                    <span className={["lq-chart__symbol-info-ohlc", up ? "lq-chart__symbol-info-ohlc--up" : "lq-chart__symbol-info-ohlc--down"].join(" ")}>
-                      {vFmt(candle.volume ?? 0)}
-                    </span>
-                  );
-                })()}
-              {!volumeCollapsed && (
-                <div
-                  className={["lq-chart__pane-header-actions", hoverVolumeY !== null && "lq-chart__pane-header-actions--visible"]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumeSettingsOpen(true)}
-                    aria-label="Paramètres du panneau Volume"
-                  >
-                    <SettingsIcon size={11} />
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => setVolumePaneState("hidden")}
-                    aria-label="Supprimer le panneau Volume"
-                  >
-                    <TrashIcon size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        {/* One header per "own"-pane indicator (RSI/CHOP/MACD), same strip as volume's above —
-            actions stay at a constant reduced opacity instead of hover-revealed (there's no
-            existing hover-tracking state covering these panes' own screen area the way
-            hoverVolumeY already did for volume, and building one just for this would be a lot of
-            plumbing for a cosmetic difference). Gear opens the same settings modal price-overlay
-            indicators use (period, or MACD's fast/slow/signal) — double-clicking the label does
-            the same, matching that same legend's convention. */}
-        {ownPaneIndicators.map((ind, idx) => (
-          <div
-            key={ind.id}
-            className={[
-              "lq-chart__pane-header",
-              "lq-chart__pane-header--always-visible",
-              ind.paneCollapsed && "lq-chart__pane-header--collapsed",
-              draggingPaneId === ind.id && "lq-chart__pane-header--dragging",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-            style={{
-              top: dims.margin.top + priceHeight + indicatorPaneTops[idx],
-              left: dims.margin.left,
-              width: dims.boundedWidth,
-              height: SUB_PANE_COLLAPSED_HEIGHT,
-            }}
-          >
-            {!ind.paneCollapsed && (
-              <div
-                className="lq-chart__pane-resize-handle"
-                onPointerDown={(e) => startPaneResize(ind.id, e)}
-                aria-hidden="true"
-              />
-            )}
-            <div className="lq-chart__pane-header-primary">
-              <button
-                type="button"
-                className="lq-chart__pane-drag-handle"
-                onPointerDown={(e) => {
-                  e.stopPropagation();
-                  e.preventDefault();
-                  setDraggingPaneId(ind.id);
-                }}
-                aria-label={`Réordonner ${indicatorLabel(ind)}`}
-                title="Glisser pour réordonner les panneaux"
-              >
-                <GripIcon size={12} />
-              </button>
-              {/* Collapse/expand chevron, right after the grip handle — a "twisty" convention,
-                  no longer pushed to the pane's far right edge via space-between. */}
-              {ind.paneCollapsed ? (
-                <button
-                  type="button"
-                  className="lq-chart__pane-header-action"
-                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))}
-                  aria-label={`Agrandir le panneau ${indicatorLabel(ind)}`}
-                >
-                  <ChevronUpIcon size={12} />
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  className="lq-chart__pane-header-action"
-                  onClick={() => commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: true } : i)))}
-                  aria-label={`Réduire le panneau ${indicatorLabel(ind)}`}
-                >
-                  <ChevronDownIcon size={12} />
-                </button>
-              )}
-              {/* The header itself is pointer-events: none (see .lq-chart__pane-header-label's
-                  own CSS) so double-clicking has to target the label specifically. Collapsed:
-                  expands the pane instead of opening its settings — there's no gear button
-                  visible to double-click toward while collapsed anyway (see below), so this is
-                  the only way to reach it short of the chevron. Expanded: same settings shortcut
-                  as before, matching the indicator legend's own double-click convention. */}
-              <span
-                className="lq-chart__pane-header-label"
-                onDoubleClick={() =>
-                  ind.paneCollapsed
-                    ? commitIndicators(indicators.map((i) => (i.id === ind.id ? { ...i, paneCollapsed: false } : i)))
-                    : openIndicatorSettings(ind.id)
-                }
-              >
-                {indicatorLabel(ind)}
-              </span>
-              {/* The RSI/CHOP/MACD equivalent of the price pane's own OHLC readout — this
-                  indicator's own value(s) at the hovered candle, falling back to the most
-                  recent one, same convention. MACD shows all three of its own series since none
-                  of them alone represents "the" value the way a single RSI/CHOP number does. */}
-              {!ind.paneCollapsed &&
-                data.length > 0 &&
-                (() => {
-                  const entry = indicatorValues.find((v) => v.indicator.id === ind.id);
-                  const value = entry?.values[hoverIndex !== null ? hoverIndex : data.length - 1];
-                  if (value === null || value === undefined) return null;
-                  return (
-                    <span className="lq-chart__symbol-info-ohlc">
-                      {typeof value === "number"
-                        ? isFundamentalKind(ind.kind)
-                          ? formatFundamentalValue(ind.kind, value)
-                          : value.toFixed(2)
-                        : "macd" in value
-                          ? `MACD ${value.macd.toFixed(2)} · Signal ${value.signal !== null ? value.signal.toFixed(2) : "–"} · Hist ${
-                              value.histogram !== null ? value.histogram.toFixed(2) : "–"
-                            }`
-                          : null}
-                    </span>
-                  );
-                })()}
-              {!ind.paneCollapsed && (
-                <div className="lq-chart__pane-header-actions lq-chart__pane-header-actions--visible">
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => openIndicatorSettings(ind.id)}
-                    aria-label={`Paramètres ${indicatorLabel(ind)}`}
-                  >
-                    <SettingsIcon size={11} />
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-chart__pane-header-action"
-                    onClick={() => removeIndicator(ind.id)}
-                    aria-label={`Supprimer ${indicatorLabel(ind)}`}
-                  >
-                    <TrashIcon size={12} />
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ))}
+        <ToolsRail
+          drawingTools={drawingTools}
+          dims={dims}
+          plotHeight={plotHeight}
+          selectedToolByCategory={selectedToolByCategory}
+          openToolMenu={openToolMenu}
+          setOpenToolMenu={setOpenToolMenu}
+          activeTool={activeTool}
+          handleToolClick={handleToolClick}
+          handleSelectToolType={handleSelectToolType}
+          menuAnchorRefFor={menuAnchorRefFor}
+          magnetActive={magnetActive}
+          setMagnetActive={setMagnetActive}
+          drawingsHidden={drawingsHidden}
+          setDrawingsHidden={setDrawingsHidden}
+          drawingsLocked={drawingsLocked}
+          setDrawingsLocked={setDrawingsLocked}
+          indicatorsManagerOpen={indicatorsManagerOpen}
+          setIndicatorsManagerOpen={setIndicatorsManagerOpen}
+        />
+        <ChartLegend
+          dims={dims}
+          symbol={symbol}
+          symbolSearch={symbolSearch}
+          setSymbolSearchOpen={setSymbolSearchOpen}
+          setSettingsOpen={setSettingsOpen}
+          currentModeEntry={currentModeEntry}
+          ohlcCandle={ohlcCandle}
+          ohlcDelta={ohlcDelta}
+          ohlcDeltaPct={ohlcDeltaPct}
+          ohlcSign={ohlcSign}
+          pFmt={pFmt}
+          showIndicators={showIndicators}
+          overlayIndicators={overlayIndicators}
+          indicators={indicators}
+          defaultIndicatorColor={defaultIndicatorColor}
+          openIndicatorSettings={openIndicatorSettings}
+          setHoveredIndicatorId={setHoveredIndicatorId}
+          indicatorLabel={indicatorLabel}
+          toggleIndicatorHidden={toggleIndicatorHidden}
+          removeIndicator={removeIndicator}
+          symbolOverlays={symbolOverlays}
+          drawings={drawings}
+          commitDrawings={commitDrawings}
+          drawingLabel={drawingLabel}
+          setHoveredDrawingId={setHoveredDrawingId}
+          setEditingId={setEditingId}
+          setDraft={setDraft}
+          setEditModalTab={setEditModalTab}
+          removeSymbolOverlay={removeSymbolOverlay}
+        />
+        <PaneHeaders
+          volumeVisible={volumeVisible}
+          dims={dims}
+          priceHeight={priceHeight}
+          volumeTop={volumeTop}
+          volumeCollapsed={volumeCollapsed}
+          draggingPaneId={draggingPaneId}
+          setDraggingPaneId={setDraggingPaneId}
+          startPaneResize={startPaneResize}
+          SUB_PANE_COLLAPSED_HEIGHT={SUB_PANE_COLLAPSED_HEIGHT}
+          hoverVolumeY={hoverVolumeY}
+          setVolumePaneState={setVolumePaneState}
+          setVolumeSettingsOpen={setVolumeSettingsOpen}
+          data={data}
+          hoverIndex={hoverIndex}
+          vFmt={vFmt}
+          ownPaneIndicators={ownPaneIndicators}
+          indicatorPaneTops={indicatorPaneTops}
+          commitIndicators={commitIndicators}
+          indicators={indicators}
+          indicatorLabel={indicatorLabel}
+          openIndicatorSettings={openIndicatorSettings}
+          removeIndicator={removeIndicator}
+          indicatorValues={indicatorValues}
+        />
         <canvas
           ref={canvasRef}
           className="lq-chart__canvas"
