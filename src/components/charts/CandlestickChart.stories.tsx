@@ -177,6 +177,7 @@ export const AllFeatures: Story = {
           symbol={currentSymbol}
           events={ALL_FEATURES_EVENTS}
           drawingTools
+          showVolume={false}
           showIndicators
           fundamentals={ALL_FEATURES_FUNDAMENTALS}
           fullscreenToggle
