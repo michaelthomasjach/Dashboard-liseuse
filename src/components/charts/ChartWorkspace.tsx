@@ -29,11 +29,12 @@ export interface ChartWorkspaceProps {
    *  cells empty. */
   children: ReactElement<CandlestickChartProps> | ReactElement<CandlestickChartProps>[];
   /** Fixed height in px applied to every panel uniformly, overriding each child's own `height`
-   *  prop if it set one — a mixed-height grid wouldn't read as one coherent workspace. Default
-   *  320. Ignored once the grid wraps into two rows (4/6/8 panels): stacking two panels' worth of
-   *  a height meant for *one* row would run well past the screen, so those instead fit the whole
-   *  workspace to exactly 100% of the viewport height and let each row's own share of that (a
-   *  plain CSS grid fraction) drive every panel's actual height instead. */
+   *  prop if it set one — a mixed-height grid wouldn't read as one coherent workspace. Omit
+   *  (default) to instead fill 100% of the viewport height, splitting that budget evenly across
+   *  however many rows the current panel count needs (a plain CSS grid fraction per row) — the
+   *  usual choice for a workspace that's the main content of its own page. Always filled this way
+   *  once the grid wraps into two rows (4/6/8 panels) regardless of this prop: stacking two rows'
+   *  worth of a height meant for *one* row would run well past the screen. */
   panelHeight?: number;
   /** Uncontrolled initial link groups — each a plain array of panel indices (0-based). */
   defaultLinkGroups?: number[][];
@@ -56,7 +57,7 @@ export function ChartWorkspace({
   defaultPanels = 1,
   onPanelsChange,
   children,
-  panelHeight = 320,
+  panelHeight,
   defaultLinkGroups,
   onLinkGroupsChange,
   className,
@@ -128,19 +129,23 @@ export function ChartWorkspace({
   const panelElements = rawChildren.length === 1 ? Array.from({ length: panels }, () => rawChildren[0]) : rawChildren.slice(0, panels);
   const columns = GRID_COLUMNS[panels];
   const rows = GRID_ROWS[panels];
-  const isMultiRow = rows > 1;
+  // Fills 100% of the viewport height whenever the caller hasn't opted into a fixed `panelHeight`
+  // — always true once the grid wraps into two rows (stacking two rows' worth of a single-row
+  // height would run well past the screen regardless of what the caller asked for), and now also
+  // the default for a single row (1/2 panels) since that's the more common case in practice: a
+  // workspace that's the main content of its own page, same as any other panel count.
+  const fillHeight = panelHeight === undefined || rows > 1;
 
   return (
     <div
       className={["lq-chart-workspace", className].filter(Boolean).join(" ")}
       style={{
         gridTemplateColumns: `repeat(${columns}, 1fr)`,
-        // Two-row layouts fit the *whole grid* to the viewport height instead of stacking two
-        // panels' worth of `panelHeight` — gridTemplateRows splits that budget evenly between the
-        // rows, and each panel below gets `height: undefined` (see CandlestickChart's own
-        // useChartDimensions doc) so it measures and fills its own row's actual share via
-        // ResizeObserver rather than a hardcoded pixel figure.
-        ...(isMultiRow ? { gridTemplateRows: `repeat(${rows}, 1fr)`, height: "100vh" } : {}),
+        // gridTemplateRows splits the 100vh budget evenly between the rows, and each panel below
+        // gets `height: undefined` (see CandlestickChart's own useChartDimensions doc) so it
+        // measures and fills its own row's actual share via ResizeObserver rather than a
+        // hardcoded pixel figure.
+        ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, 1fr)`, height: "100vh" } : {}),
       }}
     >
       {panelElements.map((child, i) =>
@@ -151,7 +156,7 @@ export function ChartWorkspace({
           // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
           // every panel down to one shared React instance instead of `panels` independent ones.
           key: i,
-          height: isMultiRow ? undefined : panelHeight,
+          height: fillHeight ? undefined : panelHeight,
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
           syncedHoverPrice: syncedPriceForPanel(i),

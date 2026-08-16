@@ -164,15 +164,12 @@ export const AllFeatures: Story = {
     const [displayMode, setDisplayMode] = useState<ChartDisplayMode>("candle");
     // Storybook's own global decorator (see .storybook/preview.tsx) wraps every story in 32px of
     // padding, unrelated to ChartWorkspace itself — harmless normally, but it's exactly what
-    // would keep a multi-row split (4/6/8 panels, each already sized to fill 100% of the
-    // viewport on its own) from actually fitting the screen without a scrollbar. A negative
-    // margin here cancels that padding out again, only once a multi-row split is actually
-    // showing (panels > 2 — 1 and 2 panels are a single row, sized by `panelHeight` instead, and
-    // still want that padding).
-    const [panels, setPanels] = useState<1 | 2 | 4 | 6 | 8>(1);
+    // would keep the workspace (sized to fill 100% of the viewport on its own, see
+    // ChartWorkspace's own `panelHeight` doc) from actually fitting the screen without a
+    // scrollbar. A negative margin here cancels that padding back out.
     return (
-      <div style={panels > 2 ? { margin: -32 } : undefined}>
-        <ChartWorkspace defaultPanels={1} panelHeight={STORY_HEIGHT} onPanelsChange={setPanels}>
+      <div style={{ margin: -32 }}>
+        <ChartWorkspace defaultPanels={1}>
           <CandlestickChart
             data={ALL_FEATURES_DATASET}
             symbol={currentSymbol}

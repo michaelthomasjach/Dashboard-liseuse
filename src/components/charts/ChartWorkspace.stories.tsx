@@ -57,7 +57,11 @@ export const EightPanels: Story = {
 export const TwoPanels: Story = {
   name: "2 panneaux",
   render: () => (
-    <div style={{ padding: 24 }}>
+    // No wrapper padding — ChartWorkspace fills 100% of the viewport height by default (see its
+    // own `panelHeight` doc), and the negative margin cancels the global Storybook decorator's
+    // own 32px padding (see .storybook/preview.tsx) so that fit is exact, same fix as
+    // CandlestickChart.stories.tsx's own "Toutes les options" story.
+    <div style={{ margin: -32 }}>
       <ChartWorkspace defaultPanels={2}>
         <CandlestickChart data={DATASETS.AAPL} symbol="AAPL" zoomable />
         <CandlestickChart data={DATASETS.MSFT} symbol="MSFT" zoomable />
