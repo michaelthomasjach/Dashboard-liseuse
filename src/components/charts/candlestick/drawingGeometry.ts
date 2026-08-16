@@ -1,10 +1,18 @@
 import type { TrendLineDrawing } from "./interfaces/TrendLineDrawing.interface";
 import type { DataPoint } from "./interfaces/DataPoint.interface";
 
-/** All of a drawing's points in click order (x1/y1, x2/y2, then extraPoints) — the shape every
- *  multi-point tool's rendering/hit-testing/dragging works off of instead of the named fields
- *  directly. */
+/** All of a drawing's points in path order — the shape every multi-point tool's rendering/
+ *  hit-testing/dragging works off of instead of the named fields directly. For every *clicked*
+ *  multi-point tool (fibonacciExtension, elliott*, disjointChannel, elbowArrow) that's x1/y1,
+ *  x2/y2, then extraPoints, since x2 is always the 2nd click and extraPoints are whatever came
+ *  after. "brush" is the one exception: it's a *dragged* stroke, not a sequence of clicks — x1/y1
+ *  is where the drag started, x2/y2 where it ended, and extraPoints are the samples in between
+ *  (see TrendLineDrawing's own doc), so x2 is chronologically *last*, not 2nd. Walking it in the
+ *  same x1→x2→extraPoints order as every other tool would jump straight from the start to the end
+ *  and then zigzag back through the middle samples — this returns x1→extraPoints→x2 for brush
+ *  specifically so callers can keep walking the result pairwise without knowing the difference. */
 export function allPointsOf(dr: TrendLineDrawing): DataPoint[] {
+  if (dr.lineType === "brush") return [{ x: dr.x1, y: dr.y1 }, ...(dr.extraPoints ?? []), { x: dr.x2, y: dr.y2 }];
   return [{ x: dr.x1, y: dr.y1 }, { x: dr.x2, y: dr.y2 }, ...(dr.extraPoints ?? [])];
 }
 
