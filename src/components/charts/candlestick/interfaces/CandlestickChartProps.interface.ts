@@ -162,15 +162,29 @@ export interface CandlestickChartProps {
    *  group of linked charts. While set, this chart draws its own crosshair (vertical line, date
    *  badge, OHLC readout) at whichever of its own candles is nearest that date, exactly as if the
    *  cursor were there — *unless* the cursor is actually, physically over this chart right now,
-   *  which always wins. Only the time axis syncs this way: the horizontal price line and the
-   *  price/volume/indicator-pane value badges stay tied to the real cursor's own Y position,
-   *  since a pixel Y from one chart's price scale means nothing on another's. Pass `null`/omit
-   *  for a chart that isn't part of any sync group. */
+   *  which always wins. The volume/indicator-pane value badges stay tied to the real cursor's own
+   *  Y position regardless (see `syncedHoverPrice` below for the main price line's own Y-axis
+   *  counterpart to this prop). Pass `null`/omit for a chart that isn't part of any sync group. */
   syncedHoverDate?: Date | null;
   /** Fires whenever *this* chart's own real (not synced-in) hover changes — the date of whichever
    *  candle the cursor is over, or `null` once it leaves. This is what a `ChartWorkspace` reads to
    *  compute `syncedHoverDate` for every other chart in the same link group. */
   onHoverDateChange?: (date: Date | null) => void;
+  /** The horizontal-axis counterpart to `syncedHoverDate` — an externally-driven hover *price*
+   *  (not a raw pixel: a pixel Y from another chart's own price scale would be meaningless here,
+   *  given each panel can have a different symbol, zoom level, or Y-auto-scaling state). While
+   *  set, this chart draws its own horizontal price line/badge at wherever that price falls on
+   *  ITS OWN current scale — clamped to stay within the visible pane (same as the live-price/
+   *  indicator-value badges already do for an off-scale value) rather than drawn off-canvas when
+   *  a linked panel's price is out of this one's own visible range. Same real-cursor-always-wins
+   *  rule as `syncedHoverDate`; independent of it, so a caller can sync one axis without the
+   *  other. Pass `null`/omit for a chart that isn't part of any sync group, or is but shouldn't
+   *  sync its Y axis. */
+  syncedHoverPrice?: number | null;
+  /** Fires whenever *this* chart's own real (not synced-in) price-pane hover changes — the price
+   *  at the cursor's Y position, or `null` once it leaves. This is what a `ChartWorkspace` reads
+   *  to compute `syncedHoverPrice` for every other chart in the same link group. */
+  onHoverPriceChange?: (price: number | null) => void;
   /** Shows a chain-link button in the header (top right, alongside Save/templates if those are
    *  also on) — click reports back via `onLinkClick` rather than doing anything on its own, since
    *  linking charts together is inherently a multi-chart concept this component has no way to

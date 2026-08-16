@@ -123,6 +123,7 @@ export function CandlestickChart({
   livePrice = false,
   syncedHoverDate,
   onHoverDateChange,
+  syncedHoverPrice, onHoverPriceChange,
   linkable = false,
   isLinked = false,
   onLinkClick,
@@ -364,7 +365,7 @@ export function CandlestickChart({
     initialVisibleCandles,
   });
 
-  const { effectiveHoverIndex, effectiveHovered } = useHoverSync({ data, hoverIndex, indexForDate, dateForIndex, syncedHoverDate, onHoverDateChange });
+  const { effectiveHoverIndex, effectiveHovered, effectiveHoverY } = useHoverSync({ data, hoverIndex, indexForDate, dateForIndex, syncedHoverDate, onHoverDateChange, hoverY, zoomedPriceScale, clampToPriceAxis, syncedHoverPrice, onHoverPriceChange });
 
   usePaneDragReorder({
     draggingPaneId,
@@ -549,7 +550,7 @@ export function CandlestickChart({
       overlayProjections,
       symbolOverlays,
       hovered: effectiveHovered,
-      hoverY,
+      hoverY: effectiveHoverY,
       hoverVolumeY,
       hoverIndicatorPaneId,
       hoverIndicatorPaneY,
@@ -597,7 +598,7 @@ export function CandlestickChart({
     overlayProjections,
     symbolOverlays,
     effectiveHovered,
-    hoverY,
+    effectiveHoverY,
     hoverVolumeY,
     hoverIndicatorPaneId,
     hoverIndicatorPaneY,
@@ -855,7 +856,7 @@ export function CandlestickChart({
           setActiveEventStack={setActiveEventStack}
         />
         <ChartHoverBadges
-          hoverY={hoverY}
+          hoverY={effectiveHoverY}
           dims={dims}
           addPriceLine={addPriceLine}
           zoomedPriceScale={zoomedPriceScale}

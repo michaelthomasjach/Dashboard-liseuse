@@ -44,13 +44,14 @@ export interface ChartWorkspaceProps {
 
 /** A split-screen grid of `CandlestickChart`s (1/2/4/6/8 panels) whose crosshairs can be synced
  *  across whichever ones the user links together — hovering a candle on any panel in a group
- *  draws the same crosshair (vertical line, date badge, OHLC readout) on every other panel in
- *  that group, translated to each one's own nearest candle by date rather than raw index, so
- *  panels showing different symbols/ranges still line up correctly. Grouping itself happens
- *  through the chain-link button each panel's own header gets (`CandlestickChart.linkable`,
- *  wired here) — opens one shared "Graphiques liés" modal (see `LinkGroupsModal`) regardless of
- *  which panel's button was clicked, since the groups themselves are workspace-wide, not
- *  per-panel. */
+ *  draws the same crosshair (vertical line, date badge, OHLC readout, plus the horizontal price
+ *  line/badge) on every other panel in that group, each axis translated to that panel's own
+ *  scale (nearest candle by date on X, the same price re-projected through that panel's own
+ *  price scale on Y) rather than a raw shared index/pixel, so panels showing different symbols,
+ *  zoom levels, or ranges still line up correctly. Grouping itself happens through the
+ *  chain-link button each panel's own header gets (`CandlestickChart.linkable`, wired here) —
+ *  opens one shared "Graphiques liés" modal (see `LinkGroupsModal`) regardless of which panel's
+ *  button was clicked, since the groups themselves are workspace-wide, not per-panel. */
 export function ChartWorkspace({
   defaultPanels = 1,
   onPanelsChange,
@@ -66,6 +67,10 @@ export function ChartWorkspace({
   // "currently hovered panel" value, since a panel that isn't in any group still needs its own
   // entry cleared correctly when its mouse leaves regardless of what else is going on.
   const [hoverByPanel, setHoverByPanel] = useState<Record<number, Date | null>>({});
+  // Horizontal-axis counterpart to hoverByPanel — a price rather than a date, see
+  // syncedPriceForPanel/CandlestickChartProps.syncedHoverPrice for why a price (not a raw pixel)
+  // is what's actually shared here.
+  const [priceByPanel, setPriceByPanel] = useState<Record<number, number | null>>({});
   const [linkModalOpen, setLinkModalOpen] = useState(false);
 
   function handlePanelsChange(next: 1 | 2 | 4 | 6 | 8) {
@@ -94,6 +99,22 @@ export function ChartWorkspace({
       if (otherIndex === panelIndex) continue;
       const date = hoverByPanel[otherIndex];
       if (date) return date;
+    }
+    return null;
+  }
+
+  function handleHoverPriceChange(panelIndex: number, price: number | null) {
+    setPriceByPanel((prev) => (prev[panelIndex] === price ? prev : { ...prev, [panelIndex]: price }));
+  }
+
+  // Horizontal-axis counterpart to syncedDateForPanel above.
+  function syncedPriceForPanel(panelIndex: number): number | null {
+    const groupIndex = groupIndexOfPanel(panelIndex);
+    if (groupIndex === null) return null;
+    for (const otherIndex of groups[groupIndex]) {
+      if (otherIndex === panelIndex) continue;
+      const price = priceByPanel[otherIndex];
+      if (price !== null && price !== undefined) return price;
     }
     return null;
   }
@@ -133,6 +154,8 @@ export function ChartWorkspace({
           height: isMultiRow ? undefined : panelHeight,
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
+          syncedHoverPrice: syncedPriceForPanel(i),
+          onHoverPriceChange: (price: number | null) => handleHoverPriceChange(i, price),
           linkable: true,
           isLinked: groupIndexOfPanel(i) !== null,
           onLinkClick: () => setLinkModalOpen(true),
