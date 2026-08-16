@@ -17,13 +17,14 @@ import { ToolsRail } from "./candlestick/components/ToolsRail";
 import { ChartLegend } from "./candlestick/components/ChartLegend";
 import { PaneHeaders } from "./candlestick/components/PaneHeaders";
 import { ChartCanvasOverlay } from "./candlestick/components/ChartCanvasOverlay";
+import { ChartHoverBadges } from "./candlestick/components/ChartHoverBadges";
 import { DrawingEditModal } from "./candlestick/components/DrawingEditModal";
 import { IndicatorModals } from "./candlestick/components/IndicatorModals";
 import { ChartSettingsModals } from "./candlestick/components/ChartSettingsModals";
 import { SymbolSearchModal } from "./candlestick/components/SymbolSearchModal";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
-import { ChevronLeftIcon, PlusIcon } from "../icons";
+import { ChevronLeftIcon } from "../icons";
 import "./charts-shared.css";
 
 import type { Candle } from "./candlestick/interfaces/Candle.interface";
@@ -62,19 +63,16 @@ export type {
 
 import { drawingLabel } from "./candlestick/drawingCatalog";
 import { indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "./candlestick/indicators";
-import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "./candlestick/eventsCatalog";
 import { CHART_DISPLAY_MODES } from "./candlestick/chartModes";
 import { findTimeframeLabel } from "./candlestick/timeframes";
 import {
   DEFAULT_MARGIN,
   TOOLS_RAIL_WIDTH,
   HEADER_HEIGHT,
-  CROSSHAIR_ADD_INSET,
-  LIVE_COUNTDOWN_OFFSET,
   MAX_DATE_TICKS,
   SUB_PANE_COLLAPSED_HEIGHT,
 } from "./candlestick/constants";
-import { formatCountdown, formatPercentFromReference } from "./candlestick/formatting";
+import { formatPercentFromReference } from "./candlestick/formatting";
 
 export function CandlestickChart({
   data,
@@ -962,207 +960,40 @@ export function CandlestickChart({
           setEventModalOpen={setEventModalOpen}
           setActiveEventStack={setActiveEventStack}
         />
-
-        {hoverY !== null && (
-          // The badge itself is pinned flush to the axis boundary so it never bleeds into the
-          // chart — only the standalone "+" button (own square, own background) is allowed to
-          // Flush to the axis boundary and at least as wide as the axis gutter itself (min-width,
-          // not width — a long price string must still be able to grow further right rather than
-          // clip, exactly as before) so the badge reads as filling the axis, not a narrower chip
-          // floating inside it. The "+" button lives inside this same flex row (stretched to its
-          // full height via align-items: stretch, no border-radius/height of its own) so it reads
-          // as one integrated piece — never a separate element overlapping the chart.
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{ top: dims.margin.top + hoverY, left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }}
-          >
-            <button type="button" className="lq-chart__axis-value-add" onClick={addPriceLine} aria-label="Ajouter une ligne de prix horizontale">
-              <PlusIcon size={9} />
-            </button>
-            <span className="lq-chart__axis-value-text">{priceAxisFmt(zoomedPriceScale.invert(hoverY))}</span>
-          </div>
-        )}
-        {hoverVolumeY !== null && (
-          <div
-            className="lq-chart__axis-value lq-chart__axis-value--y"
-            style={{
-              top: dims.margin.top + priceHeight + hoverVolumeY,
-              left: dims.margin.left + dims.boundedWidth,
-              minWidth: dims.margin.right,
-            }}
-          >
-            <button type="button" className="lq-chart__axis-value-add" onClick={addVolumeLine} aria-label="Ajouter une ligne de volume horizontale">
-              <PlusIcon size={9} />
-            </button>
-            <span className="lq-chart__axis-value-text">{vFmt(zoomedVolumeScale.invert(hoverVolumeY))}</span>
-          </div>
-        )}
-        {hovered && (
-          <>
-            <div
-              className="lq-chart__axis-value lq-chart__axis-value--x"
-              style={{ left: dims.margin.left + zoomedXScale(hoverIndex! + 0.5), top: dims.margin.top + plotBoundedHeight }}
-            >
-              <span className="lq-chart__axis-value-text">{dFmt(hovered.date)}</span>
-            </div>
-            {/* A standalone square button (not englobed by the date badge below the plot, since
-                that badge is unreachable — reaching it means leaving the interactive rect
-                entirely). Anchored inside the plot instead, in line with the vertical
-                crosshair. */}
-            <button
-              type="button"
-              className="lq-chart__crosshair-add lq-chart__crosshair-add--x"
-              style={{ left: dims.margin.left + zoomedXScale(hoverIndex! + 0.5), top: dims.margin.top + plotBoundedHeight - CROSSHAIR_ADD_INSET }}
-              onClick={addDateLine}
-              aria-label="Ajouter une ligne de date verticale"
-            >
-              <PlusIcon size={9} />
-            </button>
-          </>
-        )}
-
-        {/* Live last-close price (up/down colored against the previous close) and, right below
-            it, a countdown to the next candle — the dashed line itself is canvas (see the draw
-            effect), this is just its own Y-axis badge plus the countdown, both plain DOM since
-            the countdown needs to re-render every second independent of the canvas. The interval
-            is inferred from the last two candles' own dates, not a separate prop. */}
-        {livePrice &&
-          data.length > 0 &&
-          (() => {
-            const lastCandle = data[data.length - 1];
-            const prevCandle = data.length > 1 ? data[data.length - 2] : null;
-            const up = prevCandle ? lastCandle.close >= prevCandle.close : true;
-            const y = dims.margin.top + clampToPriceAxis(zoomedPriceScale(lastCandle.close));
-            const intervalMs = prevCandle ? lastCandle.date.getTime() - prevCandle.date.getTime() : null;
-            const remainingMs = intervalMs ? lastCandle.date.getTime() + intervalMs - now : null;
-            return (
-              <>
-                <div
-                  className="lq-chart__axis-value lq-chart__axis-value--y"
-                  style={{
-                    top: y,
-                    left: dims.margin.left + dims.boundedWidth,
-                    minWidth: dims.margin.right,
-                    backgroundColor: `var(${up ? "--lq-color-up" : "--lq-color-down"})`,
-                  }}
-                >
-                  <span className="lq-chart__axis-value-text">{priceAxisFmt(lastCandle.close)}</span>
-                </div>
-                {remainingMs !== null && (
-                  <div
-                    className="lq-chart__live-countdown"
-                    style={{ top: y + LIVE_COUNTDOWN_OFFSET, left: dims.margin.left + dims.boundedWidth }}
-                  >
-                    {formatCountdown(remainingMs)}
-                  </div>
-                )}
-              </>
-            );
-          })()}
-
-        {/* Each active price-overlay indicator's own latest value, same axis-badge style,
-            colored to match that indicator's own line instead of the theme accent. "own"-pane
-            indicators (RSI/CHOP/MACD) already get axis ticks on their own separate scale below,
-            so they're excluded here — this is price-pane overlays only (SMA/EMA/WMA/VWAP/
-            Bollinger, whose "value" is a plain number; Bollinger's own band uses its middle
-            line). */}
-        {showIndicators &&
-          indicatorValues.map(({ indicator, values }, idx) => {
-            if (indicator.hidden || indicatorCatalogEntry(indicator.kind).pane !== "price") return null;
-            const last = values[values.length - 1];
-            if (last === null) return null;
-            // Only ever a plain number (SMA/EMA/WMA/VWAP) or a band (Bollinger, use its middle
-            // line) here — MACD's own shape only exists on the "own"-pane branch this filter
-            // above already excludes, but the values array's type covers all three.
-            const value = typeof last === "number" ? last : "middle" in last ? last.middle : null;
-            if (value === null) return null;
-            const color = indicator.color ?? defaultIndicatorColor(idx);
-            return (
-              <div
-                key={indicator.id}
-                className="lq-chart__axis-value lq-chart__axis-value--y"
-                style={{
-                  top: dims.margin.top + clampToPriceAxis(zoomedPriceScale(value)),
-                  left: dims.margin.left + dims.boundedWidth,
-                  minWidth: dims.margin.right,
-                  backgroundColor: color,
-                }}
-              >
-                <span className="lq-chart__axis-value-text">{priceAxisFmt(value)}</span>
-              </div>
-            );
-          })}
-
-        {/* A horizontal/ray line's own value, permanently on its own pane's axis (not just on
-            hover, unlike the badges above) — same visual as the hover badge, minus its "+"
-            button since there's nothing left to add. Anchored to whichever pane the line's
-            `valueAxis` says (price, volume, or an own-pane indicator), same as the hover volume
-            badge already does for volume specifically. Only clamped to stay within its own pane
-            when that pane is price — volume/indicator ones are left unclamped, same as volume's
-            badge always has been (no report of that being an issue in practice). */}
-        {visibleDrawings
-          .filter((dr) => (dr.lineType === "horizontal" || dr.lineType === "ray") && (dr.valueAxis !== "volume" || volumeVisible))
-          .map((dr) => {
-            const isPrice = !dr.valueAxis || dr.valueAxis === "price";
-            const y = isPrice ? clampToPriceAxis(pixelYForDrawing(dr)) : pixelYForDrawing(dr);
-            return (
-              <div
-                key={dr.id}
-                className="lq-chart__axis-value lq-chart__axis-value--y"
-                style={{
-                  top: dims.margin.top + y,
-                  left: dims.margin.left + dims.boundedWidth,
-                  minWidth: dims.margin.right,
-                }}
-              >
-                <span className="lq-chart__axis-value-text">{isPrice ? priceAxisFmt(dr.y1) : dr.valueAxis === "volume" ? vFmt(dr.y1) : dr.y1.toFixed(2)}</span>
-              </div>
-            );
-          })}
-
-        {/* A "ray"'s own start date, only while its line is hovered (unlike the price badge
-            above, which stays up permanently) — same X-axis badge style as the hover date
-            badge, anchored to the line's own x1 instead of the live cursor position. */}
-        {visibleDrawings
-          .filter((dr) => dr.lineType === "ray" && dr.id === hoveredDrawingId)
-          .map((dr) => (
-            <div
-              key={dr.id}
-              className="lq-chart__axis-value lq-chart__axis-value--x"
-              style={{ left: dims.margin.left + zoomedXScale(indexForDate(dr.x1) + 0.5), top: dims.margin.top + plotBoundedHeight }}
-            >
-              <span className="lq-chart__axis-value-text">{dFmt(dr.x1)}</span>
-            </div>
-          ))}
-
-        {/* Anchored via left/bottom (not top) so its own content-driven height — capped at
-            350px, see EventTooltip.css — never needs measuring just to keep its bottom edge
-            pinned EVENT_TOOLTIP_GAP above the marker; see the component's own doc comment. Hidden
-            (not unmounted-with-different-props) once the modal takes over, same as any other
-            "expand" hand-off in this file. */}
-        {activeEventStack &&
-          !eventModalOpen &&
-          (() => {
-            const anchorX = dims.margin.left + zoomedXScale(activeEventStack.i + 0.5);
-            const anchorY = dims.margin.top + (priceHeight - EVENT_MARKER_OFFSET);
-            const tooltipWidth = Math.min(EVENT_TOOLTIP_WIDTH, dims.width);
-            let left = anchorX - tooltipWidth / 2;
-            left = Math.min(left, dims.width - tooltipWidth);
-            left = Math.max(left, 0);
-            const bottom = plotHeight - (anchorY - EVENT_MARKER_RADIUS - EVENT_TOOLTIP_GAP);
-            return (
-              <ChartEventTooltip
-                events={activeEventStack.events}
-                mode="popover"
-                left={left}
-                bottom={bottom}
-                width={tooltipWidth}
-                formatDate={dFmt}
-                onExpand={() => setEventModalOpen(true)}
-                onClose={() => setActiveEventStack(null)}
-              />
-            );
-          })()}
+        <ChartHoverBadges
+          hoverY={hoverY}
+          dims={dims}
+          addPriceLine={addPriceLine}
+          zoomedPriceScale={zoomedPriceScale}
+          priceAxisFmt={priceAxisFmt}
+          hoverVolumeY={hoverVolumeY}
+          priceHeight={priceHeight}
+          addVolumeLine={addVolumeLine}
+          zoomedVolumeScale={zoomedVolumeScale}
+          vFmt={vFmt}
+          hovered={hovered}
+          zoomedXScale={zoomedXScale}
+          hoverIndex={hoverIndex}
+          plotBoundedHeight={plotBoundedHeight}
+          dFmt={dFmt}
+          addDateLine={addDateLine}
+          livePrice={livePrice}
+          data={data}
+          clampToPriceAxis={clampToPriceAxis}
+          now={now}
+          showIndicators={showIndicators}
+          indicatorValues={indicatorValues}
+          visibleDrawings={visibleDrawings}
+          volumeVisible={volumeVisible}
+          pixelYForDrawing={pixelYForDrawing}
+          hoveredDrawingId={hoveredDrawingId}
+          indexForDate={indexForDate}
+          activeEventStack={activeEventStack}
+          eventModalOpen={eventModalOpen}
+          plotHeight={plotHeight}
+          setEventModalOpen={setEventModalOpen}
+          setActiveEventStack={setActiveEventStack}
+        />
       </div>
       )}
 
