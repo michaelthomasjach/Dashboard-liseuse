@@ -11,7 +11,7 @@
    loaded before this file so it would lose the cascade) — same "small" numbers as every other
    control, just scoped here since .lq-tag-input already overrides the shared defaults above. */
 .lq-tag-input--small {
-  min-height: 32px;
+  min-height: 24px;
   padding: 4px 6px;
   gap: 4px;
 }

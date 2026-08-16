@@ -20,6 +20,18 @@
   gap: 1px;
 }
 
+/* The steppers' own two stacked 12px buttons (24px + the 1px gap between them) are otherwise the
+   tallest thing in the control, stretching a small (24px, border-box) control past that height
+   to fit them — its actual available content height is 24px minus the 1px top/bottom border, so
+   the steppers need to fit inside 22px, not 24, to keep the control itself at exactly 24px. */
+.lq-field__control--small .lq-number-field__steppers {
+  gap: 0;
+}
+
+.lq-field__control--small .lq-number-field__stepper {
+  height: 11px;
+}
+
 .lq-number-field__stepper {
   display: flex;
   align-items: center;

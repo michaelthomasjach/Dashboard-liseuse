@@ -54,7 +54,7 @@
    DatePicker's trigger — put their own text directly inside it rather than through a real
    .lq-field__input, and need that size to reach them by inheritance. */
 .lq-field__control--small {
-  min-height: 32px;
+  min-height: 24px;
   padding: 0 var(--lq-space-2);
   gap: var(--lq-space-1);
   font-size: 0.8rem;
