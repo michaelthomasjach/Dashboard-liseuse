@@ -19,26 +19,35 @@ const DATASETS: Record<string, ReturnType<typeof generateCandles>> = {
   MSFT: generateCandles(320, 410, 27),
   NVDA: generateCandles(400, 120, 42),
   GOOGL: generateCandles(260, 165, 58),
+  TSLA: generateCandles(340, 240, 73),
+  AMZN: generateCandles(300, 175, 19),
+  META: generateCandles(280, 480, 35),
+  AMD: generateCandles(360, 140, 88),
 };
 
-export const FourPanels: Story = {
-  name: "4 panneaux (2 liés)",
+export const EightPanels: Story = {
+  name: "8 panneaux (2 liés, changer la disposition)",
   render: () => {
     const [groups, setGroups] = useState<number[][]>([[0, 1]]);
     return (
       <div style={{ padding: 24 }}>
         <p style={{ fontSize: 13, opacity: 0.7, marginBottom: 8 }}>
-          `panels={4}` — AAPL et MSFT (panneaux 1 et 2) sont liés par défaut (`defaultLinkGroups`) : survoler
-          l'une des deux affiche le crosshair sur l'autre, à la date la plus proche dans <em>ses propres</em>{" "}
-          données (longueurs et plages différentes entre les quatre séries, exprès). NVDA et GOOGL ne sont liés à
-          rien. Cliquer l'icône chaîne (en haut à droite de n'importe quel panneau) ouvre la même modale de
-          gestion des groupes pour les quatre.
+          `defaultPanels={8}` — huit graphiques pré-configurés en enfants ; AAPL et MSFT (panneaux 1 et 2) sont
+          liés par défaut (`defaultLinkGroups`) : survoler l'une des deux affiche le crosshair sur l'autre, à la
+          date la plus proche dans <em>ses propres</em> données (longueurs et plages différentes entre les huit
+          séries, exprès). Chaque panneau a sa propre icône grille (écran divisé, 2/4/6/8) et icône chaîne
+          (gestion des groupes) dans son en-tête — cliquer la grille change la disposition pour l'espace de
+          travail entier, quel que soit le panneau depuis lequel on clique.
         </p>
-        <ChartWorkspace panels={4} defaultLinkGroups={groups} onLinkGroupsChange={setGroups}>
+        <ChartWorkspace defaultPanels={8} defaultLinkGroups={groups} onLinkGroupsChange={setGroups}>
           <CandlestickChart data={DATASETS.AAPL} symbol="AAPL" zoomable />
           <CandlestickChart data={DATASETS.MSFT} symbol="MSFT" zoomable />
           <CandlestickChart data={DATASETS.NVDA} symbol="NVDA" zoomable />
           <CandlestickChart data={DATASETS.GOOGL} symbol="GOOGL" zoomable />
+          <CandlestickChart data={DATASETS.TSLA} symbol="TSLA" zoomable />
+          <CandlestickChart data={DATASETS.AMZN} symbol="AMZN" zoomable />
+          <CandlestickChart data={DATASETS.META} symbol="META" zoomable />
+          <CandlestickChart data={DATASETS.AMD} symbol="AMD" zoomable />
         </ChartWorkspace>
       </div>
     );
@@ -49,7 +58,7 @@ export const TwoPanels: Story = {
   name: "2 panneaux",
   render: () => (
     <div style={{ padding: 24 }}>
-      <ChartWorkspace panels={2}>
+      <ChartWorkspace defaultPanels={2}>
         <CandlestickChart data={DATASETS.AAPL} symbol="AAPL" zoomable />
         <CandlestickChart data={DATASETS.MSFT} symbol="MSFT" zoomable />
       </ChartWorkspace>

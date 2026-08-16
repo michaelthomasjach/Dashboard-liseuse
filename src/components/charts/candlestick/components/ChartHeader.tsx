@@ -1,4 +1,4 @@
-import type { RefObject, Dispatch, SetStateAction } from "react";
+import { useRef, useState, type RefObject, type Dispatch, type SetStateAction } from "react";
 import { Popover } from "../../../forms/Popover";
 import {
   ChevronDownIcon,
@@ -7,6 +7,7 @@ import {
   MaximizeIcon,
   MinimizeIcon,
   LinkIcon,
+  GridIcon,
 } from "../../../icons";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
 import type { TimeframeEntry } from "../interfaces/TimeframeEntry.interface";
@@ -53,7 +54,17 @@ export interface ChartHeaderProps {
   linkable: boolean;
   isLinked: boolean;
   onLinkClick: (() => void) | undefined;
+  showSplitScreen: boolean;
+  splitScreenPanels: 2 | 4 | 6 | 8 | undefined;
+  onSplitScreenChange: ((panels: 2 | 4 | 6 | 8) => void) | undefined;
 }
+
+const SPLIT_SCREEN_OPTIONS: { value: 2 | 4 | 6 | 8; label: string }[] = [
+  { value: 2, label: "2 panneaux" },
+  { value: 4, label: "4 panneaux" },
+  { value: 6, label: "6 panneaux" },
+  { value: 8, label: "8 panneaux" },
+];
 
 /** The chart's main (non-seasonality) header: timeframe picker, display-mode picker, "add
  *  indicator" button, "reset zoom" button, the seasonality-mode entry point, and the fullscreen
@@ -97,7 +108,17 @@ export function ChartHeader({
   linkable,
   isLinked,
   onLinkClick,
+  showSplitScreen,
+  splitScreenPanels,
+  onSplitScreenChange,
 }: ChartHeaderProps) {
+  // Local, not lifted to CandlestickChart.tsx like the timeframe/display-mode menus above —
+  // that file is already near its own 1000-line budget, and this menu (like TemplateControls'
+  // own dropdown) needs nothing from outside beyond the three plain data props already threaded
+  // in, so there's no reason to make it CandlestickChart's problem too.
+  const [splitScreenOpen, setSplitScreenOpen] = useState(false);
+  const splitScreenAnchorRef = useRef<HTMLButtonElement>(null);
+
   return (
     <div className="lq-chart__header" style={{ width: dims.width }}>
       {timeframes && timeframes.length > 0 && (
@@ -223,11 +244,45 @@ export function ChartHeader({
         </button>
       )}
       {/* `margin-left: auto` lives on this one wrapper, not the individual pieces inside it — see
-          .lq-chart__header-right's own CSS comment — so a link button and TemplateControls both
-          land flush together at the bar's far right edge instead of each fighting the other for
-          the same leftover space. */}
-      {(linkable || showTemplates) && (
+          .lq-chart__header-right's own CSS comment — so the split-screen/link buttons and
+          TemplateControls all land flush together at the bar's far right edge instead of each
+          fighting the others for the same leftover space. */}
+      {(showSplitScreen || linkable || showTemplates) && (
         <div className="lq-chart__header-right">
+          {showSplitScreen && (
+            <>
+              <button
+                ref={splitScreenAnchorRef}
+                type="button"
+                className={["lq-chart__icon-button", splitScreenOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setSplitScreenOpen((o) => !o)}
+                aria-label="Écran divisé"
+                title="Écran divisé"
+              >
+                <GridIcon size={14} />
+              </button>
+              <Popover open={splitScreenOpen} onClose={() => setSplitScreenOpen(false)} anchorRef={splitScreenAnchorRef} placement="bottom">
+                <div className="lq-chart__display-mode-menu">
+                  {SPLIT_SCREEN_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      className={["lq-chart__display-mode-option", opt.value === splitScreenPanels && "lq-chart__display-mode-option--selected"]
+                        .filter(Boolean)
+                        .join(" ")}
+                      onClick={() => {
+                        onSplitScreenChange?.(opt.value);
+                        setSplitScreenOpen(false);
+                      }}
+                    >
+                      <GridIcon size={15} />
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </Popover>
+            </>
+          )}
           {linkable && (
             <button
               type="button"

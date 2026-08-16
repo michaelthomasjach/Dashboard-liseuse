@@ -126,6 +126,9 @@ export function CandlestickChart({
   linkable = false,
   isLinked = false,
   onLinkClick,
+  showSplitScreen = false,
+  splitScreenPanels,
+  onSplitScreenChange,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -229,9 +232,8 @@ export function CandlestickChart({
   // affects the chart itself.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
-  // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than
-  // a dynamic map — Popover needs a real RefObject per anchor, and refs can't be created in a
-  // loop).
+  // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than a
+  // dynamic map — Popover needs a real RefObject per anchor, and refs can't be created in a loop).
   const linesMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const fibonacciMenuAnchorRef = useRef<HTMLButtonElement>(null);
   const elliottMenuAnchorRef = useRef<HTMLButtonElement>(null);
@@ -384,11 +386,10 @@ export function CandlestickChart({
   const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
     useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
 
-  // The bottom axis's own scale is index-based now, so its automatic tick generator would label
-  // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
-  // use for their categorical axis: explicit tickValues (slot centers, i + 0.5 — see
-  // useZoomAndScales' own dateTickValues) throttled to a readable count regardless of zoom, and a
-  // tickFormat that looks the date up by index.
+  // The bottom axis's own scale is index-based, so its automatic tick generator would label ticks
+  // with raw indices (0, 100, 200…) instead of dates — same fix BarChart/DeltaChart already use
+  // for their categorical axis: explicit tickValues (see useZoomAndScales' own dateTickValues)
+  // plus a tickFormat that looks the date up by index, this one.
   function dateTickFormat(v: number): string {
     const idx = Math.min(data.length - 1, Math.max(0, Math.round(v - 0.5)));
     return dFmt(data[idx].date);
@@ -685,6 +686,9 @@ export function CandlestickChart({
           linkable={linkable}
           isLinked={isLinked}
           onLinkClick={onLinkClick}
+          showSplitScreen={showSplitScreen}
+          splitScreenPanels={splitScreenPanels}
+          onSplitScreenChange={onSplitScreenChange}
         />
       )}
 

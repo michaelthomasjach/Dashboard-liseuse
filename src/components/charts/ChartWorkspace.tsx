@@ -7,9 +7,14 @@ import "./ChartWorkspace.css";
 const GRID_COLUMNS: Record<2 | 4 | 6 | 8, number> = { 2: 2, 4: 2, 6: 3, 8: 4 };
 
 export interface ChartWorkspaceProps {
-  /** Panel count — also picks the grid: 2 is a single row, 4/6/8 wrap into two rows (2/3/4
-   *  columns respectively). */
-  panels: 2 | 4 | 6 | 8;
+  /** Uncontrolled initial panel count — also picks the grid: 2 is a single row, 4/6/8 wrap into
+   *  two rows (2/3/4 columns respectively). Owned internally from here on (same uncontrolled
+   *  pattern as everywhere else in this library): each panel's own header grid/split-screen
+   *  button (`CandlestickChart.showSplitScreen`, wired here) lets the user change it live, same
+   *  as the chain-link button does for groups. Default 4. */
+  defaultPanels?: 2 | 4 | 6 | 8;
+  /** Fires whenever the panel count changes via any panel's own split-screen menu. */
+  onPanelsChange?: (panels: 2 | 4 | 6 | 8) => void;
   /** One pre-configured `<CandlestickChart>` per panel, in order ("Fenêtre 1" = the first child,
    *  etc.) — same "compose, don't configure" shape as everywhere else a caller hands this library
    *  a data source of their own; `ChartWorkspace` only adds layout and cross-chart sync on top,
@@ -36,13 +41,27 @@ export interface ChartWorkspaceProps {
  *  wired here) — opens one shared "Graphiques liés" modal (see `LinkGroupsModal`) regardless of
  *  which panel's button was clicked, since the groups themselves are workspace-wide, not
  *  per-panel. */
-export function ChartWorkspace({ panels, children, panelHeight = 320, defaultLinkGroups, onLinkGroupsChange, className }: ChartWorkspaceProps) {
+export function ChartWorkspace({
+  defaultPanels = 4,
+  onPanelsChange,
+  children,
+  panelHeight = 320,
+  defaultLinkGroups,
+  onLinkGroupsChange,
+  className,
+}: ChartWorkspaceProps) {
+  const [panels, setPanels] = useState(defaultPanels);
   const { groups, linkPanels, unlinkGroup, groupIndexOfPanel } = useLinkGroups({ defaultLinkGroups, onLinkGroupsChange });
   // Each panel's own last-reported real hover date (or null) — keyed by panel index, not a single
   // "currently hovered panel" value, since a panel that isn't in any group still needs its own
   // entry cleared correctly when its mouse leaves regardless of what else is going on.
   const [hoverByPanel, setHoverByPanel] = useState<Record<number, Date | null>>({});
   const [linkModalOpen, setLinkModalOpen] = useState(false);
+
+  function handlePanelsChange(next: 2 | 4 | 6 | 8) {
+    setPanels(next);
+    onPanelsChange?.(next);
+  }
 
   function handleHoverChange(panelIndex: number, date: Date | null) {
     setHoverByPanel((prev) => {
@@ -83,6 +102,9 @@ export function ChartWorkspace({ panels, children, panelHeight = 320, defaultLin
           linkable: true,
           isLinked: groupIndexOfPanel(i) !== null,
           onLinkClick: () => setLinkModalOpen(true),
+          showSplitScreen: true,
+          splitScreenPanels: panels,
+          onSplitScreenChange: handlePanelsChange,
         })
       )}
       <LinkGroupsModal

@@ -341,6 +341,15 @@ export const LinkIcon = (props: IconProps) => (
   </IconBase>
 );
 
+export const GridIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="3.5" y="3.5" width="7.5" height="7.5" rx="1" />
+    <rect x="13" y="3.5" width="7.5" height="7.5" rx="1" />
+    <rect x="3.5" y="13" width="7.5" height="7.5" rx="1" />
+    <rect x="13" y="13" width="7.5" height="7.5" rx="1" />
+  </IconBase>
+);
+
 export const CreditCardIcon = (props: IconProps) => (
   <IconBase {...props}>
     <rect x="2.5" y="5.5" width="19" height="13" rx="2" />
