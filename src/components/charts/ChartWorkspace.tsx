@@ -73,6 +73,25 @@ export function ChartWorkspace({
   // is what's actually shared here.
   const [priceByPanel, setPriceByPanel] = useState<Record<number, number | null>>({});
   const [linkModalOpen, setLinkModalOpen] = useState(false);
+  // A single template child (see panelElements below) means every clone starts from the very same
+  // `timeframe`/`onTimeframeChange` pair — without this, calling the template's own (shared)
+  // `onTimeframeChange` from one panel would update the one piece of state every other panel also
+  // reads its `timeframe` from, changing all of them at once instead of just the one the user
+  // actually touched. Forked here the same way hover/price already are: once a panel's picker is
+  // used, that panel's own entry takes over for good, independent of whatever the template's own
+  // `timeframe` prop does afterward; a panel never individually touched still tracks the template's
+  // value, same as plain controlled behavior outside a workspace.
+  const [timeframeByPanel, setTimeframeByPanel] = useState<Record<number, string | undefined>>({});
+  // Which panel(s) the "Graphiques liés" modal's own checkboxes currently have checked — mirrored
+  // out from LinkGroupsModal (which has no reach into the grid behind it) purely to drive each
+  // matching panel's highlight className below. Cleared whenever the modal closes, same as the
+  // modal's own staged selection is (see LinkGroupsModal's own reset-on-open effect).
+  const [selectedPanels, setSelectedPanels] = useState<number[]>([]);
+
+  function closeLinkModal() {
+    setLinkModalOpen(false);
+    setSelectedPanels([]);
+  }
 
   function handlePanelsChange(next: 1 | 2 | 4 | 6 | 8) {
     setPanels(next);
@@ -165,6 +184,9 @@ export function ChartWorkspace({
           // for exactly this (see its own doc) that doesn't have that collision.
           height: panelHeight,
           fillHeight,
+          className: [child.props.className, selectedPanels.includes(i) && "lq-chart-workspace__panel--selected"].filter(Boolean).join(" ") || undefined,
+          timeframe: i in timeframeByPanel ? timeframeByPanel[i] : child.props.timeframe,
+          onTimeframeChange: (value: string) => setTimeframeByPanel((prev) => ({ ...prev, [i]: value })),
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
           syncedHoverPrice: syncedPriceForPanel(i),
@@ -179,11 +201,13 @@ export function ChartWorkspace({
       )}
       <LinkGroupsModal
         open={linkModalOpen}
-        onClose={() => setLinkModalOpen(false)}
+        onClose={closeLinkModal}
         panelCount={panelElements.length}
         groups={groups}
         onLink={linkPanels}
         onUnlink={unlinkGroup}
+        panelSymbols={panelElements.map((child) => child.props.symbol)}
+        onSelectedPanelsChange={setSelectedPanels}
       />
     </div>
   );

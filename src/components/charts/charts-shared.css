@@ -5,6 +5,13 @@
      add its own 2px on top of that 100%, overflowing the parent by that much. */
   box-sizing: border-box;
   border: 1px solid var(--lq-color-border-subtle);
+  /* A synced crosshair badge (see CandlestickChartProps.syncedHoverDate/syncedHoverPrice) is
+     positioned from wherever that panel's own axis puts it, same as a real hover's — right at
+     the panel's own edge, it can otherwise render a few px past its box and bleed into whatever
+     sits next to it (the neighboring panel in a ChartWorkspace grid, with zero gap between
+     panels — see ChartWorkspace.css). Clipping here keeps every panel's own badges/canvas
+     strictly inside its own bounds regardless of exactly where the underlying value lands. */
+  overflow: hidden;
 }
 
 /* For a chart embedded inside another `.lq-chart` that already provides the outer border (see

@@ -26,7 +26,7 @@
 .lq-chart-event-tooltip--modal {
   /* 100% - 20px on both axes, not edge-to-edge: a 10px gap all round instead of `inset: 0`. */
   inset: 10px;
-  z-index: 1002;
+  z-index: 2000;
 }
 
 .lq-chart-event-tooltip__header {

@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   background-color: var(--lq-color-overlay);
-  z-index: 1000;
+  z-index: 2000;
   padding: var(--lq-space-5);
 }
 

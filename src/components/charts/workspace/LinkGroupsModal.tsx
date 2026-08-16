@@ -10,6 +10,17 @@ export interface LinkGroupsModalProps {
   groups: number[][];
   onLink: (panelIndices: number[]) => void;
   onUnlink: (groupIndex: number) => void;
+  /** Each panel's current symbol, by panel index — shown next to "Fenêtre N" so a workspace with
+   *  several different tickers open doesn't leave the user guessing which physical panel a given
+   *  row refers to. A missing/undefined entry (panel not yet showing anything) just falls back to
+   *  the bare "Fenêtre N" label. */
+  panelSymbols?: (string | undefined)[];
+  /** Mirrors the staged checkbox selection outward as it changes, so the workspace behind this
+   *  modal can highlight whichever panel(s) are currently checked — the modal itself has no way to
+   *  reach into the grid it's floating over. Fires with every currently-checked panel index on
+   *  every toggle, and implicitly clears (via the caller's own `onClose`) once a link is made or
+   *  the modal closes. */
+  onSelectedPanelsChange?: (panelIndices: number[]) => void;
 }
 
 /** The tree of "Fenêtre N" / "Groupe N" the chain-link button opens (see `ChartWorkspace`) — a
@@ -19,7 +30,7 @@ export interface LinkGroupsModalProps {
  *  own doc for exactly what that means for pre-existing groups). Each existing group's own header
  *  row carries a small dissolve button instead of a checkbox of its own — a group isn't itself a
  *  selectable panel, so there's nothing to link *it* to. */
-export function LinkGroupsModal({ open, onClose, panelCount, groups, onLink, onUnlink }: LinkGroupsModalProps) {
+export function LinkGroupsModal({ open, onClose, panelCount, groups, onLink, onUnlink, panelSymbols, onSelectedPanelsChange }: LinkGroupsModalProps) {
   const [selected, setSelected] = useState<Set<number>>(new Set());
 
   // Fresh selection every time the modal opens — carrying a stale one over from a previous visit
@@ -28,19 +39,30 @@ export function LinkGroupsModal({ open, onClose, panelCount, groups, onLink, onU
     if (open) setSelected(new Set());
   }, [open]);
 
+  // Not a functional setSelected(prev => ...) update: onSelectedPanelsChange ultimately calls
+  // setState on ChartWorkspace (a different component), and calling that from inside *this*
+  // state's own updater function runs it during React's render phase, which throws "Cannot update
+  // a component while rendering a different component". Computing `next` from the already-current
+  // `selected` up front and firing both calls as plain event-handler side effects avoids that —
+  // toggle only ever runs from a direct click, never concurrently, so there's no staleness risk.
   function toggle(panelIndex: number) {
-    setSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(panelIndex)) next.delete(panelIndex);
-      else next.add(panelIndex);
-      return next;
-    });
+    const next = new Set(selected);
+    if (next.has(panelIndex)) next.delete(panelIndex);
+    else next.add(panelIndex);
+    setSelected(next);
+    onSelectedPanelsChange?.([...next]);
   }
 
   function handleLink() {
     if (selected.size < 2) return;
     onLink([...selected]);
     setSelected(new Set());
+    onSelectedPanelsChange?.([]);
+  }
+
+  function panelLabel(panelIndex: number) {
+    const symbol = panelSymbols?.[panelIndex];
+    return symbol ? `Fenêtre ${panelIndex + 1} — ${symbol}` : `Fenêtre ${panelIndex + 1}`;
   }
 
   if (!open) return null;
@@ -84,14 +106,14 @@ export function LinkGroupsModal({ open, onClose, panelCount, groups, onLink, onU
                 key={panelIndex}
                 checked={selected.has(panelIndex)}
                 onChange={() => toggle(panelIndex)}
-                label={`Fenêtre ${panelIndex + 1}`}
+                label={panelLabel(panelIndex)}
                 className="lq-link-groups__nested"
               />
             ))}
           </div>
         ))}
         {ungrouped.map((panelIndex) => (
-          <Checkbox key={panelIndex} checked={selected.has(panelIndex)} onChange={() => toggle(panelIndex)} label={`Fenêtre ${panelIndex + 1}`} />
+          <Checkbox key={panelIndex} checked={selected.has(panelIndex)} onChange={() => toggle(panelIndex)} label={panelLabel(panelIndex)} />
         ))}
       </div>
     </Modal>
