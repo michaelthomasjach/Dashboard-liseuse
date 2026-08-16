@@ -55,11 +55,12 @@ export interface ChartHeaderProps {
   isLinked: boolean;
   onLinkClick: (() => void) | undefined;
   showSplitScreen: boolean;
-  splitScreenPanels: 2 | 4 | 6 | 8 | undefined;
-  onSplitScreenChange: ((panels: 2 | 4 | 6 | 8) => void) | undefined;
+  splitScreenPanels: 1 | 2 | 4 | 6 | 8 | undefined;
+  onSplitScreenChange: ((panels: 1 | 2 | 4 | 6 | 8) => void) | undefined;
 }
 
-const SPLIT_SCREEN_OPTIONS: { value: 2 | 4 | 6 | 8; label: string }[] = [
+const SPLIT_SCREEN_OPTIONS: { value: 1 | 2 | 4 | 6 | 8; label: string }[] = [
+  { value: 1, label: "1 fenêtre" },
   { value: 2, label: "2 panneaux" },
   { value: 4, label: "4 panneaux" },
   { value: 6, label: "6 panneaux" },

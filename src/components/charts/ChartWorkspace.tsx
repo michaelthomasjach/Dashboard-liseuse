@@ -4,17 +4,18 @@ import { useLinkGroups } from "./workspace/useLinkGroups";
 import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
 import "./ChartWorkspace.css";
 
-const GRID_COLUMNS: Record<2 | 4 | 6 | 8, number> = { 2: 2, 4: 2, 6: 3, 8: 4 };
+const GRID_COLUMNS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 2, 4: 2, 6: 3, 8: 4 };
 
 export interface ChartWorkspaceProps {
-  /** Uncontrolled initial panel count — also picks the grid: 2 is a single row, 4/6/8 wrap into
-   *  two rows (2/3/4 columns respectively). Owned internally from here on (same uncontrolled
-   *  pattern as everywhere else in this library): each panel's own header grid/split-screen
-   *  button (`CandlestickChart.showSplitScreen`, wired here) lets the user change it live, same
-   *  as the chain-link button does for groups. Default 4. */
-  defaultPanels?: 2 | 4 | 6 | 8;
+  /** Uncontrolled initial panel count — also picks the grid: 1 is a plain single chart (no grid
+   *  chrome), 2 is a single row, 4/6/8 wrap into two rows (2/3/4 columns respectively). Owned
+   *  internally from here on (same uncontrolled pattern as everywhere else in this library): each
+   *  panel's own header grid/split-screen button (`CandlestickChart.showSplitScreen`, wired here)
+   *  lets the user change it live — including going from 1 up to a split view and back — same as
+   *  the chain-link button does for groups. Default 1. */
+  defaultPanels?: 1 | 2 | 4 | 6 | 8;
   /** Fires whenever the panel count changes via any panel's own split-screen menu. */
-  onPanelsChange?: (panels: 2 | 4 | 6 | 8) => void;
+  onPanelsChange?: (panels: 1 | 2 | 4 | 6 | 8) => void;
   /** One pre-configured `<CandlestickChart>` per panel, in order ("Fenêtre 1" = the first child,
    *  etc.) — same "compose, don't configure" shape as everywhere else a caller hands this library
    *  a data source of their own; `ChartWorkspace` only adds layout and cross-chart sync on top,
@@ -32,7 +33,7 @@ export interface ChartWorkspaceProps {
   className?: string;
 }
 
-/** A split-screen grid of `CandlestickChart`s (2/4/6/8 panels) whose crosshairs can be synced
+/** A split-screen grid of `CandlestickChart`s (1/2/4/6/8 panels) whose crosshairs can be synced
  *  across whichever ones the user links together — hovering a candle on any panel in a group
  *  draws the same crosshair (vertical line, date badge, OHLC readout) on every other panel in
  *  that group, translated to each one's own nearest candle by date rather than raw index, so
@@ -42,7 +43,7 @@ export interface ChartWorkspaceProps {
  *  which panel's button was clicked, since the groups themselves are workspace-wide, not
  *  per-panel. */
 export function ChartWorkspace({
-  defaultPanels = 4,
+  defaultPanels = 1,
   onPanelsChange,
   children,
   panelHeight = 320,
@@ -58,7 +59,7 @@ export function ChartWorkspace({
   const [hoverByPanel, setHoverByPanel] = useState<Record<number, Date | null>>({});
   const [linkModalOpen, setLinkModalOpen] = useState(false);
 
-  function handlePanelsChange(next: 2 | 4 | 6 | 8) {
+  function handlePanelsChange(next: 1 | 2 | 4 | 6 | 8) {
     setPanels(next);
     onPanelsChange?.(next);
   }

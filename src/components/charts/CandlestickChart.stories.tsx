@@ -10,6 +10,7 @@ import {
   type ChartDisplayMode,
   type OverlayDataPoint,
 } from "./CandlestickChart";
+import { ChartWorkspace } from "./ChartWorkspace";
 import { generateCandles } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -153,6 +154,19 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   }));
 }
 
+// Extra panels for the split-screen demo (see ChartWorkspace) — simple, distinct instruments so
+// splitting into more windows actually shows something different in each one, unlike the fully
+// interactive/configurable main panel below.
+const SPLIT_PANEL_DATASETS: { symbol: string; data: Candle[] }[] = [
+  { symbol: "NVDA", data: generateCandles(600, 120, 15) },
+  { symbol: "AAPL", data: generateCandles(600, 190, 27) },
+  { symbol: "SPX", data: generateCandles(600, 5200, 3) },
+  { symbol: "BTCUSD", data: generateCandles(600, 62000, 61) },
+  { symbol: "ETHUSD", data: generateCandles(600, 3400, 52) },
+  { symbol: "WTI", data: generateCandles(600, 78, 84) },
+  { symbol: "EURUSD", data: generateCandles(600, 1.08, 9) },
+];
+
 export const AllFeatures: Story = {
   name: "Toutes les options",
   render: () => {
@@ -174,39 +188,46 @@ export const AllFeatures: Story = {
           bascule dans la modale "Paramètres du graphique"), saisonnalité (`seasonality` — bouton calendrier dans
           l'en-tête), zoom/pan (`zoomable`) et évènements (`events` — bulles en bas du tracé des prix, deux d'entre
           elles partageant une même date pour montrer la bulle "stack" ; les <strong>cliquer</strong> ouvre une
-          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup), et modèles
-          de disposition (`showTemplates` — bouton disquette + dossier tout à droite de l'en-tête : enregistre/
-          recharge la liste d'indicateurs et la disposition des panneaux).
+          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup), modèles de
+          disposition (`showTemplates` — bouton disquette + dossier tout à droite de l'en-tête : enregistre/
+          recharge la liste d'indicateurs et la disposition des panneaux), et écran divisé (icône grille dans
+          l'en-tête — 1/2/4/6/8 fenêtres, chacune avec sa propre icône chaîne pour synchroniser leur crosshair ;
+          ce panneau reste le seul entièrement configurable, les autres sont de simples graphiques de
+          démonstration).
         </p>
-        <CandlestickChart
-          data={ALL_FEATURES_DATASET}
-          symbol={currentSymbol}
-          events={ALL_FEATURES_EVENTS}
-          drawingTools
-          showVolume={false}
-          showIndicators
-          fundamentals={ALL_FEATURES_FUNDAMENTALS}
-          fullscreenToggle
-          zoomable
-          timeframes={TIMEFRAMES}
-          timeframe={timeframe}
-          onTimeframeChange={setTimeframe}
-          defaultChartDisplayMode={displayMode}
-          onChartDisplayModeChange={setDisplayMode}
-          symbolSearch
-          symbolSearchResults={results}
-          onSymbolSearchChange={(query, category) => setResults(filterMockSymbols(query, category, favorites))}
-          onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
-          defaultFavoriteSymbolIds={favorites}
-          onFavoriteSymbolIdsChange={setFavorites}
-          onAddSymbolOverlay={async (result) => {
-            await new Promise((resolve) => setTimeout(resolve, 600));
-            return generateOverlaySeries(result.ticker);
-          }}
-          seasonality
-          showTemplates
-          height={STORY_HEIGHT}
-        />
+        <ChartWorkspace defaultPanels={1} panelHeight={STORY_HEIGHT}>
+          <CandlestickChart
+            data={ALL_FEATURES_DATASET}
+            symbol={currentSymbol}
+            events={ALL_FEATURES_EVENTS}
+            drawingTools
+            showVolume={false}
+            showIndicators
+            fundamentals={ALL_FEATURES_FUNDAMENTALS}
+            fullscreenToggle
+            zoomable
+            timeframes={TIMEFRAMES}
+            timeframe={timeframe}
+            onTimeframeChange={setTimeframe}
+            defaultChartDisplayMode={displayMode}
+            onChartDisplayModeChange={setDisplayMode}
+            symbolSearch
+            symbolSearchResults={results}
+            onSymbolSearchChange={(query, category) => setResults(filterMockSymbols(query, category, favorites))}
+            onSymbolSelect={(r) => setCurrentSymbol(r.ticker)}
+            defaultFavoriteSymbolIds={favorites}
+            onFavoriteSymbolIdsChange={setFavorites}
+            onAddSymbolOverlay={async (result) => {
+              await new Promise((resolve) => setTimeout(resolve, 600));
+              return generateOverlaySeries(result.ticker);
+            }}
+            seasonality
+            showTemplates
+          />
+          {SPLIT_PANEL_DATASETS.map(({ symbol, data }) => (
+            <CandlestickChart key={symbol} data={data} symbol={symbol} zoomable />
+          ))}
+        </ChartWorkspace>
       </div>
     );
   },
