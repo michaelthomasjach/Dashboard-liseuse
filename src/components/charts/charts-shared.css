@@ -167,15 +167,6 @@
    .lq-chart__plot: the header row (.lq-chart__header) needs to span edge to edge to match the
    main chart's own header, and LineAreaChart's own `margin` prop (see SeasonalityView) already
    reserves the right space around its plot. */
-.lq-chart__seasonality-year-picker {
-  display: flex;
-  flex-direction: column;
-  gap: var(--lq-space-1);
-  padding: var(--lq-space-2);
-  max-height: 60vh;
-  overflow-y: auto;
-  min-width: 120px;
-}
 
 /* "year" granularity — a single aggregate number reads better as a stat than a one-point line
    chart (see SeasonalityView's own comment). Centered in the same box LineAreaChart would have
