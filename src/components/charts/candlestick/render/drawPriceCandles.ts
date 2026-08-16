@@ -11,7 +11,7 @@ import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
  *  active), price-overlay indicator lines (SMA/EMA/WMA/VWAP/Bollinger), and the hover crosshair's
  *  horizontal line. */
 export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCandlestickChartParams, style: ChartCanvasStyle) {
-  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoProfile, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks } =
+  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoProfile, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
     params;
   const { colorUp, colorDown, colorBg, colorText, colorMuted, colorAccent, colorGrid, fontFamily, isEink } = style;
 
@@ -39,6 +39,22 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       ctx.stroke();
     }
     ctx.restore();
+
+    // The "0%" baseline while comparing against a symbol overlay (see compareMode/
+    // overlayProjections) — every overlay projects onto the same mainReference price, so any one
+    // of them gives the level. A solid, slightly darker line (colorMuted, not the dashed
+    // colorGrid above) since this one's a meaningful reference threshold, not just a scale tick.
+    if (overlayProjections.length > 0) {
+      const y = snapPixel(zoomedPriceScale(overlayProjections[0].mainReference));
+      ctx.save();
+      ctx.strokeStyle = colorMuted;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(dims.boundedWidth, y);
+      ctx.stroke();
+      ctx.restore();
+    }
 
     if (chartDisplayMode === "line") {
       // A plain close-price line, same treatment as the light area fill under an indicator
