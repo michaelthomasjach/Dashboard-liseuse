@@ -11,6 +11,7 @@ export type {
   TrendLineDrawing,
   OverlayDataPoint,
   Indicator,
+  ChartTemplate,
   IndicatorKind,
   ChartEvent,
   FundamentalDataPoint,

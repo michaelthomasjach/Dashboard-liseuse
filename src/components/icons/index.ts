@@ -49,6 +49,7 @@ export {
   RefreshIcon,
   UploadCloudIcon,
   FileIcon,
+  SaveIcon,
   TrashIcon,
   FolderIcon,
   MaximizeIcon,

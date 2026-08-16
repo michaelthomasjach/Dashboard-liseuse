@@ -8,7 +8,7 @@ import type { ChartDimensions } from "../../internal/useChartDimensions";
 import type { Candle } from "../interfaces/Candle.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
-import { MAX_EMPTY_FRACTION, AXIS_BADGE_HALF_HEIGHT } from "../constants";
+import { MAX_EMPTY_FRACTION, AXIS_BADGE_HALF_HEIGHT, MAX_DATE_TICKS } from "../constants";
 import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, type PriceBrick } from "../chartModes";
 
 export interface UseZoomAndScalesArgs {
@@ -409,6 +409,35 @@ export function useZoomAndScales({
     setYManuallyAdjusted(false);
   }
 
+  // Every candle fills up to 80% of the space actually available to it at the current zoom — with
+  // a single candle visible, that's 80% of the whole plot width. Deliberately no minimum pixel
+  // floor: with many candles crammed into a narrow view (e.g. fully zoomed out on a 10,000-candle
+  // dataset), 80% of their slot is still less than the slot itself, so neighbors never overlap — a
+  // floor like `max(1, ...)` would force overlap once the slot itself was narrower than that
+  // floor. Sized off the zoomed scale's own (unclamped) domain span rather than `visibleRange`
+  // (which clamps to `data.length`) — otherwise, panned into the reserved future space with only a
+  // few real candles peeking in from the left, `visibleRange` would undercount the visible slots
+  // and render those candles too wide for the current zoom level.
+  const zoomedSlotCount = useMemo(() => {
+    const [i0, i1] = zoomedXScale.domain();
+    return Math.max(1, i1 - i0);
+  }, [zoomedXScale]);
+  const candleWidth = Math.max(0.1, (dims.boundedWidth / zoomedSlotCount) * 0.8);
+
+  // Candle indices (offset .5 to land mid-slot, matching every candle's own cx) the date axis
+  // should actually draw a tick at — thinned to at most MAX_DATE_TICKS regardless of how many
+  // candles are currently visible, so labels never overlap into unreadable clutter at low zoom.
+  const dateTickValues = useMemo(() => {
+    const start = Math.max(0, visibleRange.start);
+    const end = Math.min(data.length, visibleRange.end);
+    const count = end - start;
+    if (count <= 0) return [];
+    const step = Math.max(1, Math.ceil(count / MAX_DATE_TICKS));
+    const values: number[] = [];
+    for (let i = start; i < end; i += step) values.push(i + 0.5);
+    return values;
+  }, [visibleRange, data.length]);
+
   return {
     transform,
     setTransform,
@@ -441,5 +470,8 @@ export function useZoomAndScales({
     isZoomed,
     resetZoom,
     resetYAxis,
+    zoomedSlotCount,
+    candleWidth,
+    dateTickValues,
   };
 }

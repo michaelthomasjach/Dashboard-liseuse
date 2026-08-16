@@ -118,6 +118,24 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     onIndicatorsChange?.(next);
   }
 
+  // Replaces every piece of state a saved template snapshot covers, wholesale rather than
+  // merging — loading a template means the pane layout ends up looking *exactly* like it did
+  // when saved, including dropping any manual pane-height resize the current (not the template's
+  // own) layout happened to have. Used by useChartTemplates' own loadTemplate; not exposed as a
+  // prop since nothing about "which template is active" is meant to be controlled by the caller,
+  // same as `draggingPaneId`/`volumePaneState` above.
+  function loadIndicatorLayout(snapshot: {
+    indicators: Indicator[];
+    volumePaneOrder: number;
+    volumePaneState: "expanded" | "collapsed" | "hidden";
+    paneHeightFractions: Record<string, number>;
+  }) {
+    commitIndicators(snapshot.indicators);
+    setVolumePaneOrder(snapshot.volumePaneOrder);
+    setVolumePaneState(snapshot.volumePaneState);
+    setPaneHeightFractions(snapshot.paneHeightFractions);
+  }
+
   function addIndicator(entry: IndicatorCatalogEntry) {
     commitIndicators([
       ...indicators,
@@ -338,6 +356,7 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     handlePaneYAxisPointerUp,
     resetPaneYAxis,
     commitIndicators,
+    loadIndicatorLayout,
     addIndicator,
     openIndicatorSettings,
     closeIndicatorSettings,

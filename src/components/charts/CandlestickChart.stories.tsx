@@ -174,7 +174,9 @@ export const AllFeatures: Story = {
           bascule dans la modale "Paramètres du graphique"), saisonnalité (`seasonality` — bouton calendrier dans
           l'en-tête), zoom/pan (`zoomable`) et évènements (`events` — bulles en bas du tracé des prix, deux d'entre
           elles partageant une même date pour montrer la bulle "stack" ; les <strong>cliquer</strong> ouvre une
-          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup).
+          tooltip détaillée, le bouton œil dans l'en-tête masque/affiche toutes les bulles d'un coup), et modèles
+          de disposition (`showTemplates` — bouton disquette + dossier tout à droite de l'en-tête : enregistre/
+          recharge la liste d'indicateurs et la disposition des panneaux).
         </p>
         <CandlestickChart
           data={ALL_FEATURES_DATASET}
@@ -202,6 +204,7 @@ export const AllFeatures: Story = {
             return generateOverlaySeries(result.ticker);
           }}
           seasonality
+          showTemplates
           height={STORY_HEIGHT}
         />
       </div>

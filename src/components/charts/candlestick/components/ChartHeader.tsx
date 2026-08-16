@@ -9,8 +9,10 @@ import {
 } from "../../../icons";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
 import type { TimeframeEntry } from "../interfaces/TimeframeEntry.interface";
+import type { ChartTemplate } from "../interfaces/ChartTemplate.interface";
 import { CHART_DISPLAY_MODES, type ChartDisplayModeDef } from "../chartModes";
 import { isTimeframeGroup } from "../timeframes";
+import { TemplateControls } from "./TemplateControls";
 
 export interface ChartHeaderProps {
   dims: { width: number | undefined };
@@ -39,6 +41,13 @@ export interface ChartHeaderProps {
   fullscreenToggle: boolean;
   toggleFullscreen: () => void;
   isFullscreen: boolean;
+  showTemplates: boolean;
+  templates: ChartTemplate[];
+  activeTemplateId: string | null;
+  templatesDirty: boolean;
+  onSaveTemplate: (name?: string) => void;
+  onLoadTemplate: (id: string) => void;
+  onDeleteTemplate: (id: string) => void;
 }
 
 /** The chart's main (non-seasonality) header: timeframe picker, display-mode picker, "add
@@ -72,6 +81,13 @@ export function ChartHeader({
   fullscreenToggle,
   toggleFullscreen,
   isFullscreen,
+  showTemplates,
+  templates,
+  activeTemplateId,
+  templatesDirty,
+  onSaveTemplate,
+  onLoadTemplate,
+  onDeleteTemplate,
 }: ChartHeaderProps) {
   return (
     <div className="lq-chart__header" style={{ width: dims.width }}>
@@ -196,6 +212,16 @@ export function ChartHeader({
         >
           {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
         </button>
+      )}
+      {showTemplates && (
+        <TemplateControls
+          templates={templates}
+          activeTemplateId={activeTemplateId}
+          isDirty={templatesDirty}
+          onSave={onSaveTemplate}
+          onLoad={onLoadTemplate}
+          onDelete={onDeleteTemplate}
+        />
       )}
     </div>
   );

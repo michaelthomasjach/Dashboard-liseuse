@@ -1320,6 +1320,100 @@
   animation: lq-chart-spin 0.8s linear infinite;
 }
 
+/* Pushes the Save button + templates dropdown trigger (see TemplateControls) to the header bar's
+   own far right edge — .lq-chart__header is a plain packed-left flex row with no
+   space-between/other push-right mechanism, so this margin is what actually does it. */
+.lq-chart__header-templates {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+
+/* Saved-templates dropdown (see TemplateControls) — one row per template, name on the left
+   (click loads it), a hover-revealed delete icon on the right. Built on plain flex rather than
+   DropdownPanel's own .lq-dropdown-panel__option since that one's a single `<button>` covering
+   the whole row — this row needs a second, independently-clickable icon button nested beside the
+   name, which a row-as-button element can't contain. */
+.lq-chart__template-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-chart__template-row:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart__template-row--active {
+  font-weight: 700;
+}
+
+.lq-chart__template-row-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font-family: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  color: var(--lq-color-text);
+  background: none;
+  border: none;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-chart__template-row-name svg {
+  flex-shrink: 0;
+  color: var(--lq-color-accent);
+}
+
+/* Same "invisible until the row's hovered/focused" reveal as .lq-chart__indicator-legend-action. */
+.lq-chart__template-row-delete {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-right: 6px;
+  padding: 2px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0;
+}
+
+.lq-chart__template-row:hover .lq-chart__template-row-delete,
+.lq-chart__template-row-delete:focus-visible {
+  opacity: 0.85;
+}
+
+.lq-chart__template-row-delete:hover {
+  color: var(--lq-color-down);
+  opacity: 1;
+}
+
+.lq-chart__template-empty {
+  margin: 0;
+  padding: var(--lq-space-3) var(--lq-space-2);
+  color: var(--lq-color-text-muted);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.lq-chart__template-confirm-text {
+  margin: 0;
+  color: var(--lq-color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .lq-chart__symbol-search-overlay-spinner {
     animation: none;

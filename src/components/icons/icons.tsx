@@ -368,6 +368,14 @@ export const FileIcon = (props: IconProps) => (
   </IconBase>
 );
 
+export const SaveIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M5 3.5h11l3 3v13.5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-15.5a1 1 0 0 1 1-1Z" />
+    <path d="M8 3.5v5h7v-5" />
+    <path d="M7.5 21v-6.5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1V21" />
+  </IconBase>
+);
+
 export const TrashIcon = (props: IconProps) => (
   <IconBase {...props}>
     <path d="M4.5 7h15M9.5 7V5a1.5 1.5 0 0 1 1.5-1.5h2A1.5 1.5 0 0 1 14.5 5v2" />

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions } from "./internal/useChartDimensions";
 import { useFullscreen } from "./internal/useFullscreen";
@@ -8,6 +8,7 @@ import { useChartEvents } from "./candlestick/hooks/useChartEvents";
 import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
 import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
+import { useChartTemplates } from "./candlestick/hooks/useChartTemplates";
 import { usePaneDragReorder } from "./candlestick/hooks/usePaneDragReorder";
 import { useThemePaletteTick } from "./candlestick/hooks/useThemePaletteTick";
 import { useDefaultDrawingColor } from "./candlestick/hooks/useDefaultDrawingColor";
@@ -40,6 +41,7 @@ import type { IndicatorKind } from "./candlestick/interfaces/IndicatorKind.inter
 import type { IndicatorBand } from "./candlestick/interfaces/IndicatorBand.interface";
 import type { IndicatorMACD } from "./candlestick/interfaces/IndicatorMACD.interface";
 import type { Indicator } from "./candlestick/interfaces/Indicator.interface";
+import type { ChartTemplate } from "./candlestick/interfaces/ChartTemplate.interface";
 import type { ChartDisplayMode } from "./candlestick/interfaces/ChartDisplayMode.interface";
 import type { TimeframeOption } from "./candlestick/interfaces/TimeframeOption.interface";
 import type { TimeframeGroup } from "./candlestick/interfaces/TimeframeGroup.interface";
@@ -58,6 +60,7 @@ export type {
   IndicatorBand,
   IndicatorMACD,
   Indicator,
+  ChartTemplate,
   ChartDisplayMode,
   TimeframeOption,
   TimeframeGroup,
@@ -73,7 +76,6 @@ import {
   DEFAULT_MARGIN,
   TOOLS_RAIL_WIDTH,
   HEADER_HEIGHT,
-  MAX_DATE_TICKS,
   SUB_PANE_COLLAPSED_HEIGHT,
 } from "./candlestick/constants";
 import { formatPercentFromReference } from "./candlestick/formatting";
@@ -95,6 +97,9 @@ export function CandlestickChart({
   showIndicators = false,
   defaultIndicators,
   onIndicatorsChange,
+  showTemplates = false,
+  defaultTemplates,
+  onTemplatesChange,
   initialVisibleCandles = 500,
   YAutoScaling = true,
   onYAutoScalingChange,
@@ -261,13 +266,17 @@ export function CandlestickChart({
     setIndicatorsManagerOpen,
     draggingPaneId,
     setDraggingPaneId,
+    volumePaneOrder,
+    volumePaneState,
     setVolumePaneState,
+    paneHeightFractions,
     paneYTransform,
     handlePaneYAxisPointerDown,
     handlePaneYAxisPointerMove,
     handlePaneYAxisPointerUp,
     resetPaneYAxis,
     commitIndicators,
+    loadIndicatorLayout,
     addIndicator,
     openIndicatorSettings,
     closeIndicatorSettings,
@@ -287,6 +296,23 @@ export function CandlestickChart({
     volumeHeight,
     priceHeight,
   } = usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolume, plotBoundedHeight });
+
+  const {
+    templates,
+    activeTemplateId,
+    isDirty: templatesDirty,
+    saveTemplate,
+    loadTemplate,
+    deleteTemplate,
+  } = useChartTemplates({
+    defaultTemplates,
+    onTemplatesChange,
+    indicators,
+    volumePaneOrder,
+    volumePaneState,
+    paneHeightFractions,
+    loadIndicatorLayout,
+  });
 
   const {
     yTransform,
@@ -312,6 +338,8 @@ export function CandlestickChart({
     isZoomed,
     resetZoom,
     resetYAxis,
+    candleWidth,
+    dateTickValues,
   } = useZoomAndScales({
     data,
     dims,
@@ -349,38 +377,13 @@ export function CandlestickChart({
 
   // The bottom axis's own scale is index-based now, so its automatic tick generator would label
   // ticks with raw indices (0, 100, 200…) instead of dates. Same fix BarChart/DeltaChart already
-  // use for their categorical axis: supply explicit tickValues (slot centers, i + 0.5) throttled
-  // to a readable count regardless of zoom, and a tickFormat that looks the date up by index.
-  const dateTickValues = useMemo(() => {
-    const start = Math.max(0, visibleRange.start);
-    const end = Math.min(data.length, visibleRange.end);
-    const count = end - start;
-    if (count <= 0) return [];
-    const step = Math.max(1, Math.ceil(count / MAX_DATE_TICKS));
-    const values: number[] = [];
-    for (let i = start; i < end; i += step) values.push(i + 0.5);
-    return values;
-  }, [visibleRange, data.length]);
-
+  // use for their categorical axis: explicit tickValues (slot centers, i + 0.5 — see
+  // useZoomAndScales' own dateTickValues) throttled to a readable count regardless of zoom, and a
+  // tickFormat that looks the date up by index.
   function dateTickFormat(v: number): string {
     const idx = Math.min(data.length - 1, Math.max(0, Math.round(v - 0.5)));
     return dFmt(data[idx].date);
   }
-
-  // Each candle fills up to 80% of the space actually available to it at the current zoom —
-  // with a single candle visible, that's 80% of the whole plot width. Deliberately no minimum
-  // pixel floor: with many candles crammed into a narrow view (e.g. fully zoomed out on a
-  // 10,000-candle dataset), 80% of their slot is still less than the slot itself, so neighbors
-  // never overlap — a floor like `max(1, ...)` would force overlap once the slot itself was
-  // narrower than that floor. Sized off the zoomed scale's own (unclamped) domain span rather
-  // than `visibleRange` (which clamps to `data.length`) — otherwise, panned into the reserved
-  // future space with only a few real candles peeking in from the left, `visibleRange` would
-  // undercount the visible slots and render those candles too wide for the current zoom level.
-  const zoomedSlotCount = useMemo(() => {
-    const [i0, i1] = zoomedXScale.domain();
-    return Math.max(1, i1 - i0);
-  }, [zoomedXScale]);
-  const candleWidth = Math.max(0.1, (dims.boundedWidth / zoomedSlotCount) * 0.8);
 
   const {
     indicatorValues,
@@ -671,6 +674,13 @@ export function CandlestickChart({
           fullscreenToggle={fullscreenToggle}
           toggleFullscreen={toggleFullscreen}
           isFullscreen={isFullscreen}
+          showTemplates={showTemplates}
+          templates={templates}
+          activeTemplateId={activeTemplateId}
+          templatesDirty={templatesDirty}
+          onSaveTemplate={saveTemplate}
+          onLoadTemplate={loadTemplate}
+          onDeleteTemplate={deleteTemplate}
         />
       )}
 
