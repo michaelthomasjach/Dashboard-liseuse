@@ -175,8 +175,8 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
           {justSaved ? <CheckIcon size={14} /> : <SaveIcon size={14} />}
         </button>
         {/* "Enregistrer sous" — always a new template, distinct from Save itself overwriting the
-            active one. A smaller icon (not its own full lq-chart__icon-button-sized glyph) reads
-            as "a modifier on Save" rather than an equally-weighted peer action. */}
+            active one. Same icon size as every other header button, not a smaller one — a
+            visibly undersized glyph next to its peers just read as a rendering glitch. */}
         <button
           type="button"
           className="lq-chart__icon-button"
@@ -184,7 +184,7 @@ export function TemplateControls({ templates, activeTemplateId, isDirty, onSave,
           aria-label="Enregistrer sous (nouveau modèle)"
           title="Enregistrer sous (nouveau modèle)"
         >
-          <PlusIcon size={11} />
+          <PlusIcon size={14} />
         </button>
         <button
           ref={dropdownAnchorRef}

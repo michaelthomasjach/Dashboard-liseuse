@@ -7,6 +7,7 @@ import type { SymbolSearchResult } from "../interfaces/SymbolSearchResult.interf
 import { DRAWING_TOOL_CATEGORIES, categoryOfTool } from "../drawingCatalog";
 import { EMPTY_DRAWINGS } from "../constants";
 import { defaultIndicatorColor } from "../indicators";
+import { offsetDrawingUp } from "../drawingGeometry";
 
 export interface UseDrawingStateArgs {
   data: Candle[];
@@ -263,8 +264,9 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
 
   // Ctrl/Cmd+C over a hovered drawing copies it (copiedDrawingRef, not state — never read during
   // render, same reasoning usePaneLayout's own copiedIndicatorRef isn't); Ctrl/Cmd+V pastes a
-  // duplicate (new id, everything else — geometry, style, text — unchanged, no offset applied)
-  // appended to `drawings`. Mirrors indicators' own Ctrl+C/Ctrl+V exactly (see usePaneLayout),
+  // duplicate (new id, everything else — geometry, style, text — unchanged) appended to
+  // `drawings`, nudged up slightly (see offsetDrawingUp) so it doesn't land perfectly invisible on
+  // top of its source. Mirrors indicators' own Ctrl+C/Ctrl+V exactly otherwise (see usePaneLayout),
   // just keyed off `hoveredDrawingId` instead of `hoveredIndicatorId` — the two never fire
   // together since a legend entry and a canvas drawing can't both be hovered at once, so both
   // hooks' own `window` listeners coexist without stepping on each other.
@@ -285,7 +287,7 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
       }
       if (!copiedDrawingRef.current) return;
       e.preventDefault();
-      commitDrawings([...drawings, { ...copiedDrawingRef.current, id: `drawing-${drawingIdRef.current++}` }]);
+      commitDrawings([...drawings, { ...offsetDrawingUp(copiedDrawingRef.current), id: `drawing-${drawingIdRef.current++}` }]);
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);

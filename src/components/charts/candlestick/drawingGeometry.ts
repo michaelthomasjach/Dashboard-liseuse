@@ -66,6 +66,22 @@ export function effectiveExtendOf(dr: TrendLineDrawing): "none" | "left" | "righ
   return dr.extend ?? (dr.lineType === "extended" ? "both" : "none");
 }
 
+// A pasted duplicate (see useDrawingState's own Ctrl+C/Ctrl+V) lands at *exactly* its source's own
+// coordinates — invisible until dragged, with no way to tell a paste actually happened. Nudged up
+// by 1% of its own reference price (y1) instead, the same delta applied uniformly across every one
+// of its points (never scaled per-point) so a multi-point shape — channel, fibonacci, elliott —
+// keeps its own relative geometry, just translated as a whole rather than distorted. Falls back to
+// a tiny fixed nudge only when y1 is exactly 0 (1% of nothing is still nothing).
+export function offsetDrawingUp(dr: TrendLineDrawing): TrendLineDrawing {
+  const delta = Math.abs(dr.y1) * 0.01 || 0.01;
+  return {
+    ...dr,
+    y1: round4(dr.y1 + delta),
+    y2: round4(dr.y2 + delta),
+    extraPoints: dr.extraPoints?.map((p) => ({ ...p, y: round4(p.y + delta) })),
+  };
+}
+
 // Shared by "channel" and "disjointChannel": the 3rd click's own vertical distance from line 1
 // (p1→p2) at that click's date — a constant applied uniformly to line 2 rather than a true
 // perpendicular distance, the same simplification most trading platforms use for this tool.
