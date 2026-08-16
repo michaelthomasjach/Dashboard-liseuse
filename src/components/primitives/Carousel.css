@@ -1,0 +1,90 @@
+.lq-carousel {
+  position: relative;
+  border-radius: var(--lq-radius-lg);
+  overflow: hidden;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-carousel {
+  border-radius: 0;
+}
+
+.lq-carousel__track {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  transition: transform 400ms ease;
+}
+
+.lq-root[data-lq-palette="eink"] .lq-carousel__track {
+  transition: none;
+}
+
+.lq-carousel__slide {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* A slide's own direct child (e.g. a Jumbotron) fills the slot instead of sizing to its own
+   content — the track's height comes from `.lq-carousel` itself (see the `height` prop), not
+   from whichever slide happens to be tallest. */
+.lq-carousel__slide > * {
+  height: 100%;
+}
+
+.lq-carousel__arrow {
+  position: absolute;
+  top: 50%;
+  /* Centered via a fixed negative margin (half of IconButton's own --md size), not
+     `transform: translateY(-50%)` — IconButton's own `:active` press effect sets `transform`
+     too (a scale, for the press-down feedback), and since `transform` is a single property, that
+     rule would otherwise *replace* this one entirely on mousedown rather than combine with it,
+     snapping the button uncentered right as it's clicked. */
+  margin-top: -20px;
+  z-index: 1;
+  background-color: var(--lq-color-panel);
+  opacity: 0.9;
+}
+
+.lq-carousel__arrow--prev {
+  left: var(--lq-space-3);
+}
+
+.lq-carousel__arrow--next {
+  right: var(--lq-space-3);
+}
+
+.lq-carousel__dots {
+  position: absolute;
+  bottom: var(--lq-space-3);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1;
+  display: flex;
+  gap: var(--lq-space-2);
+}
+
+.lq-carousel__dot {
+  width: 8px;
+  height: 8px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background-color: var(--lq-color-overlay);
+  cursor: pointer;
+  transition: background-color var(--lq-transition-fast), transform var(--lq-transition-fast);
+}
+
+.lq-root[data-lq-palette="eink"] .lq-carousel__dot {
+  border-radius: 0;
+}
+
+.lq-carousel__dot:hover {
+  background-color: var(--lq-color-text-muted);
+}
+
+.lq-carousel__dot--active {
+  background-color: var(--lq-color-bg);
+  transform: scale(1.3);
+}

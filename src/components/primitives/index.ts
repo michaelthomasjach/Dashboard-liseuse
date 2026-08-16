@@ -31,6 +31,9 @@ export type { TabsProps, TabItem } from "./Tabs";
 export { Jumbotron } from "./Jumbotron";
 export type { JumbotronProps } from "./Jumbotron";
 
+export { Carousel } from "./Carousel";
+export type { CarouselProps } from "./Carousel";
+
 export { TreeView, moveTreeNode } from "./TreeView";
 export type { TreeViewProps, TreeNode, TreeDropPosition } from "./TreeView";
 

@@ -33,6 +33,11 @@
      React state/props — the custom property lets that effect skip a re-render on every scroll
      tick, this rule is just what turns it into an actual filter. */
   filter: blur(var(--lq-jumbotron-blur, 0px));
+  /* Purely decorative — never a click target itself, and never allowed to shadow one either: a
+     Jumbotron embedded in something interactive on top of it (e.g. Carousel's own prev/next
+     arrows) must always be able to reach through this layer regardless of any z-index/stacking
+     nuance between the two components. */
+  pointer-events: none;
 }
 
 .lq-jumbotron__bg,
@@ -55,6 +60,7 @@
 .lq-jumbotron__scrim {
   position: absolute;
   inset: 0;
+  pointer-events: none;
   background: linear-gradient(90deg, var(--lq-color-overlay) 30%, transparent 90%);
 }
 
