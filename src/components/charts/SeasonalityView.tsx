@@ -17,6 +17,14 @@ const GRANULARITY_OPTIONS: { value: SeasonalityGranularity; label: string }[] = 
   { value: "year", label: "Année" },
 ];
 
+// LineAreaChart's own X-axis default (5, see ChartAxis) reads as sparse against a whole reference
+// year of buckets — one tick per bucket for month/quarter (small counts, room for all of them);
+// week stays short of one-per-bucket (52 would be unreadably dense) but still far denser than the
+// default. "year" never actually reaches the chart (single-bucket granularities render the
+// one-number summary instead, see result.buckets.length === 1 below) — its own entry here is
+// unused in practice, just kept for this map's own type completeness.
+const X_TICKS_BY_GRANULARITY: Record<SeasonalityGranularity, number> = { week: 13, month: 12, quarter: 4, year: 1 };
+
 // One letter per granularity, shown on the rail button in place of a generic calendar glyph so
 // the button reads its own current value at a glance (same idea as a toggle button showing its
 // own state) — spelled out here rather than derived from GRANULARITY_OPTIONS' own French label
@@ -475,6 +483,8 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             formatX={(x) => result.buckets.find((b) => b.index === x)?.label ?? String(x)}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
+            xTicks={X_TICKS_BY_GRANULARITY[granularity]}
+            yTicks={8}
             // The floating years panel (see managedYears, above the chart in this file's own
             // JSX) already covers "which color is which year" (plus hide/recolor/remove, which
             // the plain legend can't do) — showing both would be two separately-stateful ways to

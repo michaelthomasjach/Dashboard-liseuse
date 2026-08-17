@@ -75,6 +75,11 @@ export interface LineAreaChartProps {
    *  X/Y readout that way (see SeasonalityView) — a second, differently-shaped floating tooltip
    *  box would read as a visual inconsistency next to it. Default false (floating tooltip). */
   axisHoverLabels?: boolean;
+  /** Roughly how many ticks to request on each axis — a hint, not an exact count (d3's own
+   *  `.ticks(n)` rounds to whichever "nice" step lands closest to it, same as ChartAxis's own
+   *  default already works). Default 5 (ChartAxis's own default) for both when omitted. */
+  xTicks?: number;
+  yTicks?: number;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -102,6 +107,8 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   showZoomReset = true,
   onZoomChange,
   axisHoverLabels = false,
+  xTicks,
+  yTicks,
   margin,
   className,
 }, handleRef) {
@@ -297,6 +304,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             grid={showGrid}
             gridLength={dims.boundedWidth}
             tickFormat={formatY ? (v) => formatY(Number(v)) : undefined}
+            ticks={yTicks}
           />
           {/* d3's own X-axis domain line only spans its scale's range ([0, boundedWidth]) — with
               the Y axis moved into a right-side margin column, that left it short of the chart's
@@ -316,6 +324,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             orientation="bottom"
             transform={`translate(0, ${dims.boundedHeight})`}
             tickFormat={formatX ? (v) => formatX(xType === "time" ? (v as Date) : Number(v)) : undefined}
+            ticks={xTicks}
           />
 
           <g clipPath={`url(#${clipId})`}>
