@@ -18,6 +18,7 @@ import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
+import { useDrawingToolMenuAnchors } from "./candlestick/hooks/useDrawingToolMenuAnchors";
 import { ChartHeader } from "./candlestick/components/ChartHeader";
 import { ToolsRail } from "./candlestick/components/ToolsRail";
 import { ChartLegend } from "./candlestick/components/ChartLegend";
@@ -236,16 +237,7 @@ export function CandlestickChart({
   // affects the chart itself.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
-  // One per category (a fixed, known-at-compile-time list, so plain individual refs rather than a
-  // dynamic map — Popover needs a real RefObject per anchor, and refs can't be created in a loop).
-  const linesMenuAnchorRef = useRef<HTMLButtonElement>(null);
-  const fibonacciMenuAnchorRef = useRef<HTMLButtonElement>(null);
-  const elliottMenuAnchorRef = useRef<HTMLButtonElement>(null);
-  function menuAnchorRefFor(categoryId: string) {
-    if (categoryId === "fibonacci") return fibonacciMenuAnchorRef;
-    if (categoryId === "elliott") return elliottMenuAnchorRef;
-    return linesMenuAnchorRef;
-  }
+  const { menuAnchorRefFor } = useDrawingToolMenuAnchors();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools

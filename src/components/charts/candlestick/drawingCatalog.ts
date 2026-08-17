@@ -92,6 +92,12 @@ export interface DrawingToolDef {
   type: DrawingToolType;
   label: string;
   icon: typeof TrendLineIcon;
+  /** Groups this tool with its own neighbors inside a tall dropdown (see ToolsRail.tsx, which
+   *  draws a thin divider wherever it changes between two consecutive tools) — purely a visual
+   *  grouping within one category's own menu, unrelated to `DrawingToolCategory.id` itself.
+   *  Optional: a category whose tools are all left untagged (every one but "lines" today) renders
+   *  as one flat list, same as before this field existed. */
+  subgroup?: string;
 }
 
 export interface DrawingToolCategory {
@@ -106,34 +112,39 @@ export interface DrawingToolCategory {
 
 // Each category gets its own button + chevron + dropdown in the rail (see the JSX below) —
 // the button represents whichever of its own tools was picked last (defaulting to the first),
-// same as the single button used to for the whole flat list before categories existed. Exactly
-// 4 categories by design: "shapes" and "measure" (once their own top-level groups) folded into
-// "lines" as its generalist catch-all, and "elliott" was renamed/repurposed into "chartPatterns"
-// (gaining headShoulders) since Elliott waves are themselves one kind of chart pattern.
+// same as the single button used to for the whole flat list before categories existed. 5
+// categories by design: "shapes" (folded into "lines" as its generalist catch-all) and "elliott"
+// (renamed/repurposed into "chartPatterns", gaining headShoulders, since Elliott waves are
+// themselves one kind of chart pattern) both lost their own top-level slot; "measure" kept its
+// own instead of joining "lines" like "shapes" did, since unlike a shape it doesn't add a drawing
+// to the chart at all — a different enough kind of tool to stay a category of its own.
 export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
   {
     id: "lines",
     label: "Lines",
     tools: [
-      { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
-      { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
-      { type: "channel", label: "Canal", icon: ChannelIcon },
-      { type: "disjointChannel", label: "Canal disjoint", icon: DisjointChannelIcon },
-      { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
-      { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
-      { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
-      { type: "pitchfork", label: "Pitchfork", icon: PitchforkIcon },
-      { type: "schiffPitchfork", label: "Schiff Pitchfork", icon: SchiffPitchforkIcon },
-      { type: "modifiedSchiffPitchfork", label: "Modified Schiff Pitchfork", icon: ModifiedSchiffPitchforkIcon },
-      { type: "insidePitchfork", label: "Inside Pitchfork", icon: InsidePitchforkIcon },
-      { type: "rectangle", label: "Rectangle", icon: RectangleShapeIcon },
-      { type: "zones", label: "Zones (positif/neutre/négatif)", icon: ZonesIcon },
-      { type: "elbowArrow", label: "Flèche coudée", icon: ElbowArrowIcon },
-      { type: "brush", label: "Pinceau", icon: BrushIcon },
-      { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon },
-      { type: "arrowDown", label: "Flèche bas", icon: ArrowDownIcon },
-      { type: "arrowLine", label: "Ligne fléchée", icon: ArrowLineIcon },
-      { type: "measure", label: "Mesure", icon: MeasureIcon },
+      // subgroup "trend": the original free/constrained trend-line family.
+      { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon, subgroup: "trend" },
+      { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon, subgroup: "trend" },
+      { type: "channel", label: "Canal", icon: ChannelIcon, subgroup: "trend" },
+      { type: "disjointChannel", label: "Canal disjoint", icon: DisjointChannelIcon, subgroup: "trend" },
+      { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon, subgroup: "trend" },
+      { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon, subgroup: "trend" },
+      { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon, subgroup: "trend" },
+      // subgroup "pitchfork": the 4 Andrews' Pitchfork variants.
+      { type: "pitchfork", label: "Pitchfork", icon: PitchforkIcon, subgroup: "pitchfork" },
+      { type: "schiffPitchfork", label: "Schiff Pitchfork", icon: SchiffPitchforkIcon, subgroup: "pitchfork" },
+      { type: "modifiedSchiffPitchfork", label: "Modified Schiff Pitchfork", icon: ModifiedSchiffPitchforkIcon, subgroup: "pitchfork" },
+      { type: "insidePitchfork", label: "Inside Pitchfork", icon: InsidePitchforkIcon, subgroup: "pitchfork" },
+      // subgroup "regions": bounded-area shapes.
+      { type: "rectangle", label: "Rectangle", icon: RectangleShapeIcon, subgroup: "regions" },
+      { type: "zones", label: "Zones (positif/neutre/négatif)", icon: ZonesIcon, subgroup: "regions" },
+      // subgroup "markers": arrows and freehand annotation.
+      { type: "elbowArrow", label: "Flèche coudée", icon: ElbowArrowIcon, subgroup: "markers" },
+      { type: "brush", label: "Pinceau", icon: BrushIcon, subgroup: "markers" },
+      { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon, subgroup: "markers" },
+      { type: "arrowDown", label: "Flèche bas", icon: ArrowDownIcon, subgroup: "markers" },
+      { type: "arrowLine", label: "Ligne fléchée", icon: ArrowLineIcon, subgroup: "markers" },
     ],
   },
   {
@@ -160,6 +171,11 @@ export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
       { type: "rangeForecast", label: "Range forecast", icon: RangeForecastIcon },
     ],
+  },
+  {
+    id: "measure",
+    label: "Measure",
+    tools: [{ type: "measure", label: "Mesure", icon: MeasureIcon }],
   },
 ];
 

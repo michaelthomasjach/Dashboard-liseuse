@@ -32,11 +32,13 @@ export interface ToolsRailProps {
 }
 
 /** The left-docked drawing-tools rail (`drawingTools` prop): one button + chevron + flyout menu
- *  per tool category (see DRAWING_TOOL_CATEGORIES — Lines/Fibonacci/Chart patterns/Forecasting,
- *  each menu headed by its own category name), then the persistent aimant/hide-drawings/
- *  lock-drawings/event-visibility toggles, then the "Dessins et indicateurs" manager button
- *  pinned to the rail's own bottom edge. Purely presentational — every interaction is a callback
- *  prop from `useDrawingState`/`useChartEvents`. */
+ *  per tool category (see DRAWING_TOOL_CATEGORIES — Lines/Fibonacci/Chart patterns/Forecasting/
+ *  Measure, each menu headed by its own category name and, for the tall "Lines" one, further
+ *  broken into smaller visual clusters by a thin divider wherever DrawingToolDef.subgroup
+ *  changes), then a separator and the persistent aimant/hide-drawings/lock-drawings/
+ *  event-visibility toggles, then the "Dessins et indicateurs" manager button pinned to the
+ *  rail's own bottom edge. Purely presentational — every interaction is a callback prop from
+ *  `useDrawingState`/`useChartEvents`. */
 export function ToolsRail({
   drawingTools,
   dims,
@@ -117,20 +119,29 @@ export function ToolsRail({
                   >
                     <div className="lq-chart__tool-menu">
                       <div className="lq-chart__tool-menu-header">{category.label}</div>
-                      {category.tools.map((opt) => {
+                      {category.tools.map((opt, i) => {
                         const OptionIcon = opt.icon;
+                        // A divider wherever `subgroup` changes from the previous tool — only
+                        // ever true within a category that actually tags its own tools with one
+                        // (just "lines" today, see DrawingToolDef.subgroup's own doc); every
+                        // other category's tools are all `subgroup: undefined`, so this never
+                        // fires for them.
+                        const previousSubgroup = i > 0 ? category.tools[i - 1].subgroup : undefined;
+                        const showDivider = i > 0 && opt.subgroup !== previousSubgroup;
                         return (
-                          <button
-                            key={opt.type}
-                            type="button"
-                            className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
-                              .filter(Boolean)
-                              .join(" ")}
-                            onClick={() => handleSelectToolType(opt.type)}
-                          >
-                            <OptionIcon size={14} />
-                            {opt.label}
-                          </button>
+                          <Fragment key={opt.type}>
+                            {showDivider && <div className="lq-chart__tool-menu-divider" aria-hidden="true" />}
+                            <button
+                              type="button"
+                              className={["lq-chart__tool-menu-option", opt.type === selectedType && "lq-chart__tool-menu-option--selected"]
+                                .filter(Boolean)
+                                .join(" ")}
+                              onClick={() => handleSelectToolType(opt.type)}
+                            >
+                              <OptionIcon size={14} />
+                              {opt.label}
+                            </button>
+                          </Fragment>
                         );
                       })}
                     </div>
@@ -141,6 +152,11 @@ export function ToolsRail({
             </Fragment>
           );
         })}
+        {/* Marks the boundary between the drawing-tool category buttons above (Lines/Fibonacci/
+            Chart patterns/Forecasting/Measure) and the persistent modifier toggles below —
+            unconditional (always sits right here) rather than tied to whichever category happens
+            to render last, so it can't silently disappear if the category list itself changes. */}
+        <div className="lq-chart__tool-separator" aria-hidden="true" />
         {/* A persistent modifier, not a tool of its own — stays on across tool switches
             (see toDataPoint/magnetSnapPrice) until toggled off again, so it lives outside
             DRAWING_TOOL_CATEGORIES' button+chevron+menu pattern as a plain toggle. */}

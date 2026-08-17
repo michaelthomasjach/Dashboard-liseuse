@@ -283,6 +283,26 @@
   position: relative;
 }
 
+/* Marks the boundary between the drawing-tool category buttons above and the persistent
+   modifier toggles (aimant/masquer/verrouiller…) below — extra margin on top of the rail's own
+   4px item gap (see .lq-chart__tools-rail-items) so the two clusters read as visually distinct
+   groups, not just one more gap in the same list. */
+.lq-chart__tool-separator {
+  width: 20px;
+  height: 1px;
+  margin: 6px 0;
+  background-color: var(--lq-color-border-subtle);
+}
+
+/* Groups a tall category dropdown's own tools into smaller clusters (see DrawingToolDef.subgroup)
+   — a plain rule between two consecutive tools whose subgroup differs, same weight as the
+   timeframe menu's own group dividers. */
+.lq-chart__tool-menu-divider {
+  height: 1px;
+  margin: var(--lq-space-1) 4px;
+  background-color: var(--lq-color-border-subtle);
+}
+
 /* Invisible until the tool button or the chevron itself is hovered/focused — the group covers
    both, since the chevron is a descendant of it (hovering the chevron always also counts as
    hovering the group). Forced visible while its own menu is open so it doesn't vanish out from
