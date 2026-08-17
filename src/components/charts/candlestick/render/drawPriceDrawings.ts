@@ -6,7 +6,6 @@ import {
   FIBONACCI_EXTENSION_LEVELS,
   ELLIOTT_IMPULSE_VERTEX_LABELS,
   ELLIOTT_CORRECTION_VERTEX_LABELS,
-  HEAD_SHOULDERS_VERTEX_LABELS,
   MULTI_POINT_TOOLS,
 } from "../drawingCatalog";
 import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint, rangeForecastMaxMin } from "../drawingGeometry";
@@ -14,6 +13,7 @@ import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender"
 import { defaultIndicatorColor } from "../indicators";
 import { drawPitchforkDrawings } from "./drawPitchfork";
 import { drawRangeForecastDrawings } from "./drawRangeForecast";
+import { drawHeadShouldersDrawings } from "./drawHeadShoulders";
 
 const PITCHFORK_LINE_TYPES = new Set(["pitchfork", "schiffPitchfork", "modifiedSchiffPitchfork", "insidePitchfork"]);
 
@@ -53,14 +53,15 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     // ones are drawn full-height further down, outside any clip).
     for (const dr of visibleDrawings) {
       // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown"/"forecast"/every pitchfork
-      // variant/"rangeForecast" have their own geometry entirely unlike the "diagonal x1/y1–x2/y2,
-      // optionally extended, plus per-lineType extras" shape every other type below shares —
-      // drawn in their own dedicated loops (or, for the pitchfork family and "rangeForecast",
-      // dedicated files — see drawPitchfork.ts/drawRangeForecast.ts) further down instead, same
-      // reasoning "vertical" (full-height, outside this clip) already skips this one for.
-      // "forecast" specifically draws a *curved* line between the same two points instead of a
-      // straight one, so it can't share this loop's own straight moveTo/lineTo call the way even
-      // every other excluded type here still visually builds on in its own loop.
+      // variant/"rangeForecast"/"headShoulders" have their own geometry entirely unlike the
+      // "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType extras" shape every other
+      // type below shares — drawn in their own dedicated loops (or, for the pitchfork family,
+      // "rangeForecast", and "headShoulders", dedicated files — see drawPitchfork.ts/
+      // drawRangeForecast.ts/drawHeadShoulders.ts) further down instead, same reasoning "vertical"
+      // (full-height, outside this clip) already skips this one for. "forecast" specifically draws
+      // a *curved* line between the same two points instead of a straight one, so it can't share
+      // this loop's own straight moveTo/lineTo call the way even every other excluded type here
+      // still visually builds on in its own loop.
       if (
         dr.lineType === "vertical" ||
         dr.lineType === "rectangle" ||
@@ -71,6 +72,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         dr.lineType === "arrowDown" ||
         dr.lineType === "forecast" ||
         dr.lineType === "rangeForecast" ||
+        dr.lineType === "headShoulders" ||
         PITCHFORK_LINE_TYPES.has(dr.lineType ?? "") ||
         // Its x1/y1/x2/y2 aren't real coordinates (see the lineType's own doc comment) — just
         // the overlay's own first/last raw points, unrelated to the main series' price space.
@@ -197,31 +199,6 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.textBaseline = "bottom";
         ctx.fillStyle = lineColor;
         allScreen.forEach((p, i) => ctx.fillText(vertexLabels[i] ?? "", p.x, p.y - 6));
-        ctx.restore();
-      }
-
-      // "headShoulders": same shape as elliottImpulse/elliottCorrection just above — x1/x2 (left
-      // shoulder to head, already drawn above) is the first segment, extraPoints continue the
-      // polyline through the right shoulder and the neckline's own two points — but only the
-      // three peaks (left shoulder/head/right shoulder) get a vertex label, not the neckline ends.
-      if (dr.lineType === "headShoulders" && dr.extraPoints?.length) {
-        const restScreen = dr.extraPoints.map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
-        ctx.beginPath();
-        ctx.moveTo(x2, y2);
-        for (const p of restScreen) ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-
-        const allScreen = [{ x: x1, y: y1 }, { x: x2, y: y2 }, ...restScreen];
-        ctx.save();
-        ctx.setLineDash([]);
-        ctx.font = `700 10px ${fontFamily}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "bottom";
-        ctx.fillStyle = lineColor;
-        allScreen.forEach((p, i) => {
-          const label = HEAD_SHOULDERS_VERTEX_LABELS[i];
-          if (label) ctx.fillText(label, p.x, p.y - 6);
-        });
         ctx.restore();
       }
 
@@ -487,6 +464,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
 
     drawPitchforkDrawings(ctx, params, style);
     drawRangeForecastDrawings(ctx, params, style);
+    drawHeadShouldersDrawings(ctx, params, style);
 
     if (activeTool && pendingPoint && previewPoint) {
       ctx.save();
@@ -562,6 +540,39 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.moveTo(sx, sy);
         ctx.lineTo((maxX + minX) / 2, (maxY + minY) / 2);
         ctx.stroke();
+      } else if (activeTool === "headShoulders") {
+        // Same "polyline through whatever's placed so far, plus a live segment to the cursor"
+        // preview the generic multi-point tools below get, plus (once point 5 exists —
+        // pendingExtraPoints[2]) a live preview of the neckline itself, extended to the plot's own
+        // right edge same as the committed render's own "unbroken" state (point 7 doesn't exist
+        // yet to have confirmed a breakout) — matches the "quand j'arrive au point 5, une droite
+        // apparaît" request driving this whole tool's own design.
+        const placed = [pendingPoint, pendingSecondPoint, ...pendingExtraPoints].filter((p): p is DataPoint => p !== null);
+        ctx.beginPath();
+        placed.forEach((p, i) => {
+          const x = zoomedXScale(indexForDate(p.x) + 0.5);
+          const y = zoomedPriceScale(p.y);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.lineTo(zoomedXScale(indexForDate(previewPoint.x) + 0.5), zoomedPriceScale(previewPoint.y));
+        ctx.stroke();
+
+        if (pendingExtraPoints.length >= 3) {
+          const p1x = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+          const p1y = zoomedPriceScale(pendingPoint.y);
+          const point5 = pendingExtraPoints[2];
+          const p5x = zoomedXScale(indexForDate(point5.x) + 0.5);
+          const p5y = zoomedPriceScale(point5.y);
+          const extended = extendSegmentToEdges(p1x, p1y, p5x, p5y, 0, dims.boundedWidth, "right");
+          ctx.save();
+          ctx.setLineDash([1.5, 3]);
+          ctx.beginPath();
+          ctx.moveTo(p1x, p1y);
+          ctx.lineTo(extended.x2, extended.y2);
+          ctx.stroke();
+          ctx.restore();
+        }
       } else if (activeTool === "elbowArrow") {
         // Open-ended — same "polyline through whatever's placed so far, plus a live segment to
         // the cursor" preview as the fixed-count multi-point tools below, just without a point

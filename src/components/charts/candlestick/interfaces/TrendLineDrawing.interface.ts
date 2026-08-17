@@ -119,9 +119,17 @@ export interface TrendLineDrawing {
    *  "arrowDown" are single-point markers (x2/y2 always mirrors x1/y1, same convention as
    *  "horizontal") drawn as a small triangle pointing up/down, anchored just clear of the point
    *  itself. "headShoulders" is the same fixed-click-count shape as elliottImpulse/
-   *  elliottCorrection (x1/y1, x2/y2, then 3 `extraPoints`) — left shoulder, head, right
-   *  shoulder, then the neckline's own two points — drawn as one connected polyline through all
-   *  five, the same way Elliott's own vertices are, with the three peaks labeled. "forecast" is a
+   *  elliottCorrection, just with more points — x1/y1, x2/y2, then 5 `extraPoints`, the pattern's
+   *  own 7 vertices in path order: 1 (the low right before the pattern starts), 2 (left shoulder),
+   *  3 (the trough between the two peaks), 4 (head), 5 (the trough after it), 6 (right shoulder),
+   *  7 (a confirmation point past the right shoulder) — drawn as one connected polyline through
+   *  all seven (see drawHeadShoulders.ts), every vertex numbered, the three peaks additionally
+   *  named with their own pill badge. A dashed horizontal line marks the head's own price level,
+   *  and a dotted "neckline" — a straight line through points 1 and 5, not a stored point of its
+   *  own, always derived from them — extends indefinitely rightward past point 7 for as long as
+   *  point 7 itself hasn't closed below it; once it has (a confirmed breakout), the neckline stops
+   *  extending past point 7 instead of projecting indefinitely into a pattern that's already
+   *  resolved. The region between the polyline and the neckline is filled. "forecast" is a
    *  free two-point tool like a plain trend line, but drawn as a curved (not straight) arrow from
    *  x1/y1 to x2/y2, each end labeled with its own price/date, and the end additionally with the
    *  price change and elapsed time from the start — a price-projection annotation, not a support/
@@ -172,10 +180,11 @@ export interface TrendLineDrawing {
   channelOffset?: number;
   /** Points beyond x1/y1 (the 1st) and x2/y2 (the 2nd), in click order — "fibonacciExtension"
    *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
-   *  (line 2's own two points — see `lineType` above for how they're derived), "headShoulders" 3
-   *  (right shoulder, then the neckline's own two points), every pitchfork variant 1 (P2),
-   *  "rangeForecast" 1 (its own Min — see `lineType` above for how it and x2/y2's own Max are
-   *  first derived). Unused otherwise. */
+   *  (line 2's own two points — see `lineType` above for how they're derived), "headShoulders" 5
+   *  (points 3 through 7 — see `lineType` above for the pattern's own full 7-point shape and how
+   *  its neckline is derived from points 1/5), every pitchfork variant 1 (P2), "rangeForecast" 1
+   *  (its own Min — see `lineType` above for how it and x2/y2's own Max are first derived).
+   *  Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
   /** "zones" only: x1/y1 and x2/y2 are still opposite corners like "rectangle", but split the
    *  price pane into three horizontal bands instead of one filled box — above the higher of the

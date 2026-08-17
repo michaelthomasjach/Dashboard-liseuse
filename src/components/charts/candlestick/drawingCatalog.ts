@@ -56,7 +56,11 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
   elliottCorrection: { extraPoints: 2, labels: ["Point 0", "Point A", "Point B", "Point C"] },
   elliottImpulse: { extraPoints: 4, labels: ["Point 0", "Point 1", "Point 2", "Point 3", "Point 4", "Point 5"] },
   disjointChannel: { extraPoints: 2, labels: ["Point 1", "Point 2", "Point 3", "Point 4"] },
-  headShoulders: { extraPoints: 3, labels: ["Épaule gauche", "Tête", "Épaule droite", "Ligne de cou (début)", "Ligne de cou (fin)"] },
+  // The pattern's own 7 vertices in path order — 1 (the low right before the left shoulder), 2
+  // (Épaule gauche), 3 (the trough between the two peaks), 4 (Tête), 5 (the trough after it,
+  // paired with point 1 to derive the neckline — see drawHeadShoulders.ts), 6 (Épaule droite), 7
+  // (the pattern's own confirmation point — below the neckline there confirms the breakout).
+  headShoulders: { extraPoints: 5, labels: ["Point 1", "Épaule gauche", "Creux 1", "Tête", "Creux 2", "Épaule droite", "Point 7"] },
   // The 3 pitchfork points: P0 (x1/y1) is the "manche" (handle) every variant's own median starts
   // from or targets; P1/P2 (x2/y2, extraPoints[0]) are the two points the parallel tine lines pass
   // through, unchanged across all 4 variants (see pitchforkGeometry.ts).
@@ -78,10 +82,11 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
 // MULTI_POINT_TOOLS' longer "Point X" labels, which are for the edit modal's field list instead.
 export const ELLIOTT_IMPULSE_VERTEX_LABELS = ["0", "1", "2", "3", "4", "5"];
 export const ELLIOTT_CORRECTION_VERTEX_LABELS = ["0", "A", "B", "C"];
-// Only the three peaks get a label — the neckline's own two points (indices 3-4) aren't
-// individually identified the way a peak is, same "not every vertex needs a name" idea a
-// disjointChannel's own 4 points already accept.
-export const HEAD_SHOULDERS_VERTEX_LABELS = ["ÉG", "T", "ÉD", "", ""];
+// Every one of the pattern's own 7 vertices gets a plain number (drawHeadShoulders.ts renders
+// these in the theme's own "down" red, distinct from the pattern's own line color) — separate
+// from the green pill badges drawHeadShoulders.ts also draws over the 3 peaks specifically
+// (indices 1/3/5: Épaule gauche/Tête/Épaule droite), which name those three, not every vertex.
+export const HEAD_SHOULDERS_VERTEX_LABELS = ["1", "2", "3", "4", "5", "6", "7"];
 
 export interface DrawingToolDef {
   type: DrawingToolType;

@@ -96,3 +96,38 @@ export function drawArrowhead(ctx: CanvasRenderingContext2D, fromX: number, from
   ctx.fill();
   ctx.restore();
 }
+
+/** A small rounded, filled "badge" label — unlike every other drawing type's plain `fillText`
+ *  (see drawDrawingText above), used where a annotation needs to read as a standalone marker
+ *  rather than plain text floating next to the line: "rangeForecast"'s own Current/Max/Avg/Min
+ *  price readouts, and "headShoulders"'s own "Left Shoulder"/"Head"/"Right Shoulder" peak names.
+ *  Anchored to one side of a point and vertically centered on it. */
+export function drawPillLabel(
+  ctx: CanvasRenderingContext2D,
+  anchorX: number,
+  anchorY: number,
+  text: string,
+  bg: string,
+  fg: string,
+  fontFamily: string,
+  side: "left" | "right" | "center"
+) {
+  ctx.save();
+  ctx.font = `700 10px ${fontFamily}`;
+  const width = ctx.measureText(text).width;
+  const paddingX = 7;
+  const height = 17;
+  const boxWidth = width + paddingX * 2;
+  const gap = 8;
+  const x = side === "right" ? anchorX + gap : side === "left" ? anchorX - gap - boxWidth : anchorX - boxWidth / 2;
+  const y = anchorY - height / 2;
+  ctx.fillStyle = bg;
+  ctx.beginPath();
+  ctx.roundRect(x, y, boxWidth, height, height / 2);
+  ctx.fill();
+  ctx.fillStyle = fg;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + paddingX, anchorY + 0.5);
+  ctx.restore();
+}
