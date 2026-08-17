@@ -6,7 +6,7 @@ import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
 import { Modal } from "../primitives/Modal";
-import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
+import { ChevronLeftIcon, CalendarIcon, DisjointChannelIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -94,7 +94,7 @@ export interface SeasonalityViewProps {
  * (`embedded`) since it's nested inside CandlestickChart's own bordered root.
  */
 export function SeasonalityView({ data, symbol, onBack, showHeader = true, height = 380, className }: SeasonalityViewProps) {
-  const [granularity, setGranularity] = useState<SeasonalityGranularity>("week");
+  const [granularity, setGranularity] = useState<SeasonalityGranularity>("month");
   const availableYears = useMemo(() => Array.from(new Set(data.map((d) => d.date.getUTCFullYear()))).sort((a, b) => a - b), [data]);
   // Excluded, not included: unchecking a handful of years (an election year, a crash) out of a
   // long history is the common case — a whitelist would make every *other* year the odd one out.
@@ -112,12 +112,31 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const [isZoomed, setIsZoomed] = useState(false);
   // Overlays the current (in-progress) year's own line on top of the average — only meaningful in
   // the default "average" view, since `independentYears` below already shows every included year
-  // (current one included) as its own line.
+  // (current one included) as its own line. Mutually exclusive with `independentYears` (see the
+  // two toggle functions below) — both stay visible regardless of which is active, rather than
+  // one hiding the other, so switching between the two view modes never requires first hunting
+  // down whichever button turns the current one off.
   const [showCurrentYear, setShowCurrentYear] = useState(false);
   // Replaces the single averaged line with one line per included year (see image the user
   // attached: several thin past-year lines plus a thicker current-year one ending in a dot where
   // its data currently stops) instead of collapsing them into `average`.
   const [independentYears, setIndependentYears] = useState(false);
+
+  function toggleIndependentYears() {
+    setIndependentYears((v) => {
+      const next = !v;
+      if (next) setShowCurrentYear(false);
+      return next;
+    });
+  }
+
+  function toggleShowCurrentYear() {
+    setShowCurrentYear((v) => {
+      const next = !v;
+      if (next) setIndependentYears(false);
+      return next;
+    });
+  }
   // Per-year display state for whichever years currently render as their own line (see
   // managedYears below) — deliberately separate from `excludedYears` above: that one decides what
   // feeds the *average*, this one only ever hides/recolors an already-individual line, and the two
@@ -344,21 +363,22 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             <button
               type="button"
               className={["lq-chart__icon-button", independentYears && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-              onClick={() => setIndependentYears((v) => !v)}
+              onClick={toggleIndependentYears}
               aria-pressed={independentYears}
               aria-label={independentYears ? "Revenir à la courbe moyenne" : "Afficher chaque année indépendamment"}
               title="Afficher chaque année incluse comme sa propre courbe, plutôt qu'une seule moyenne"
             >
-              <LayersIcon size={14} />
+              <DisjointChannelIcon size={14} />
             </button>
-            {/* Only meaningful for the "average" view — `independentYears` above already shows
-                the current year as one of its own lines, un-optional, so this toggle would be
-                inert (and confusing) while that mode is active. */}
-            {!independentYears && hasCurrentYear && (
+            {/* Stays visible regardless of `independentYears` (unlike before) — the two are
+                mutually exclusive view modes now (see toggleIndependentYears/
+                toggleShowCurrentYear), so this button switching the chart *out* of independent-
+                years mode when clicked is itself the point, not something to hide behind. */}
+            {hasCurrentYear && (
               <button
                 type="button"
                 className={["lq-chart__icon-button", showCurrentYear && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => setShowCurrentYear((v) => !v)}
+                onClick={toggleShowCurrentYear}
                 aria-pressed={showCurrentYear}
                 aria-label={showCurrentYear ? "Masquer l'année en cours" : "Afficher l'année en cours"}
                 title={`Superposer la performance de ${currentYear} (en cours) à la moyenne`}
