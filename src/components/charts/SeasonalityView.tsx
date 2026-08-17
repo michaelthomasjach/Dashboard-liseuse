@@ -6,7 +6,7 @@ import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
 import { Modal } from "../primitives/Modal";
-import { ChevronLeftIcon, CalendarIcon, DisjointChannelIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
+import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -34,6 +34,15 @@ const GRANULARITY_LETTERS: Record<SeasonalityGranularity, string> = { week: "S",
 // US presidential elections land every 4 years on the nose (1788, 1792, … 2024, 2028…) — no
 // lookup table needed, just the one arithmetic fact.
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
+
+/** The chart body's own display mode — "average" (the default, a single averaged line, optionally
+ *  with `current` overlaid on top of it — see below), "independent" (one line per included year,
+ *  see the image the user attached: several thin past-year lines plus a thicker current-year one
+ *  ending in a dot where its data currently stops), "current" (the average, plus the current
+ *  (in-progress) year's own line overlaid on top of it). A single tri-state value rather than two
+ *  separate booleans (as this used to be) — "independent" and "current" are mutually exclusive by
+ *  construction this way, instead of needing two toggle functions to keep them that way by hand. */
+type SeasonalityViewMode = "average" | "independent" | "current";
 
 // A dedicated pastel palette for year lines — not indicators.ts's own INDICATOR_COLORS (sharper,
 // built for a single indicator line standing alone against the price series), since several
@@ -90,11 +99,12 @@ export interface SeasonalityViewProps {
  * Presentational half of the seasonality feature — `computeSeasonality` (see
  * `internal/seasonality.ts`) does the actual aggregation, kept entirely independent of this
  * component (and of React) so it can be tested, reused, or extended on its own. The header holds
- * just the back button and title, same as before; granularity and the years filter now live in
- * their own left-docked icon rail — same `TOOLS_RAIL_WIDTH`/visual convention as
- * `CandlestickChart`'s own drawing-tools rail — rather than crowding the header row, each opening
- * its own popover (`DropdownPanel` for years, since a multi-select with its own bulk actions
- * needs more than the plain option list a `Select` gives). The chart body itself renders through
+ * the back button, title, and the view-mode dropdown (Moyenne/Années indépendantes/Année en
+ * cours — see `SeasonalityViewMode`); granularity and the years filter live in their own
+ * left-docked icon rail instead — same `TOOLS_RAIL_WIDTH`/visual convention as
+ * `CandlestickChart`'s own drawing-tools rail — each opening its own popover (`DropdownPanel` for
+ * years, since a multi-select with its own bulk actions needs more than the plain option list a
+ * `Select` gives). The chart body itself renders through
  * `LineAreaChart` rather than a bespoke chart of its own — a seasonal path is just one more line
  * series once it's been computed, no reason to re-implement axes/zoom/hover for it — told to
  * match the main chart's own right-side price-axis convention (`yAxisOrientation="right"`,
@@ -118,33 +128,9 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // rail/header layout wraps around it).
   const lineChartRef = useRef<LineAreaChartHandle>(null);
   const [isZoomed, setIsZoomed] = useState(false);
-  // Overlays the current (in-progress) year's own line on top of the average — only meaningful in
-  // the default "average" view, since `independentYears` below already shows every included year
-  // (current one included) as its own line. Mutually exclusive with `independentYears` (see the
-  // two toggle functions below) — both stay visible regardless of which is active, rather than
-  // one hiding the other, so switching between the two view modes never requires first hunting
-  // down whichever button turns the current one off.
-  const [showCurrentYear, setShowCurrentYear] = useState(false);
-  // Replaces the single averaged line with one line per included year (see image the user
-  // attached: several thin past-year lines plus a thicker current-year one ending in a dot where
-  // its data currently stops) instead of collapsing them into `average`.
-  const [independentYears, setIndependentYears] = useState(false);
-
-  function toggleIndependentYears() {
-    setIndependentYears((v) => {
-      const next = !v;
-      if (next) setShowCurrentYear(false);
-      return next;
-    });
-  }
-
-  function toggleShowCurrentYear() {
-    setShowCurrentYear((v) => {
-      const next = !v;
-      if (next) setIndependentYears(false);
-      return next;
-    });
-  }
+  const [viewMode, setViewMode] = useState<SeasonalityViewMode>("average");
+  const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
+  const viewModeAnchorRef = useRef<HTMLButtonElement>(null);
   // Per-year display state for whichever years currently render as their own line (see
   // managedYears below) — deliberately separate from `excludedYears` above: that one decides what
   // feeds the *average*, this one only ever hides/recolors an already-individual line, and the two
@@ -174,49 +160,50 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   }
 
   // The single source of truth for "which color does this year's line actually render in right
-  // now" — independentYears cycles every included year through the palette by its own position,
+  // now" — "independent" cycles every included year through the palette by its own position,
   // otherwise there's only ever the lone current-year overlay, pinned to slot 0. Used both to
   // build `series` below and to color the "Années affichées" list's own swatches, so the two can
   // never drift apart the way two separately-inlined copies of this same branch just did.
   function displayColorForYear(year: number): string {
-    return independentYears ? colorForYear(year, result.years.indexOf(year)) : colorForYear(year, 0);
+    return viewMode === "independent" ? colorForYear(year, result.years.indexOf(year)) : colorForYear(year, 0);
   }
 
   // Whichever years currently render as their own individual line — exactly the set the "Années
   // affichées" list below manages — regardless of `hiddenYears` (a hidden year stays listed, with
   // its own eye toggled off, so it can be brought back).
-  const managedYears: number[] = independentYears ? result.years : showCurrentYear && hasCurrentYear ? [currentYear] : [];
+  const managedYears: number[] = viewMode === "independent" ? result.years : viewMode === "current" && hasCurrentYear ? [currentYear] : [];
 
-  const series: ChartSeries[] = independentYears
-    ? result.years
-        .filter((year) => !hiddenYears.has(year))
-        .map((year) => ({
-          id: `year-${year}`,
-          label: String(year),
-          color: displayColorForYear(year),
-          data: occurrencesForYear(result.buckets, year),
-          strokeWidth: year === currentYear ? 3 : 1.5,
-          endDot: year === currentYear,
-        }))
-    : [
-        {
-          id: "seasonality",
-          label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
-          data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
-        },
-        ...(showCurrentYear && hasCurrentYear && !hiddenYears.has(currentYear)
-          ? [
-              {
-                id: `year-${currentYear}`,
-                label: `${currentYear} (en cours)`,
-                color: displayColorForYear(currentYear),
-                data: occurrencesForYear(result.buckets, currentYear),
-                strokeWidth: 3,
-                endDot: true,
-              },
-            ]
-          : []),
-      ];
+  const series: ChartSeries[] =
+    viewMode === "independent"
+      ? result.years
+          .filter((year) => !hiddenYears.has(year))
+          .map((year) => ({
+            id: `year-${year}`,
+            label: String(year),
+            color: displayColorForYear(year),
+            data: occurrencesForYear(result.buckets, year),
+            strokeWidth: year === currentYear ? 3 : 1.5,
+            endDot: year === currentYear,
+          }))
+      : [
+          {
+            id: "seasonality",
+            label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
+            data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
+          },
+          ...(viewMode === "current" && hasCurrentYear && !hiddenYears.has(currentYear)
+            ? [
+                {
+                  id: `year-${currentYear}`,
+                  label: `${currentYear} (en cours)`,
+                  color: displayColorForYear(currentYear),
+                  data: occurrencesForYear(result.buckets, currentYear),
+                  strokeWidth: 3,
+                  endDot: true,
+                },
+              ]
+            : []),
+        ];
 
   function toggleHiddenYear(year: number) {
     setHiddenYears((prev) => {
@@ -257,6 +244,15 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const recentYearsCount = Math.min(5, availableYears.length);
   const recentYearsCutoff = availableYears[availableYears.length - recentYearsCount];
 
+  // "current" only offered once there's actually a current (in-progress) year in the data to
+  // overlay — same gate the old standalone rail button used to hide behind entirely.
+  const viewModeOptions: { value: SeasonalityViewMode; label: string }[] = [
+    { value: "average", label: "Moyenne" },
+    { value: "independent", label: "Années indépendantes" },
+    ...(hasCurrentYear ? [{ value: "current" as const, label: "Année en cours" }] : []),
+  ];
+  const currentViewModeLabel = viewModeOptions.find((o) => o.value === viewMode)?.label ?? "Moyenne";
+
   return (
     <div className={["lq-chart__seasonality", className].filter(Boolean).join(" ")}>
       {showHeader && (
@@ -265,6 +261,40 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             <ChevronLeftIcon size={14} />
           </button>
           <span className="lq-chart__symbol-info-name">{symbol ? `${symbol} — Saisonnalité` : "Saisonnalité"}</span>
+          {/* The view-mode picker — "Moyenne"/"Années indépendantes"/"Année en cours" — used to be
+              two separate rail toggle buttons; now a single header dropdown, same
+              trigger-button-plus-chevron convention the main (non-seasonality) chart's own
+              timeframe picker already uses (see ChartHeader.tsx), since it's the same "pick one of
+              a few named modes" shape. */}
+          <button
+            ref={viewModeAnchorRef}
+            type="button"
+            className="lq-chart__timeframe-trigger"
+            onClick={() => setViewModeMenuOpen((o) => !o)}
+            aria-label={`Mode d'affichage : ${currentViewModeLabel}`}
+          >
+            {currentViewModeLabel}
+            <ChevronDownIcon size={12} />
+          </button>
+          <Popover open={viewModeMenuOpen} onClose={() => setViewModeMenuOpen(false)} anchorRef={viewModeAnchorRef} placement="bottom">
+            <div className="lq-chart__tool-menu">
+              {viewModeOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={["lq-chart__tool-menu-option", opt.value === viewMode && "lq-chart__tool-menu-option--selected"]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => {
+                    setViewMode(opt.value);
+                    setViewModeMenuOpen(false);
+                  }}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </Popover>
           {/* Gated on the chart branch too, not just `isZoomed` — switching to "Année" granularity
               (the single-bucket summary below, no LineAreaChart at all) unmounts the chart without
               a chance to report itself back to `isZoomed=false`, which would otherwise leave a
@@ -367,33 +397,6 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <Checkbox key={year} checked={!excludedYears.has(year)} onChange={() => toggleYear(year)} label={String(year)} />
               ))}
             </DropdownPanel>
-
-            <button
-              type="button"
-              className={["lq-chart__icon-button", independentYears && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-              onClick={toggleIndependentYears}
-              aria-pressed={independentYears}
-              aria-label={independentYears ? "Revenir à la courbe moyenne" : "Afficher chaque année indépendamment"}
-              title="Afficher chaque année incluse comme sa propre courbe, plutôt qu'une seule moyenne"
-            >
-              <DisjointChannelIcon size={14} />
-            </button>
-            {/* Stays visible regardless of `independentYears` (unlike before) — the two are
-                mutually exclusive view modes now (see toggleIndependentYears/
-                toggleShowCurrentYear), so this button switching the chart *out* of independent-
-                years mode when clicked is itself the point, not something to hide behind. */}
-            {hasCurrentYear && (
-              <button
-                type="button"
-                className={["lq-chart__icon-button", showCurrentYear && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={toggleShowCurrentYear}
-                aria-pressed={showCurrentYear}
-                aria-label={showCurrentYear ? "Masquer l'année en cours" : "Afficher l'année en cours"}
-                title={`Superposer la performance de ${currentYear} (en cours) à la moyenne`}
-              >
-                <ActivityIcon size={14} />
-              </button>
-            )}
           </div>
         </div>
 
