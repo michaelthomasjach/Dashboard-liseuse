@@ -356,19 +356,24 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <ActivityIcon size={14} />
               </button>
             )}
-            {/* Only meaningful once at least one year renders as its own line — plain "average"
-                mode (independentYears off, showCurrentYear off) has nothing here to manage. */}
-            {managedYears.length > 0 && (
-              <button
-                type="button"
-                className={["lq-chart__icon-button", yearsManagerOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-                onClick={() => setYearsManagerOpen((o) => !o)}
-                aria-label="Années affichées"
-                title="Afficher/masquer ou recolorer chaque année affichée individuellement"
-              >
-                <EyeIcon size={14} />
-              </button>
-            )}
+            {/* Always present, not gated on managedYears.length like the two toggles above —
+                hiding it until the user had already found and enabled "Années indépendantes" (or
+                the current-year overlay) left this list undiscoverable from the plain "average"
+                view, its own starting state. Clicking it while nothing is individually displayed
+                yet turns independentYears on first, so it always opens to a populated list rather
+                than requiring that discovery step beforehand. */}
+            <button
+              type="button"
+              className={["lq-chart__icon-button", yearsManagerOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => {
+                if (managedYears.length === 0) setIndependentYears(true);
+                setYearsManagerOpen(true);
+              }}
+              aria-label="Années affichées"
+              title="Afficher/masquer ou recolorer chaque année affichée individuellement"
+            >
+              <EyeIcon size={14} />
+            </button>
           </div>
         </div>
 
@@ -421,6 +426,9 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
       {yearsManagerOpen && (
         <Modal open onClose={() => setYearsManagerOpen(false)} title="Années affichées" footer={null}>
           <div className="lq-chart__indicators-manager">
+            {managedYears.length === 0 && (
+              <p className="lq-chart__indicator-picker-empty">Aucune année disponible pour l'instant.</p>
+            )}
             {managedYears.map((year) => {
               const hidden = hiddenYears.has(year);
               const color = displayColorForYear(year);
