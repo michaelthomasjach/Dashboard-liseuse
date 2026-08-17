@@ -18,11 +18,37 @@ export interface GaugeChartProps {
   formatValue?: (value: number) => string;
   /** Color bands drawn as the track, e.g. [{upTo:33,color:'var(--lq-color-down)'}, {upTo:66,color:'var(--lq-color-warning)'}, {upTo:100,color:'var(--lq-color-up)'}]. */
   thresholds?: GaugeThreshold[];
+  /** Draws each threshold's own `label` (see GaugeThreshold — declared for exactly this, unused
+   *  until now) just outside the arc, at that band's own angular midpoint — e.g. "Vente forte" /
+   *  "Vente" / "Neutre" / "Achat" / "Achat fort" around a 5-band analyst-rating gauge. A band with
+   *  no `label` simply gets no text. Ignored without `thresholds` (there's no band to label a
+   *  midpoint of). Default false. Reserves extra room around the arc itself (see LABEL_MARGIN/
+   *  LABEL_TOP_MARGIN below) so the outermost labels don't clip the SVG's own edge — the arc stays
+   *  exactly `size` wide either way, only the surrounding canvas grows. */
+  showBandLabels?: boolean;
   className?: string;
 }
 
 const START_ANGLE = -Math.PI / 2;
 const END_ANGLE = Math.PI / 2;
+// Extra canvas reserved around the arc when showBandLabels is on: sideways for the two outermost
+// labels (anchored to grow further outward, away from the arc, via text-anchor "end"/"start" —
+// see anchorForAngle), and above for the topmost one (anchored "middle", growing both ways from
+// straight up).
+const LABEL_SIDE_MARGIN = 78;
+const LABEL_TOP_MARGIN = 26;
+const LABEL_RADIUS_GAP = 14;
+
+// A label's own text-anchor, chosen by its angle so it grows *away* from the arc (out into the
+// margin reserved for it) rather than back over the colored band itself: past ±15° off top-center
+// it anchors to its far end so the text trails outward, dead-center keeps it centered over the
+// topmost point.
+function anchorForAngle(angle: number): "start" | "middle" | "end" {
+  const deg = (angle * 180) / Math.PI;
+  if (deg < -15) return "end";
+  if (deg > 15) return "start";
+  return "middle";
+}
 
 export function GaugeChart({
   value,
@@ -32,10 +58,12 @@ export function GaugeChart({
   label,
   formatValue,
   thresholds,
+  showBandLabels = false,
   className,
 }: GaugeChartProps) {
-  const width = size;
-  const height = size / 2 + 24;
+  const hasBandLabels = showBandLabels && !!thresholds?.length;
+  const width = size + (hasBandLabels ? LABEL_SIDE_MARGIN * 2 : 0);
+  const height = size / 2 + 24 + (hasBandLabels ? LABEL_TOP_MARGIN : 0);
   const radius = size / 2 - 8;
   const cx = width / 2;
   const cy = height - 16;
@@ -91,6 +119,22 @@ export function GaugeChart({
             <path d={trackArc({} as never) ?? undefined} className="lq-gauge-chart__track" />
           )}
           {!bands && <path d={valueArc({} as never) ?? undefined} className="lq-gauge-chart__value" />}
+          {hasBandLabels &&
+            bands?.map(
+              (b, i) =>
+                b.label && (
+                  <text
+                    key={i}
+                    className="lq-gauge-chart__band-label"
+                    x={(radius + LABEL_RADIUS_GAP) * Math.sin((b.startAngle + b.endAngle) / 2)}
+                    y={-(radius + LABEL_RADIUS_GAP) * Math.cos((b.startAngle + b.endAngle) / 2)}
+                    textAnchor={anchorForAngle((b.startAngle + b.endAngle) / 2)}
+                    dominantBaseline="central"
+                  >
+                    {b.label}
+                  </text>
+                )
+            )}
           <line
             className="lq-gauge-chart__needle"
             x1={0}

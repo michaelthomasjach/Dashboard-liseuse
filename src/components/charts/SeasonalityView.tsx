@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from "react";
 import type { Candle } from "./CandlestickChart";
-import { computeSeasonality, type SeasonalityGranularity } from "./internal/seasonality";
-import { LineAreaChart, type LineAreaChartHandle } from "./LineAreaChart";
+import { computeSeasonality, type SeasonalityGranularity, type SeasonalityBucket } from "./internal/seasonality";
+import { LineAreaChart, type LineAreaChartHandle, type ChartSeries, type ChartPoint } from "./LineAreaChart";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
-import { ChevronLeftIcon, CalendarIcon, LayersIcon } from "../icons";
+import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -16,9 +16,43 @@ const GRANULARITY_OPTIONS: { value: SeasonalityGranularity; label: string }[] = 
   { value: "year", label: "Année" },
 ];
 
+// One letter per granularity, shown on the rail button in place of a generic calendar glyph so
+// the button reads its own current value at a glance (same idea as a toggle button showing its
+// own state) — spelled out here rather than derived from GRANULARITY_OPTIONS' own French label
+// (its first letter) so a future label wording change can't silently change the letter too.
+const GRANULARITY_LETTERS: Record<SeasonalityGranularity, string> = { week: "S", month: "M", quarter: "T", year: "A" };
+
 // US presidential elections land every 4 years on the nose (1788, 1792, … 2024, 2028…) — no
 // lookup table needed, just the one arithmetic fact.
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
+
+/** A single letter rendered through the same 24x24/currentColor convention every other icon in
+ *  this library follows (see IconBase) — filled text instead of a stroked glyph, since there's no
+ *  static-path precedent for dynamic per-instance content in the shared icon catalog. Kept local
+ *  to this file rather than added to icons.tsx: every entry there is a fixed SVG shape with no
+ *  props of its own, and a parameterized "draw this exact letter" component doesn't fit that
+ *  pattern. */
+function LetterIcon({ letter, size = 24 }: { letter: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <text x="12" y="17" textAnchor="middle" fontSize="15" fontWeight="700">
+        {letter}
+      </text>
+    </svg>
+  );
+}
+
+/** One year's own occurrence value at every bucket it has data for — gaps (a bucket that year
+ *  never reached, e.g. an in-progress current year past "today") are simply omitted rather than
+ *  interpolated or zeroed, so the resulting line stops exactly where that year's own data does. */
+function occurrencesForYear(buckets: SeasonalityBucket[], year: number): ChartPoint[] {
+  const points: ChartPoint[] = [];
+  for (const bucket of buckets) {
+    const occurrence = bucket.occurrences.find((o) => o.year === year);
+    if (occurrence) points.push({ x: bucket.index, y: occurrence.value });
+  }
+  return points;
+}
 
 export interface SeasonalityViewProps {
   data: Candle[];
@@ -68,10 +102,47 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // rail/header layout wraps around it).
   const lineChartRef = useRef<LineAreaChartHandle>(null);
   const [isZoomed, setIsZoomed] = useState(false);
+  // Overlays the current (in-progress) year's own line on top of the average — only meaningful in
+  // the default "average" view, since `independentYears` below already shows every included year
+  // (current one included) as its own line.
+  const [showCurrentYear, setShowCurrentYear] = useState(false);
+  // Replaces the single averaged line with one line per included year (see image the user
+  // attached: several thin past-year lines plus a thicker current-year one ending in a dot where
+  // its data currently stops) instead of collapsing them into `average`.
+  const [independentYears, setIndependentYears] = useState(false);
 
   const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
   const currentGranularityLabel = GRANULARITY_OPTIONS.find((o) => o.value === granularity)?.label ?? "";
+  const currentYear = new Date().getUTCFullYear();
+  const hasCurrentYear = result.years.includes(currentYear);
+
+  const series: ChartSeries[] = independentYears
+    ? result.years.map((year) => ({
+        id: `year-${year}`,
+        label: String(year),
+        data: occurrencesForYear(result.buckets, year),
+        strokeWidth: year === currentYear ? 3 : 1.5,
+        endDot: year === currentYear,
+      }))
+    : [
+        {
+          id: "seasonality",
+          label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
+          data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
+        },
+        ...(showCurrentYear && hasCurrentYear
+          ? [
+              {
+                id: `year-${currentYear}`,
+                label: `${currentYear} (en cours)`,
+                data: occurrencesForYear(result.buckets, currentYear),
+                strokeWidth: 3,
+                endDot: true,
+              },
+            ]
+          : []),
+      ];
 
   function toggleYear(year: number) {
     setExcludedYears((prev) => {
@@ -125,7 +196,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
               aria-label={`Granularité : ${currentGranularityLabel}`}
               title="Granularité de la saisonnalité"
             >
-              <CalendarIcon size={14} />
+              <LetterIcon letter={GRANULARITY_LETTERS[granularity]} size={14} />
             </button>
             <Popover open={granularityMenuOpen} onClose={() => setGranularityMenuOpen(false)} anchorRef={granularityAnchorRef} placement="bottom">
               <div className="lq-chart__tool-menu">
@@ -155,7 +226,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
               aria-label={`Années incluses : ${yearsLabel}`}
               title="Années incluses dans le calcul"
             >
-              <LayersIcon size={14} />
+              <CalendarIcon size={14} />
             </button>
             <DropdownPanel
               open={yearPickerOpen}
@@ -204,6 +275,32 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <Checkbox key={year} checked={!excludedYears.has(year)} onChange={() => toggleYear(year)} label={String(year)} />
               ))}
             </DropdownPanel>
+
+            <button
+              type="button"
+              className={["lq-chart__icon-button", independentYears && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setIndependentYears((v) => !v)}
+              aria-pressed={independentYears}
+              aria-label={independentYears ? "Revenir à la courbe moyenne" : "Afficher chaque année indépendamment"}
+              title="Afficher chaque année incluse comme sa propre courbe, plutôt qu'une seule moyenne"
+            >
+              <LayersIcon size={14} />
+            </button>
+            {/* Only meaningful for the "average" view — `independentYears` above already shows
+                the current year as one of its own lines, un-optional, so this toggle would be
+                inert (and confusing) while that mode is active. */}
+            {!independentYears && hasCurrentYear && (
+              <button
+                type="button"
+                className={["lq-chart__icon-button", showCurrentYear && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setShowCurrentYear((v) => !v)}
+                aria-pressed={showCurrentYear}
+                aria-label={showCurrentYear ? "Masquer l'année en cours" : "Afficher l'année en cours"}
+                title={`Superposer la performance de ${currentYear} (en cours) à la moyenne`}
+              >
+                <ActivityIcon size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -231,17 +328,11 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
         ) : (
           <LineAreaChart
             ref={lineChartRef}
-            series={[
-              {
-                id: "seasonality",
-                label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
-                data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
-              },
-            ]}
+            series={series}
             xType="linear"
             formatX={(x) => result.buckets.find((b) => b.index === x)?.label ?? String(x)}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
-            showLegend={false}
+            axisHoverLabels
             fullscreenToggle={false}
             yAxisOrientation="right"
             embedded

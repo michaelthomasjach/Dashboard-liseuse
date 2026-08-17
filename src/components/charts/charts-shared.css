@@ -65,6 +65,14 @@
   pointer-events: none;
 }
 
+/* A series' own persistent "still going, paused here" marker (see ChartSeries.endDot) — a
+   contrasting ring makes it read as a deliberate marker sitting on top of its own line, not just
+   another hover dot that happened to stay on screen. */
+.lq-chart__dot--end {
+  stroke: var(--lq-color-panel);
+  stroke-width: 2px;
+}
+
 .lq-chart__toolbar {
   position: absolute;
   top: 0;

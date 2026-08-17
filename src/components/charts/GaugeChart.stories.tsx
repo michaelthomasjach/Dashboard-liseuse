@@ -28,3 +28,23 @@ export const RiskScore: Story = {
 export const Simple: Story = {
   render: () => <GaugeChart value={72} label="Objectif atteint" formatValue={(v) => `${v} %`} />,
 };
+
+export const AnalystRating: Story = {
+  render: () => (
+    <GaugeChart
+      value={92}
+      min={0}
+      max={100}
+      label="Recommandation"
+      formatValue={() => "Achat fort"}
+      showBandLabels
+      thresholds={[
+        { upTo: 20, color: "var(--lq-color-down)", label: "Vente forte" },
+        { upTo: 40, color: "color-mix(in srgb, var(--lq-color-down) 50%, var(--lq-color-warning))", label: "Vente" },
+        { upTo: 60, color: "var(--lq-color-warning)", label: "Neutre" },
+        { upTo: 80, color: "color-mix(in srgb, var(--lq-color-warning) 50%, var(--lq-color-up))", label: "Achat" },
+        { upTo: 100, color: "var(--lq-color-up)", label: "Achat fort" },
+      ]}
+    />
+  ),
+};

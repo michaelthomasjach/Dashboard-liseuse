@@ -24,6 +24,14 @@ export interface ChartSeries {
   color?: string;
   /** Fill the area under this series. Falls back to the chart-level `area` prop. */
   area?: boolean;
+  /** Line thickness in px. Default 2 — bump it to make one series (e.g. the current, in-progress
+   *  year in SeasonalityView's "années indépendantes" mode) stand out among several others. */
+  strokeWidth?: number;
+  /** Draws a persistent dot at this series' own last defined point, not just while hovered — for
+   *  a series that legitimately ends partway through the shared X domain (an in-progress year
+   *  whose data simply stops at "today", short of every other series' full range) so that stop
+   *  point reads as "still going, paused here" rather than an unexplained dangling line end. */
+  endDot?: boolean;
   data: ChartPoint[];
 }
 
@@ -59,6 +67,14 @@ export interface LineAreaChartProps {
   /** Fires whenever the zoomed-in/panned state changes — lets a caller that set `showZoomReset`
    *  to false know when to show its own reset control. */
   onZoomChange?: (isZoomed: boolean) => void;
+  /** Swaps the floating `ChartTooltip` box for a pair of axis-pinned value badges instead (same
+   *  `.lq-chart__axis-value` treatment `CandlestickChart`'s own crosshair uses) — one under the X
+   *  axis showing the hovered point's own X label, one per visible series on the Y axis (right
+   *  edge when `yAxisOrientation="right"`, left edge otherwise) showing that series' own value,
+   *  colored to match its line. For a chart embedded alongside another one that already reads its
+   *  X/Y readout that way (see SeasonalityView) — a second, differently-shaped floating tooltip
+   *  box would read as a visual inconsistency next to it. Default false (floating tooltip). */
+  axisHoverLabels?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -85,6 +101,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   referenceLineY,
   showZoomReset = true,
   onZoomChange,
+  axisHoverLabels = false,
   margin,
   className,
 }, handleRef) {
@@ -295,7 +312,21 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
               return (
                 <g key={s.id}>
                   {fillArea && <path d={areaGen(s.data) ?? undefined} fill={color} fillOpacity={0.12} stroke="none" />}
-                  <path d={lineGen(s.data) ?? undefined} fill="none" stroke={color} strokeWidth={2} />
+                  <path d={lineGen(s.data) ?? undefined} fill="none" stroke={color} strokeWidth={s.strokeWidth ?? 2} />
+                  {s.endDot &&
+                    s.data.length > 0 &&
+                    (() => {
+                      const last = s.data[s.data.length - 1];
+                      return (
+                        <circle
+                          className="lq-chart__dot lq-chart__dot--end"
+                          cx={zoomedXScale(last.x as never)}
+                          cy={zoomedYScale(last.y)}
+                          r={5}
+                          fill={color}
+                        />
+                      );
+                    })()}
                 </g>
               );
             })}
@@ -369,29 +400,64 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
 
       {hover &&
         hoverPoint &&
-        (() => {
-          const anchor = hoverPoint[0]?.point;
-          if (!anchor) return null;
-          const nearRightEdge = hover.mouseX > dims.boundedWidth * 0.65;
-          return (
-            <ChartTooltip
-              x={dims.margin.left + hover.mouseX}
-              y={dims.margin.top}
-              visible
-              align={nearRightEdge ? "left" : "right"}
-            >
-              <div className="lq-chart-tooltip__title">
-                {formatX ? formatX(anchor.x) : xType === "time" ? d3.timeFormat("%d %b %Y")(anchor.x as Date) : String(anchor.x)}
-              </div>
-              {hoverPoint.map(({ series: s, color, point }) => (
-                <div key={s.id} className="lq-chart-tooltip__row">
-                  <span className="lq-chart-tooltip__swatch" style={{ backgroundColor: color }} />
-                  {s.label ?? s.id}: <strong>{point ? (formatY ? formatY(point.y) : point.y) : "—"}</strong>
+        (axisHoverLabels ? (
+          (() => {
+            const anchor = hoverPoint[0]?.point;
+            if (!anchor) return null;
+            const formattedX = formatX ? formatX(anchor.x) : xType === "time" ? d3.timeFormat("%d %b %Y")(anchor.x as Date) : String(anchor.x);
+            return (
+              <>
+                <div
+                  className="lq-chart__axis-value lq-chart__axis-value--x"
+                  style={{ left: dims.margin.left + hover.mouseX, top: dims.margin.top + dims.boundedHeight }}
+                >
+                  <span className="lq-chart__axis-value-text">{formattedX}</span>
                 </div>
-              ))}
-            </ChartTooltip>
-          );
-        })()}
+                {hoverPoint.map(({ series: s, color, point }) =>
+                  point ? (
+                    <div
+                      key={s.id}
+                      className="lq-chart__axis-value lq-chart__axis-value--y"
+                      style={{
+                        top: dims.margin.top + zoomedYScale(point.y),
+                        backgroundColor: color,
+                        ...(yAxisOrientation === "right"
+                          ? { left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }
+                          : { left: 0, width: dims.margin.left, justifyContent: "flex-end" }),
+                      }}
+                    >
+                      <span className="lq-chart__axis-value-text">{formatY ? formatY(point.y) : point.y}</span>
+                    </div>
+                  ) : null
+                )}
+              </>
+            );
+          })()
+        ) : (
+          (() => {
+            const anchor = hoverPoint[0]?.point;
+            if (!anchor) return null;
+            const nearRightEdge = hover.mouseX > dims.boundedWidth * 0.65;
+            return (
+              <ChartTooltip
+                x={dims.margin.left + hover.mouseX}
+                y={dims.margin.top}
+                visible
+                align={nearRightEdge ? "left" : "right"}
+              >
+                <div className="lq-chart-tooltip__title">
+                  {formatX ? formatX(anchor.x) : xType === "time" ? d3.timeFormat("%d %b %Y")(anchor.x as Date) : String(anchor.x)}
+                </div>
+                {hoverPoint.map(({ series: s, color, point }) => (
+                  <div key={s.id} className="lq-chart-tooltip__row">
+                    <span className="lq-chart-tooltip__swatch" style={{ backgroundColor: color }} />
+                    {s.label ?? s.id}: <strong>{point ? (formatY ? formatY(point.y) : point.y) : "—"}</strong>
+                  </div>
+                ))}
+              </ChartTooltip>
+            );
+          })()
+        ))}
 
       {showLegend && series.length > 1 && (
         <div className="lq-chart__legend">
