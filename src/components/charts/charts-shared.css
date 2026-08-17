@@ -217,6 +217,29 @@
   font-size: 0.8rem;
 }
 
+/* "Années affichées" list (see SeasonalityView) — a plain color dot standing in for the badge
+   icon every other row in .lq-chart__indicators-manager uses, since a year's own identity here
+   *is* its line color rather than a tool/indicator kind. */
+.lq-chart__seasonality-year-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* The native color picker trigger for that same row's own "Paramètres" (gear) action — kept in
+   the DOM (not display:none, which would drop it from the label/input association some browsers
+   rely on to open the picker on click) but visually invisible and pinned to zero size so only the
+   gear icon it's layered under is actually seen. */
+.lq-chart__seasonality-year-color-input {
+  position: absolute;
+  width: 0;
+  height: 0;
+  padding: 0;
+  border: none;
+  opacity: 0;
+}
+
 .lq-chart__legend {
   display: flex;
   flex-wrap: wrap;

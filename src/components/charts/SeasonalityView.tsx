@@ -2,10 +2,12 @@ import { useMemo, useRef, useState } from "react";
 import type { Candle } from "./CandlestickChart";
 import { computeSeasonality, type SeasonalityGranularity, type SeasonalityBucket } from "./internal/seasonality";
 import { LineAreaChart, type LineAreaChartHandle, type ChartSeries, type ChartPoint } from "./LineAreaChart";
+import { INDICATOR_COLORS } from "./candlestick/indicators";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
-import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon } from "../icons";
+import { Modal } from "../primitives/Modal";
+import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -110,6 +112,14 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // attached: several thin past-year lines plus a thicker current-year one ending in a dot where
   // its data currently stops) instead of collapsing them into `average`.
   const [independentYears, setIndependentYears] = useState(false);
+  // Per-year display state for whichever years currently render as their own line (see
+  // managedYears below) — deliberately separate from `excludedYears` above: that one decides what
+  // feeds the *average*, this one only ever hides/recolors an already-individual line, and the two
+  // shouldn't fight over the same checkbox. A year hidden this way, then later dropped out of
+  // `result.years` entirely (e.g. via `excludedYears`), just leaves an inert, harmless entry here.
+  const [hiddenYears, setHiddenYears] = useState<Set<number>>(new Set());
+  const [yearColors, setYearColors] = useState<Record<number, string>>({});
+  const [yearsManagerOpen, setYearsManagerOpen] = useState(false);
 
   const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
@@ -117,25 +127,56 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const currentYear = new Date().getUTCFullYear();
   const hasCurrentYear = result.years.includes(currentYear);
 
+  // A year's own line color: a caller override if one was ever set via the "Années affichées"
+  // list, else a slot in the same literal-hex palette indicators use for their own color picker
+  // (indicators.ts's own INDICATOR_COLORS, not the CSS-var-based CHART_PALETTE — a native
+  // `<input type="color">` can't open on a `var(--lq-color-x)` reference as its own `value`, only
+  // a resolvable hex, same reason indicators picked a literal palette for exactly this). Slot 0
+  // (a warm amber, nowhere near the plain "average" line's own blue accent) is reserved for the
+  // lone current-year overlay so the two can never coincide; `fallbackIndex` is otherwise the
+  // caller's choice of which slot — a year's own position among every included year, for
+  // independentYears.
+  function colorForYear(year: number, fallbackIndex: number): string {
+    return yearColors[year] ?? INDICATOR_COLORS[((fallbackIndex % INDICATOR_COLORS.length) + INDICATOR_COLORS.length) % INDICATOR_COLORS.length];
+  }
+
+  // The single source of truth for "which color does this year's line actually render in right
+  // now" — independentYears cycles every included year through the palette by its own position,
+  // otherwise there's only ever the lone current-year overlay, pinned to slot 0. Used both to
+  // build `series` below and to color the "Années affichées" list's own swatches, so the two can
+  // never drift apart the way two separately-inlined copies of this same branch just did.
+  function displayColorForYear(year: number): string {
+    return independentYears ? colorForYear(year, result.years.indexOf(year)) : colorForYear(year, 0);
+  }
+
+  // Whichever years currently render as their own individual line — exactly the set the "Années
+  // affichées" list below manages — regardless of `hiddenYears` (a hidden year stays listed, with
+  // its own eye toggled off, so it can be brought back).
+  const managedYears: number[] = independentYears ? result.years : showCurrentYear && hasCurrentYear ? [currentYear] : [];
+
   const series: ChartSeries[] = independentYears
-    ? result.years.map((year) => ({
-        id: `year-${year}`,
-        label: String(year),
-        data: occurrencesForYear(result.buckets, year),
-        strokeWidth: year === currentYear ? 3 : 1.5,
-        endDot: year === currentYear,
-      }))
+    ? result.years
+        .filter((year) => !hiddenYears.has(year))
+        .map((year) => ({
+          id: `year-${year}`,
+          label: String(year),
+          color: displayColorForYear(year),
+          data: occurrencesForYear(result.buckets, year),
+          strokeWidth: year === currentYear ? 3 : 1.5,
+          endDot: year === currentYear,
+        }))
     : [
         {
           id: "seasonality",
           label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
           data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
         },
-        ...(showCurrentYear && hasCurrentYear
+        ...(showCurrentYear && hasCurrentYear && !hiddenYears.has(currentYear)
           ? [
               {
                 id: `year-${currentYear}`,
                 label: `${currentYear} (en cours)`,
+                color: displayColorForYear(currentYear),
                 data: occurrencesForYear(result.buckets, currentYear),
                 strokeWidth: 3,
                 endDot: true,
@@ -143,6 +184,15 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             ]
           : []),
       ];
+
+  function toggleHiddenYear(year: number) {
+    setHiddenYears((prev) => {
+      const next = new Set(prev);
+      if (next.has(year)) next.delete(year);
+      else next.add(year);
+      return next;
+    });
+  }
 
   function toggleYear(year: number) {
     setExcludedYears((prev) => {
@@ -301,6 +351,19 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <ActivityIcon size={14} />
               </button>
             )}
+            {/* Only meaningful once at least one year renders as its own line — plain "average"
+                mode (independentYears off, showCurrentYear off) has nothing here to manage. */}
+            {managedYears.length > 0 && (
+              <button
+                type="button"
+                className={["lq-chart__icon-button", yearsManagerOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+                onClick={() => setYearsManagerOpen((o) => !o)}
+                aria-label="Années affichées"
+                title="Afficher/masquer ou recolorer chaque année affichée individuellement"
+              >
+                <EyeIcon size={14} />
+              </button>
+            )}
           </div>
         </div>
 
@@ -333,6 +396,11 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             formatX={(x) => result.buckets.find((b) => b.index === x)?.label ?? String(x)}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
+            // The "Années affichées" list below already covers "which color is which year" (plus
+            // hide/recolor, which the plain legend can't do) — showing both would be two
+            // separately-stateful ways to hide the same line (LineAreaChart's own click-to-fade
+            // legend item vs. this file's own `hiddenYears`), so the built-in legend stays off.
+            showLegend={false}
             fullscreenToggle={false}
             yAxisOrientation="right"
             embedded
@@ -344,6 +412,52 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
           />
         )}
       </div>
+
+      {yearsManagerOpen && (
+        <Modal open onClose={() => setYearsManagerOpen(false)} title="Années affichées" footer={null}>
+          <div className="lq-chart__indicators-manager">
+            {managedYears.map((year) => {
+              const hidden = hiddenYears.has(year);
+              const color = displayColorForYear(year);
+              return (
+                <div className="lq-chart__indicators-manager-row" key={year}>
+                  <span className="lq-chart__indicators-manager-badge">
+                    <span className="lq-chart__seasonality-year-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+                  </span>
+                  <span className="lq-chart__indicators-manager-name">
+                    {year}
+                    {year === currentYear ? " (en cours)" : ""}
+                  </span>
+                  <span className="lq-chart__indicators-manager-actions">
+                    {/* A <label> wrapping a visually-hidden color <input> — clicking the gear
+                        activates the input directly (standard label/input association), opening
+                        the browser's own native color picker with no extra popover of our own to
+                        build or position. */}
+                    <label className="lq-chart__pane-header-action" title={`Couleur de ${year}`}>
+                      <SettingsIcon size={13} />
+                      <input
+                        type="color"
+                        value={color}
+                        onChange={(e) => setYearColors((prev) => ({ ...prev, [year]: e.target.value }))}
+                        className="lq-chart__seasonality-year-color-input"
+                        aria-label={`Couleur de ${year}`}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="lq-chart__pane-header-action"
+                      onClick={() => toggleHiddenYear(year)}
+                      aria-label={hidden ? `Afficher ${year}` : `Masquer ${year}`}
+                    >
+                      {hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
