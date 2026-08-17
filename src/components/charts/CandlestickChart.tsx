@@ -937,7 +937,7 @@ export function CandlestickChart({
         customIndicators={customIndicators} addCustomIndicator={addCustomIndicator}
         indicatorsManagerOpen={indicatorsManagerOpen}
         setIndicatorsManagerOpen={setIndicatorsManagerOpen}
-        indicators={indicators}
+        indicators={indicators} commitIndicators={commitIndicators}
         ownPaneIndicators={ownPaneIndicators}
         volumeVisible={volumeVisible}
         visibleDrawings={visibleDrawings}

@@ -1118,6 +1118,13 @@
   gap: 2px;
 }
 
+.lq-chart__indicators-manager-confirm-text {
+  margin: 0;
+  color: var(--lq-color-text-muted);
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
 .lq-chart__symbol-search-clear {
   display: flex;
   padding: 0;

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Modal } from "../../../primitives/Modal";
 import { Checkbox } from "../../../forms/Checkbox";
 import { TextField } from "../../../forms/TextField";
@@ -24,6 +25,7 @@ export interface IndicatorModalsProps {
   indicatorsManagerOpen: boolean;
   setIndicatorsManagerOpen: (open: boolean) => void;
   indicators: Indicator[];
+  commitIndicators: (next: Indicator[]) => void;
   ownPaneIndicators: Indicator[];
   volumeVisible: boolean;
   visibleDrawings: TrendLineDrawing[];
@@ -62,6 +64,7 @@ export function IndicatorModals({
   indicatorsManagerOpen,
   setIndicatorsManagerOpen,
   indicators,
+  commitIndicators,
   ownPaneIndicators,
   volumeVisible,
   visibleDrawings,
@@ -80,6 +83,21 @@ export function IndicatorModals({
   deleteEditingIndicator,
   saveIndicatorSettings,
 }: IndicatorModalsProps) {
+  const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
+
+  // Scoped to exactly what the manager list itself shows (visibleDrawings, not every drawing that
+  // ever existed — a drawing outside the current view has no row here to have deleted it from) so
+  // "tout supprimer" never removes something the user never saw listed. Indicators have no such
+  // split: `indicators` is already 100% overlay + own-pane, nothing hidden from the list. Doesn't
+  // close indicatorsManagerOpen itself — same as removing the last item one at a time, the manager
+  // just re-renders into its own empty state.
+  function handleDeleteAll() {
+    commitDrawings(drawings.filter((d) => !visibleDrawings.some((v) => v.id === d.id)));
+    commitIndicators([]);
+    if (volumeVisible) setVolumePaneState("hidden");
+    setConfirmDeleteAllOpen(false);
+  }
+
   return (
     <>
       {indicatorPickerOpen && (
@@ -174,96 +192,132 @@ export function IndicatorModals({
         </Modal>
       )}
 
-      {indicatorsManagerOpen && (
-        <Modal open onClose={() => setIndicatorsManagerOpen(false)} title="Dessins et indicateurs" footer={null}>
-          <div className="lq-chart__indicators-manager">
-            {(() => {
-              const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind).pane === "price");
-              const own = ownPaneIndicators;
-              if (overlay.length === 0 && own.length === 0 && !volumeVisible && visibleDrawings.length === 0) {
-                return <p className="lq-chart__indicator-picker-empty">Rien à gérer pour l'instant — aucun dessin ni indicateur actif.</p>;
-              }
-              // A row's own two actions mirror exactly what's already reachable from the chart
-              // itself (the legend's roue crantée/corbeille for an overlay, a pane header's for an
-              // "own" one, Suppr/double-clic for a drawing) — this list is a second way to reach
-              // the same actions, not a new set of them, so nothing here can do anything the
-              // chart's own hover/pane-header UI can't.
-              const row = (label: string, badge: React.ReactNode, badgeTitle: string, onSettings: (() => void) | null, onDelete: () => void, key: string) => (
-                <div className="lq-chart__indicators-manager-row" key={key}>
-                  <span className="lq-chart__indicators-manager-badge" title={badgeTitle}>
-                    {badge}
-                  </span>
-                  <span className="lq-chart__indicators-manager-name">{label}</span>
-                  <span className="lq-chart__indicators-manager-actions">
-                    {onSettings && (
-                      <button type="button" className="lq-chart__pane-header-action" onClick={onSettings} aria-label={`Paramètres ${label}`}>
-                        <SettingsIcon size={13} />
-                      </button>
-                    )}
-                    <button type="button" className="lq-chart__pane-header-action" onClick={onDelete} aria-label={`Supprimer ${label}`}>
-                      <TrashIcon size={13} />
+      {indicatorsManagerOpen &&
+        (() => {
+          const overlay = indicators.filter((ind) => indicatorCatalogEntry(ind).pane === "price");
+          const own = ownPaneIndicators;
+          const hasAnything = overlay.length > 0 || own.length > 0 || volumeVisible || visibleDrawings.length > 0;
+          // A row's own two actions mirror exactly what's already reachable from the chart itself
+          // (the legend's roue crantée/corbeille for an overlay, a pane header's for an "own" one,
+          // Suppr/double-clic for a drawing) — this list is a second way to reach the same actions,
+          // not a new set of them, so nothing here can do anything the chart's own hover/pane-header
+          // UI can't.
+          const row = (label: string, badge: React.ReactNode, badgeTitle: string, onSettings: (() => void) | null, onDelete: () => void, key: string) => (
+            <div className="lq-chart__indicators-manager-row" key={key}>
+              <span className="lq-chart__indicators-manager-badge" title={badgeTitle}>
+                {badge}
+              </span>
+              <span className="lq-chart__indicators-manager-name">{label}</span>
+              <span className="lq-chart__indicators-manager-actions">
+                {onSettings && (
+                  <button type="button" className="lq-chart__pane-header-action" onClick={onSettings} aria-label={`Paramètres ${label}`}>
+                    <SettingsIcon size={13} />
+                  </button>
+                )}
+                <button type="button" className="lq-chart__pane-header-action" onClick={onDelete} aria-label={`Supprimer ${label}`}>
+                  <TrashIcon size={13} />
+                </button>
+              </span>
+            </div>
+          );
+          return (
+            <Modal
+              open
+              onClose={() => setIndicatorsManagerOpen(false)}
+              title="Dessins et indicateurs"
+              footer={
+                hasAnything ? (
+                  <div className="lq-chart__edit-drawing-footer">
+                    <button type="button" className="lq-chart__reset-button" onClick={() => setConfirmDeleteAllOpen(true)}>
+                      Tout supprimer
                     </button>
-                  </span>
-                </div>
-              );
-              return (
-                <>
-                  {visibleDrawings.length > 0 && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">Dessins</div>
-                      {visibleDrawings.map((dr) => {
-                        const ToolIcon = drawingToolMeta(dr).icon;
-                        return row(
-                          drawingLabel(dr),
-                          <ToolIcon size={13} />,
-                          drawingToolMeta(dr).label,
-                          () => {
-                            setEditingId(dr.id);
-                            setDraft(dr);
-                            setEditModalTab("coords");
-                          },
-                          () => commitDrawings(drawings.filter((d) => d.id !== dr.id)),
-                          dr.id
-                        );
-                      })}
-                    </div>
-                  )}
-                  {overlay.length > 0 && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">Superposés au prix</div>
-                      {overlay.map((ind) =>
-                        row(
-                          indicatorLabel(ind),
-                          <OverlayBadgeIcon size={13} />,
-                          "Superposé au prix",
-                          () => openIndicatorSettings(ind.id),
-                          () => removeIndicator(ind.id),
-                          ind.id
-                        )
-                      )}
-                    </div>
-                  )}
-                  {(own.length > 0 || volumeVisible) && (
-                    <div className="lq-chart__indicator-picker-group">
-                      <div className="lq-chart__indicator-picker-group-label">En sous-panneau</div>
-                      {volumeVisible &&
-                        row("Volume", <PaneBadgeIcon size={13} />, "Panneau séparé", () => setVolumeSettingsOpen(true), () => setVolumePaneState("hidden"), "volume")}
-                      {own.map((ind) =>
-                        row(
-                          indicatorLabel(ind),
-                          <PaneBadgeIcon size={13} />,
-                          "Panneau séparé",
-                          () => openIndicatorSettings(ind.id),
-                          () => removeIndicator(ind.id),
-                          ind.id
-                        )
-                      )}
-                    </div>
-                  )}
-                </>
-              );
-            })()}
-          </div>
+                  </div>
+                ) : null
+              }
+            >
+              <div className="lq-chart__indicators-manager">
+                {!hasAnything ? (
+                  <p className="lq-chart__indicator-picker-empty">Rien à gérer pour l'instant — aucun dessin ni indicateur actif.</p>
+                ) : (
+                  <>
+                    {visibleDrawings.length > 0 && (
+                      <div className="lq-chart__indicator-picker-group">
+                        <div className="lq-chart__indicator-picker-group-label">Dessins</div>
+                        {visibleDrawings.map((dr) => {
+                          const ToolIcon = drawingToolMeta(dr).icon;
+                          return row(
+                            drawingLabel(dr),
+                            <ToolIcon size={13} />,
+                            drawingToolMeta(dr).label,
+                            () => {
+                              setEditingId(dr.id);
+                              setDraft(dr);
+                              setEditModalTab("coords");
+                            },
+                            () => commitDrawings(drawings.filter((d) => d.id !== dr.id)),
+                            dr.id
+                          );
+                        })}
+                      </div>
+                    )}
+                    {overlay.length > 0 && (
+                      <div className="lq-chart__indicator-picker-group">
+                        <div className="lq-chart__indicator-picker-group-label">Superposés au prix</div>
+                        {overlay.map((ind) =>
+                          row(
+                            indicatorLabel(ind),
+                            <OverlayBadgeIcon size={13} />,
+                            "Superposé au prix",
+                            () => openIndicatorSettings(ind.id),
+                            () => removeIndicator(ind.id),
+                            ind.id
+                          )
+                        )}
+                      </div>
+                    )}
+                    {(own.length > 0 || volumeVisible) && (
+                      <div className="lq-chart__indicator-picker-group">
+                        <div className="lq-chart__indicator-picker-group-label">En sous-panneau</div>
+                        {volumeVisible &&
+                          row("Volume", <PaneBadgeIcon size={13} />, "Panneau séparé", () => setVolumeSettingsOpen(true), () => setVolumePaneState("hidden"), "volume")}
+                        {own.map((ind) =>
+                          row(
+                            indicatorLabel(ind),
+                            <PaneBadgeIcon size={13} />,
+                            "Panneau séparé",
+                            () => openIndicatorSettings(ind.id),
+                            () => removeIndicator(ind.id),
+                            ind.id
+                          )
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            </Modal>
+          );
+        })()}
+
+      {confirmDeleteAllOpen && (
+        <Modal
+          open
+          onClose={() => setConfirmDeleteAllOpen(false)}
+          title="Tout supprimer ?"
+          footer={
+            <div className="lq-chart__edit-drawing-footer">
+              <button type="button" className="lq-chart__reset-button" onClick={() => setConfirmDeleteAllOpen(false)}>
+                Annuler
+              </button>
+              <button type="button" className="lq-chart__confirm-button" onClick={handleDeleteAll}>
+                Tout supprimer
+              </button>
+            </div>
+          }
+        >
+          <p className="lq-chart__indicators-manager-confirm-text">
+            Tous les dessins et indicateurs actifs sur ce graphique seront supprimés. Cette action est irréversible.
+          </p>
         </Modal>
       )}
 

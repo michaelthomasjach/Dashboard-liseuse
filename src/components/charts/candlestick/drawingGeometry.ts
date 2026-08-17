@@ -99,25 +99,3 @@ export function channelOffsetFromClick(p1: DataPoint, p2: DataPoint, click: Data
   const onLineY = x2i === x1i ? p1.y : p1.y + (p2.y - p1.y) * ((indexForDate(click.x) - x1i) / (x2i - x1i));
   return click.y - onLineY;
 }
-
-// "forecast" only, and only for a declining move (B's price below A's) — the rising case keeps
-// its own plain quadratic-bezier bow (a symmetric arc), unchanged, right where it's drawn. A
-// decline instead reads as a sampled, asymmetric logarithmic-decay shape: barely moving away from
-// A at first, then dropping sharply into B — the "price holds, then breaks" shape a real forecast
-// wants, rather than the mirror image of the rise's own symmetric bow. Traces y = ln(1-x) over
-// x ∈ [-(e-1), 0] (its natural increasing-x reading), reparametrized so t=0 sits at A and t=1 at
-// B: at x=-(e-1), y=1 (A, 0% of the way to B); at x=0, y=0 (B, 100% of the way) — the curve's own
-// concavity means that "% of the way to B" barely moves for small t and accelerates as t→1, which
-// is exactly the shape wanted. Returns screen points already smooth (matching the plain quadratic
-// curve's own smoothness) purely by virtue of `steps` being generous — ln is infinitely smooth on
-// this whole domain, no separate rounding/spline step needed on top of it.
-export function forecastDownCurvePoints(ax: number, ay: number, bx: number, by: number, steps = 48): { x: number; y: number }[] {
-  const points: { x: number; y: number }[] = [];
-  for (let i = 0; i <= steps; i++) {
-    const t = i / steps;
-    const x = (t - 1) * (Math.E - 1);
-    const frac = 1 - Math.log(1 - x);
-    points.push({ x: ax + (bx - ax) * t, y: ay + (by - ay) * frac });
-  }
-  return points;
-}
