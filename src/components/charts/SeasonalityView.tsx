@@ -6,7 +6,7 @@ import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
 import { Modal } from "../primitives/Modal";
-import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
+import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon, MeasureIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -35,14 +35,14 @@ const GRANULARITY_LETTERS: Record<SeasonalityGranularity, string> = { week: "S",
 // lookup table needed, just the one arithmetic fact.
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
 
-/** The chart body's own display mode — "average" (the default, a single averaged line, optionally
- *  with `current` overlaid on top of it — see below), "independent" (one line per included year,
- *  see the image the user attached: several thin past-year lines plus a thicker current-year one
- *  ending in a dot where its data currently stops), "current" (the average, plus the current
- *  (in-progress) year's own line overlaid on top of it). A single tri-state value rather than two
- *  separate booleans (as this used to be) — "independent" and "current" are mutually exclusive by
- *  construction this way, instead of needing two toggle functions to keep them that way by hand. */
-type SeasonalityViewMode = "average" | "independent" | "current";
+/** The chart body's own display mode — "current" (the default: the average line, plus the current
+ *  (in-progress) year's own line overlaid on top of it, when there is one), "independent" (one
+ *  line per included year, see the image the user attached: several thin past-year lines plus a
+ *  thicker current-year one ending in a dot where its data currently stops). No separate "average
+ *  only" mode of its own to pick — "current" already degrades to exactly that whenever there's no
+ *  in-progress year in the data to overlay (see `hasCurrentYear`), so a 3rd option selecting the
+ *  same rendering "current" already falls back to would have been redundant. */
+type SeasonalityViewMode = "independent" | "current";
 
 // A dedicated pastel palette for year lines — not indicators.ts's own INDICATOR_COLORS (sharper,
 // built for a single indicator line standing alone against the price series), since several
@@ -99,8 +99,9 @@ export interface SeasonalityViewProps {
  * Presentational half of the seasonality feature — `computeSeasonality` (see
  * `internal/seasonality.ts`) does the actual aggregation, kept entirely independent of this
  * component (and of React) so it can be tested, reused, or extended on its own. The header holds
- * the back button, title, and the view-mode dropdown (Moyenne/Années indépendantes/Année en
- * cours — see `SeasonalityViewMode`); granularity and the years filter live in their own
+ * the back button, title, and the view-mode dropdown (Années indépendantes/Année en cours, the
+ * latter also the default — see `SeasonalityViewMode`); granularity and the years filter live in
+ * their own
  * left-docked icon rail instead — same `TOOLS_RAIL_WIDTH`/visual convention as
  * `CandlestickChart`'s own drawing-tools rail — each opening its own popover (`DropdownPanel` for
  * years, since a multi-select with its own bulk actions needs more than the plain option list a
@@ -128,7 +129,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // rail/header layout wraps around it).
   const lineChartRef = useRef<LineAreaChartHandle>(null);
   const [isZoomed, setIsZoomed] = useState(false);
-  const [viewMode, setViewMode] = useState<SeasonalityViewMode>("average");
+  const [viewMode, setViewMode] = useState<SeasonalityViewMode>("current");
   const [viewModeMenuOpen, setViewModeMenuOpen] = useState(false);
   const viewModeAnchorRef = useRef<HTMLButtonElement>(null);
   // Per-year display state for whichever years currently render as their own line (see
@@ -140,6 +141,11 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const [yearColors, setYearColors] = useState<Record<number, string>>({});
   // Which year's own settings modal (currently just a color picker) is open — null when none is.
   const [colorModalYear, setColorModalYear] = useState<number | null>(null);
+  // The rail's own ruler toggle — click-to-measure on the chart body (see LineAreaChart's
+  // `measureActive`). `zoomable={!measureActive}` below suspends drag-to-pan/zoom while it's on,
+  // same reasoning CandlestickChart's own drawing tools already suspend zoom while an `activeTool`
+  // is set: the two gesture sets would otherwise fight over the same clicks/drags.
+  const [measureActive, setMeasureActive] = useState(false);
 
   const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
@@ -171,7 +177,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // Whichever years currently render as their own individual line — exactly the set the "Années
   // affichées" list below manages — regardless of `hiddenYears` (a hidden year stays listed, with
   // its own eye toggled off, so it can be brought back).
-  const managedYears: number[] = viewMode === "independent" ? result.years : viewMode === "current" && hasCurrentYear ? [currentYear] : [];
+  const managedYears: number[] = viewMode === "independent" ? result.years : hasCurrentYear ? [currentYear] : [];
 
   const series: ChartSeries[] =
     viewMode === "independent"
@@ -191,7 +197,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             label: `Moyenne (${result.years.length} année${result.years.length > 1 ? "s" : ""})`,
             data: result.buckets.map((b) => ({ x: b.index, y: b.average })),
           },
-          ...(viewMode === "current" && hasCurrentYear && !hiddenYears.has(currentYear)
+          ...(hasCurrentYear && !hiddenYears.has(currentYear)
             ? [
                 {
                   id: `year-${currentYear}`,
@@ -245,9 +251,11 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const recentYearsCutoff = availableYears[availableYears.length - recentYearsCount];
 
   // "current" only offered once there's actually a current (in-progress) year in the data to
-  // overlay — same gate the old standalone rail button used to hide behind entirely.
+  // overlay — same gate the old standalone rail button used to hide behind entirely. Without it,
+  // "current" mode still renders (it always has — see `series` above), just as a plain average
+  // with nothing extra to overlay, so the trigger's own label falls back to "Moyenne" below to
+  // describe what's actually showing instead of naming a mode with nothing to pick it from.
   const viewModeOptions: { value: SeasonalityViewMode; label: string }[] = [
-    { value: "average", label: "Moyenne" },
     { value: "independent", label: "Années indépendantes" },
     ...(hasCurrentYear ? [{ value: "current" as const, label: "Année en cours" }] : []),
   ];
@@ -397,6 +405,16 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <Checkbox key={year} checked={!excludedYears.has(year)} onChange={() => toggleYear(year)} label={String(year)} />
               ))}
             </DropdownPanel>
+
+            <button
+              type="button"
+              className={["lq-chart__icon-button", measureActive && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setMeasureActive((a) => !a)}
+              aria-label={measureActive ? "Désactiver l'outil règle" : "Outil règle"}
+              title="Mesurer entre deux points"
+            >
+              <MeasureIcon size={14} />
+            </button>
           </div>
         </div>
 
@@ -483,7 +501,12 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             ref={lineChartRef}
             series={series}
             xType="linear"
-            formatX={(x) => result.buckets.find((b) => b.index === x)?.label ?? String(x)}
+            // Rounded, not an exact `===` match: the regular hover crosshair only ever passes an
+            // exact bucket index (snapped via allXValues), but the ruler's own points are raw,
+            // unsnapped pixel positions (see LineAreaChart's `measureActive`) that land between
+            // buckets more often than not — rounding to the nearest one keeps its readout showing
+            // a real bucket label instead of falling back to a raw fractional number.
+            formatX={(x) => result.buckets.find((b) => b.index === Math.round(Number(x)))?.label ?? String(x)}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
             xTicks={X_TICKS_BY_GRANULARITY[granularity]}
@@ -502,6 +525,8 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             onZoomChange={setIsZoomed}
             margin={{ ...DEFAULT_MARGIN, left: TOOLS_RAIL_WIDTH }}
             height={height}
+            measureActive={measureActive}
+            zoomable={!measureActive}
           />
         )}
       </div>

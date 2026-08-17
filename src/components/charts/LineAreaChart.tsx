@@ -80,6 +80,16 @@ export interface LineAreaChartProps {
    *  default already works). Default 5 (ChartAxis's own default) for both when omitted. */
   xTicks?: number;
   yTicks?: number;
+  /** Click-to-place ruler: the first click on the plot area sets a start point, the second sets
+   *  an end point and shows the delta between them (each point's own formatted X, plus the Y
+   *  delta) — a third click starts a new measurement instead of adding a third point. Neither
+   *  point snaps to any series' own data (unlike the regular hover crosshair) — this measures
+   *  between any two points on the plot itself, same as a physical ruler would. Suppresses the
+   *  regular hover crosshair/tooltip while active so the two don't compete for the same space,
+   *  and clears whatever was measured the moment it goes back to false. The caller owns both this
+   *  value and its own toggle button (see SeasonalityView's own rail) — same "caller decides, this
+   *  chart just renders accordingly" shape as `axisHoverLabels`. Default false. */
+  measureActive?: boolean;
   margin?: Partial<ChartMargin>;
   className?: string;
 }
@@ -109,6 +119,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   axisHoverLabels = false,
   xTicks,
   yTicks,
+  measureActive = false,
   margin,
   className,
 }, handleRef) {
@@ -124,6 +135,22 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   // `anchorX` directly rather than any one series' own point, so it always names whatever's
   // actually under the cursor even where a particular series has no data of its own.
   const [hover, setHover] = useState<{ index: number; mouseX: number; anchorX: Date | number } | null>(null);
+  // Raw pixel cursor position, tracked independently of `hover` above (which snaps to the nearest
+  // *data point*) — the ruler measures between any two points on the plot itself, not points
+  // necessarily lying on a series' own line, so it needs the cursor's own unsnapped position.
+  const [pointerPos, setPointerPos] = useState<{ x: number; y: number } | null>(null);
+  const [measureStart, setMeasureStart] = useState<ChartPoint | null>(null);
+  const [measureEnd, setMeasureEnd] = useState<ChartPoint | null>(null);
+
+  // Whatever was mid-measurement (or already completed) shouldn't reappear the next time
+  // `measureActive` flips back on — same "starting the tool over" reasoning re-selecting any
+  // other tool already resets its own in-progress state elsewhere in this library.
+  useEffect(() => {
+    if (!measureActive) {
+      setMeasureStart(null);
+      setMeasureEnd(null);
+    }
+  }, [measureActive]);
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin, { height: isFullscreen ? undefined : height });
@@ -248,6 +275,8 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    setPointerPos({ x: mouseX, y: mouseY });
     if (allXValues.length === 0) return;
     const bisect = d3.bisector<Date | number, number>((d) => +d).left;
     const xValue = zoomedXScale.invert(mouseX);
@@ -256,6 +285,33 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
       i <= 0 ? 0 : i >= allXValues.length ? allXValues.length - 1 : +xValue - +allXValues[i - 1] <= +allXValues[i] - +xValue ? i - 1 : i;
     setHover({ index, mouseX: zoomedXScale(allXValues[index] as never), anchorX: allXValues[index] });
   }
+
+  // Places the ruler's own start/end points — never snapped to a series' own data (unlike `hover`
+  // above), so it reads pixel position straight off the click itself rather than reusing anything
+  // `handlePointerMove` already bisected. A 3rd click (both points already set) starts over
+  // instead of doing nothing, so re-measuring never requires first hunting for a "clear" control.
+  function handleMeasureClick(e: React.MouseEvent<SVGRectElement>) {
+    if (!measureActive) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const point: ChartPoint = {
+      x: zoomedXScale.invert(e.clientX - rect.left) as unknown as Date | number,
+      y: zoomedYScale.invert(e.clientY - rect.top),
+    };
+    if (!measureStart || measureEnd) {
+      setMeasureStart(point);
+      setMeasureEnd(null);
+    } else {
+      setMeasureEnd(point);
+    }
+  }
+
+  // The ruler's own live end point while only `measureStart` has been placed yet — the raw cursor
+  // position converted through the same scales a completed `measureEnd` would already be in, so
+  // the preview line reads identically to the committed one the moment the 2nd click lands.
+  const measureLivePoint: ChartPoint | null =
+    measureActive && measureStart && !measureEnd && pointerPos
+      ? { x: zoomedXScale.invert(pointerPos.x) as unknown as Date | number, y: zoomedYScale.invert(pointerPos.y) }
+      : null;
 
   // A series' own closest point to `xValue` — bisecting *that series' own* data instead of
   // reusing another series' array index (see hover.anchorX's own doc): two series only share an
@@ -383,7 +439,8 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
               );
             })}
 
-            {hover &&
+            {!measureActive &&
+              hover &&
               hoverPoint &&
               (() => {
                 return (
@@ -435,15 +492,40 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                   </>
                 );
               })()}
+
+            {/* The ruler's own line + endpoints — `end` is whichever of measureEnd (committed) or
+                measureLivePoint (still tracking the cursor) currently applies; nothing draws until
+                there's at least a start and *some* end to draw toward. */}
+            {measureActive &&
+              measureStart &&
+              (() => {
+                const end = measureEnd ?? measureLivePoint;
+                if (!end) return null;
+                const x1 = zoomedXScale(measureStart.x as never);
+                const y1 = zoomedYScale(measureStart.y);
+                const x2 = zoomedXScale(end.x as never);
+                const y2 = zoomedYScale(end.y);
+                return (
+                  <>
+                    <line className="lq-chart__measure-line" x1={x1} y1={y1} x2={x2} y2={y2} />
+                    <circle className="lq-chart__dot" cx={x1} cy={y1} r={4} />
+                    <circle className="lq-chart__dot" cx={x2} cy={y2} r={4} />
+                  </>
+                );
+              })()}
           </g>
 
           <rect
             ref={zoomRef}
-            className="lq-chart__overlay"
+            className={["lq-chart__overlay", measureActive && "lq-chart__overlay--measuring"].filter(Boolean).join(" ")}
             width={dims.boundedWidth}
             height={dims.boundedHeight}
             onPointerMove={handlePointerMove}
-            onPointerLeave={() => setHover(null)}
+            onPointerLeave={() => {
+              setHover(null);
+              setPointerPos(null);
+            }}
+            onClick={handleMeasureClick}
           />
 
           <rect
@@ -473,7 +555,8 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
         </g>
       </svg>
 
-      {hover &&
+      {!measureActive &&
+        hover &&
         hoverPoint &&
         (axisHoverLabels ? (
           (() => {
@@ -541,6 +624,30 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             );
           })()
         ))}
+
+      {/* The ruler's own readout — each point's own formatted X, plus the Y delta between them —
+          anchored to whichever point is currently the "end" (committed, or still tracking the
+          cursor), same edge-flipping `ChartTooltip` already does for the regular hover tooltip. */}
+      {measureActive &&
+        measureStart &&
+        (() => {
+          const end = measureEnd ?? measureLivePoint;
+          if (!end) return null;
+          const endX = zoomedXScale(end.x as never);
+          const endY = zoomedYScale(end.y);
+          const nearRightEdge = endX > dims.boundedWidth * 0.65;
+          const delta = end.y - measureStart.y;
+          const formatPoint = (x: Date | number) =>
+            formatX ? formatX(x) : xType === "time" ? d3.timeFormat("%d %b %Y")(x as Date) : String(x);
+          return (
+            <ChartTooltip x={dims.margin.left + endX} y={dims.margin.top + endY} visible align={nearRightEdge ? "left" : "right"}>
+              <div className="lq-chart-tooltip__title">
+                {formatPoint(measureStart.x)} → {formatPoint(end.x)}
+              </div>
+              <div className="lq-chart-tooltip__row">{formatY ? formatY(delta) : `${delta >= 0 ? "+" : ""}${delta}`}</div>
+            </ChartTooltip>
+          );
+        })()}
 
       {showLegend && series.length > 1 && (
         <div className="lq-chart__legend">

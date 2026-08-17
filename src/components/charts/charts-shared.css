@@ -61,6 +61,13 @@
   pointer-events: none;
 }
 
+.lq-chart__measure-line {
+  stroke: var(--lq-color-text);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  pointer-events: none;
+}
+
 .lq-chart__dot {
   pointer-events: none;
 }
@@ -239,7 +246,8 @@
   flex-shrink: 0;
 }
 
-.lq-chart__overlay--drawing {
+.lq-chart__overlay--drawing,
+.lq-chart__overlay--measuring {
   cursor: crosshair;
 }
 
