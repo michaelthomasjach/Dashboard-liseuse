@@ -9,7 +9,7 @@ import {
   HEAD_SHOULDERS_VERTEX_LABELS,
   MULTI_POINT_TOOLS,
 } from "../drawingCatalog";
-import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick } from "../drawingGeometry";
+import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender";
 import { defaultIndicatorColor } from "../indicators";
 
@@ -410,15 +410,10 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       ctx.setLineDash(lineDashArray(dr));
       ctx.beginPath();
       ctx.moveTo(ax, ay);
-      const dx = bx - ax;
-      const dy = by - ay;
-      const len = Math.hypot(dx, dy) || 1;
-      const bow = len * 0.28;
-      const cx = (ax + bx) / 2 - (dy / len) * bow;
-      const cy = (ay + by) / 2 + (dx / len) * bow;
-      ctx.quadraticCurveTo(cx, cy, bx, by);
-      const tangentFromX = cx;
-      const tangentFromY = cy;
+      const control = forecastControlPoint(ax, ay, bx, by);
+      ctx.quadraticCurveTo(control.x, control.y, bx, by);
+      const tangentFromX = control.x;
+      const tangentFromY = control.y;
       ctx.stroke();
       ctx.restore();
       // Arrowhead direction follows the curve's own tangent at B (its last segment, whichever
@@ -575,13 +570,8 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         const y2 = zoomedPriceScale(previewPoint.y);
         ctx.beginPath();
         ctx.moveTo(x1, y1);
-        const dx = x2 - x1;
-        const dy = y2 - y1;
-        const len = Math.hypot(dx, dy) || 1;
-        const bow = len * 0.28;
-        const cx = (x1 + x2) / 2 - (dy / len) * bow;
-        const cy = (y1 + y2) / 2 + (dx / len) * bow;
-        ctx.quadraticCurveTo(cx, cy, x2, y2);
+        const previewControl = forecastControlPoint(x1, y1, x2, y2);
+        ctx.quadraticCurveTo(previewControl.x, previewControl.y, x2, y2);
         ctx.stroke();
       } else {
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);

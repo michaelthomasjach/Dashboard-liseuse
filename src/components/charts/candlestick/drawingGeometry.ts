@@ -99,3 +99,37 @@ export function channelOffsetFromClick(p1: DataPoint, p2: DataPoint, click: Data
   const onLineY = x2i === x1i ? p1.y : p1.y + (p2.y - p1.y) * ((indexForDate(click.x) - x1i) / (x2i - x1i));
   return click.y - onLineY;
 }
+
+// "forecast"'s own quadratic-bezier control point — a fixed 28%-of-length offset perpendicular to
+// the straight A→B segment, the one formula both the committed render and its live preview (see
+// drawPriceDrawings.ts) build their curve from. Pulled out here (rather than left inlined in each
+// of those two spots, as it used to be) so hit-testing (see forecastCurvePoints below) can derive
+// hover/drag detection from the *exact* same curve that actually gets drawn, instead of drifting
+// out of sync with a second, hand-copied formula.
+export function forecastControlPoint(ax: number, ay: number, bx: number, by: number): { x: number; y: number } {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.hypot(dx, dy) || 1;
+  const bow = len * 0.28;
+  return { x: (ax + bx) / 2 - (dy / len) * bow, y: (ay + by) / 2 + (dx / len) * bow };
+}
+
+// "forecast"'s curve, sampled into a polyline for hit-testing (see useDrawingInteractions' own
+// hover-detection, which walks this the same "min distance over consecutive segments" way brush/
+// elliott/symbolOverlay already do for their own multi-point shapes) — a curved line has no single
+// straight chord a plain distanceToSegment call could test against, so this stands in for one.
+export function forecastCurvePoints(ax: number, ay: number, bx: number, by: number, steps = 24): { x: number; y: number }[] {
+  const c = forecastControlPoint(ax, ay, bx, by);
+  const points: { x: number; y: number }[] = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const mt = 1 - t;
+    // Quadratic Bézier: B(t) = (1-t)²·A + 2(1-t)t·C + t²·B — same curve ctx.quadraticCurveTo(cx,
+    // cy, bx, by) draws natively on canvas, just evaluated pointwise here instead.
+    points.push({
+      x: mt * mt * ax + 2 * mt * t * c.x + t * t * bx,
+      y: mt * mt * ay + 2 * mt * t * c.y + t * t * by,
+    });
+  }
+  return points;
+}

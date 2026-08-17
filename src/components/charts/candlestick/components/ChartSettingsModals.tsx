@@ -13,6 +13,8 @@ export interface ChartSettingsModalsProps {
   yAutoScalingState: boolean;
   setYAutoScalingState: (checked: boolean) => void;
   onYAutoScalingChange: ((value: boolean) => void) | undefined;
+  futureZoneVisible: boolean;
+  setFutureZoneVisible: (checked: boolean) => void;
   eventKinds: string[];
   hiddenEventKinds: Set<string>;
   setHiddenEventKinds: Dispatch<SetStateAction<Set<string>>>;
@@ -38,6 +40,8 @@ export function ChartSettingsModals({
   yAutoScalingState,
   setYAutoScalingState,
   onYAutoScalingChange,
+  futureZoneVisible,
+  setFutureZoneVisible,
   eventKinds,
   hiddenEventKinds,
   setHiddenEventKinds,
@@ -91,6 +95,11 @@ export function ChartSettingsModals({
               onYAutoScalingChange?.(checked);
             }}
             label="Rescale automatique de l'axe des prix au zoom"
+          />
+          <Checkbox
+            checked={futureZoneVisible}
+            onChange={setFutureZoneVisible}
+            label="Zone rayée après la dernière bougie"
           />
           {eventKinds.length > 0 && (
             <div className="lq-chart__settings-events">

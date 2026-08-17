@@ -76,9 +76,16 @@ export function Jumbotron({
       {backgroundImage && (
         <>
           <div ref={bgWrapRef} className="lq-jumbotron__bg-wrap">
-            <div className="lq-jumbotron__bg" style={{ backgroundImage: `url(${backgroundImage})` }} />
+            {/* Quoted, not a bare url(${backgroundImage}) — an unquoted CSS url() token can't
+                contain a literal, unescaped "(" or ")", which a data: URI (an SVG background
+                gradient's own url(#id) reference, say) can easily carry straight through
+                encodeURIComponent (it doesn't escape parentheses). An unescaped one there breaks
+                the whole url() token, and the browser drops the entire declaration — the image
+                just silently never appears. Quotes route around that: the CSS spec explicitly
+                allows literal parentheses inside a quoted url(). */}
+            <div className="lq-jumbotron__bg" style={{ backgroundImage: `url("${backgroundImage}")` }} />
             {imageFilter === "grayscale" && (
-              <div className="lq-jumbotron__bg-grayscale" style={{ backgroundImage: `url(${backgroundImage})` }} />
+              <div className="lq-jumbotron__bg-grayscale" style={{ backgroundImage: `url("${backgroundImage}")` }} />
             )}
           </div>
           <div className="lq-jumbotron__scrim" />

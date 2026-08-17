@@ -219,6 +219,7 @@ export function CandlestickChart({
     setVolumeSettingsOpen,
     yAutoScalingState,
     setYAutoScalingState,
+    futureZoneVisible, setFutureZoneVisible,
     now,
   } = useChartAppearance({ YAutoScaling, livePrice });
   // Swaps the whole chart body for SeasonalityView (see the `seasonality` prop's own doc
@@ -565,7 +566,7 @@ export function CandlestickChart({
       measurePoints,
       livePrice,
       visibleIndicators,
-      indexForDate,
+      indexForDate, futureZoneVisible,
     });
   }, [
     visible,
@@ -613,7 +614,7 @@ export function CandlestickChart({
     measurePoints,
     livePrice,
     visibleIndicators,
-    indexForDate,
+    indexForDate, futureZoneVisible,
     dims,
     plotBoundedHeight,
     themeTick,
@@ -958,15 +959,14 @@ export function CandlestickChart({
       />
 
       <ChartSettingsModals
-        settingsOpen={settingsOpen}
-        setSettingsOpen={setSettingsOpen}
-        upColorOverride={upColorOverride}
-        setUpColorOverride={setUpColorOverride}
+        settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen}
+        upColorOverride={upColorOverride} setUpColorOverride={setUpColorOverride}
         downColorOverride={downColorOverride}
         setDownColorOverride={setDownColorOverride}
         yAutoScalingState={yAutoScalingState}
         setYAutoScalingState={setYAutoScalingState}
         onYAutoScalingChange={onYAutoScalingChange}
+        futureZoneVisible={futureZoneVisible} setFutureZoneVisible={setFutureZoneVisible}
         eventKinds={eventKinds}
         hiddenEventKinds={hiddenEventKinds}
         setHiddenEventKinds={setHiddenEventKinds}

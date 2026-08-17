@@ -1,5 +1,6 @@
 import type { RenderCandlestickChartParams } from "../interfaces/RenderCandlestickChartParams.interface";
 import type { ChartCanvasStyle } from "../interfaces/ChartCanvasStyle.interface";
+import { drawFutureZone } from "./drawFutureZone";
 import { drawPriceCandles } from "./drawPriceCandles";
 import { drawPriceDrawings } from "./drawPriceDrawings";
 import { drawVolumeAndPanes } from "./drawVolumeAndPanes";
@@ -13,15 +14,17 @@ export type { RenderCandlestickChartParams } from "../interfaces/RenderCandlesti
  *  every file in this codebase under its 1000-line budget; the call site (still a `useEffect`, now
  *  just a thin wrapper around this) is unchanged in behavior.
  *
- *  Split into three phases, called in this fixed order: `drawPriceCandles` opens the price
- *  section's own clip and paints candles/gridlines/price-overlay indicators, leaving the clip
- *  open; `drawPriceDrawings` continues inside that same clip (every drawing type, tool previews,
- *  the live-price line, symbol overlays) and closes it; `drawVolumeAndPanes` paints outside the
- *  clip (volume, each "own"-pane indicator's own clipped strip, "vertical" drawings, the
- *  crosshair's vertical line). Splitting this way (rather than each phase re-opening its own
- *  independent clip) mirrors the source exactly as it always flowed as one function — the three
- *  phases share one canvas `save()`/`clip()`/`restore()` stack across the (synchronous, always
- *  same-order) calls below, not three independent ones. */
+ *  Split into four phases, called in this fixed order: `drawFutureZone` paints its own hatched
+ *  background marker first (see its own doc), entirely independent of the clip stack the other
+ *  three share; `drawPriceCandles` opens the price section's own clip and paints candles/
+ *  gridlines/price-overlay indicators, leaving the clip open; `drawPriceDrawings` continues inside
+ *  that same clip (every drawing type, tool previews, the live-price line, symbol overlays) and
+ *  closes it; `drawVolumeAndPanes` paints outside the clip (volume, each "own"-pane indicator's
+ *  own clipped strip, "vertical" drawings, the crosshair's vertical line). Splitting this way
+ *  (rather than each phase re-opening its own independent clip) mirrors the source exactly as it
+ *  always flowed as one function — the three clip-sharing phases share one canvas
+ *  `save()`/`clip()`/`restore()` stack across the (synchronous, always same-order) calls below,
+ *  not three independent ones. */
 export function renderCandlestickChart(canvas: HTMLCanvasElement, wrapper: HTMLElement, params: RenderCandlestickChartParams) {
   const { dims, plotBoundedHeight, upColorOverride, downColorOverride } = params;
   if (dims.boundedWidth <= 0 || plotBoundedHeight <= 0) return;
@@ -47,6 +50,7 @@ export function renderCandlestickChart(canvas: HTMLCanvasElement, wrapper: HTMLE
     isEink: wrapper.closest('[data-lq-palette="eink"]') !== null,
   };
 
+  drawFutureZone(ctx, params, style);
   drawPriceCandles(ctx, params, style);
   drawPriceDrawings(ctx, params, style);
   drawVolumeAndPanes(ctx, params, style);

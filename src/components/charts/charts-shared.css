@@ -224,7 +224,7 @@
   display: inline-block;
   width: 10px;
   height: 10px;
-  border-radius: 50%;
+  border-radius: var(--lq-radius-sm);
 }
 
 /* The native color picker trigger for that same row's own "Paramètres" (gear) action — kept in

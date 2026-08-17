@@ -76,4 +76,8 @@ export interface RenderCandlestickChartParams {
   livePrice: boolean;
   visibleIndicators: { indicator: Indicator; points: { i: number; value: IndicatorValue }[] }[];
   indexForDate: (d: Date) => number;
+  /** Draws a diagonal-hatched marker over the price pane's own "future" — from just past the last
+   *  candle to the plot's right edge — see drawFutureZone.ts. A chart-settings toggle, not a
+   *  prop; default false. */
+  futureZoneVisible: boolean;
 }

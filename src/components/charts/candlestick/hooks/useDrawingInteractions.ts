@@ -6,7 +6,15 @@ import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface"
 import type { DataPoint } from "../interfaces/DataPoint.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { FIBONACCI_LEVELS, FIBONACCI_EXTENSION_LEVELS, MULTI_POINT_TOOLS } from "../drawingCatalog";
-import { allPointsOf, distanceToSegment, round4, effectiveExtendOf, extendSegmentToEdges, channelOffsetFromClick } from "../drawingGeometry";
+import {
+  allPointsOf,
+  distanceToSegment,
+  round4,
+  effectiveExtendOf,
+  extendSegmentToEdges,
+  channelOffsetFromClick,
+  forecastCurvePoints,
+} from "../drawingGeometry";
 import { DRAWING_HIT_DISTANCE } from "../constants";
 
 /** Plain mutable ref shape (matches what `useRef` in another hook already returns) — used instead
@@ -778,6 +786,24 @@ export function useDrawingInteractions({
             );
           }
           d = Math.min(...distances);
+        } else if (dr.lineType === "forecast") {
+          // Same "polyline through sampled points" distance as brush/elliott/symbolOverlay above
+          // — "forecast" bows away from its own straight x1/y1→x2/y2 chord by up to 28% of that
+          // chord's own length (see forecastControlPoint's doc), so testing distance-to-the-chord
+          // itself would miss the actually-drawn curve almost entirely.
+          const fcx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const fcy1 = zoomedPriceScale(dr.y1);
+          const fcx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
+          const fcy2 = zoomedPriceScale(dr.y2);
+          const screenPoints = forecastCurvePoints(fcx1, fcy1, fcx2, fcy2);
+          let minSegmentDist = Infinity;
+          for (let i = 1; i < screenPoints.length; i++) {
+            minSegmentDist = Math.min(
+              minSegmentDist,
+              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
+            );
+          }
+          d = minSegmentDist;
         } else {
           const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
           const y1 = zoomedPriceScale(dr.y1);

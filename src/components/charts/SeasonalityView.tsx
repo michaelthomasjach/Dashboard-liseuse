@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from "react";
 import type { Candle } from "./CandlestickChart";
 import { computeSeasonality, type SeasonalityGranularity, type SeasonalityBucket } from "./internal/seasonality";
 import { LineAreaChart, type LineAreaChartHandle, type ChartSeries, type ChartPoint } from "./LineAreaChart";
-import { INDICATOR_COLORS } from "./candlestick/indicators";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
@@ -27,6 +26,13 @@ const GRANULARITY_LETTERS: Record<SeasonalityGranularity, string> = { week: "S",
 // US presidential elections land every 4 years on the nose (1788, 1792, … 2024, 2028…) — no
 // lookup table needed, just the one arithmetic fact.
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
+
+// A dedicated pastel palette for year lines — not indicators.ts's own INDICATOR_COLORS (sharper,
+// built for a single indicator line standing alone against the price series), since several
+// pastel lines sharing one small chart read as a *set* without any one of them fighting for
+// attention — only the current year (drawn thicker, see `series` below) is meant to stand out.
+// Literal hex, not a CSS var: a native `<input type="color">` can't open on a `var()` reference.
+const YEAR_PASTEL_COLORS = ["#a8c3e8", "#a8d8b8", "#f0c99a", "#e8b4c8", "#c9b8e8", "#9ed9d3"];
 
 /** A single letter rendered through the same 24x24/currentColor convention every other icon in
  *  this library follows (see IconBase) — filled text instead of a stroked glyph, since there's no
@@ -128,16 +134,15 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const hasCurrentYear = result.years.includes(currentYear);
 
   // A year's own line color: a caller override if one was ever set via the "Années affichées"
-  // list, else a slot in the same literal-hex palette indicators use for their own color picker
-  // (indicators.ts's own INDICATOR_COLORS, not the CSS-var-based CHART_PALETTE — a native
-  // `<input type="color">` can't open on a `var(--lq-color-x)` reference as its own `value`, only
-  // a resolvable hex, same reason indicators picked a literal palette for exactly this). Slot 0
-  // (a warm amber, nowhere near the plain "average" line's own blue accent) is reserved for the
-  // lone current-year overlay so the two can never coincide; `fallbackIndex` is otherwise the
-  // caller's choice of which slot — a year's own position among every included year, for
-  // independentYears.
+  // list, else a slot in YEAR_PASTEL_COLORS above — a literal hex palette (a native
+  // `<input type="color">` can't open on a `var(--lq-color-x)` reference as its own `value`, so
+  // this can't reuse CHART_PALETTE's CSS-var-based colors the way most of this library's
+  // categorical color-cycling does). Slot 0 (pastel blue, nowhere near the plain "average" line's
+  // own accent) is reserved for the lone current-year overlay so the two can never coincide;
+  // `fallbackIndex` is otherwise the caller's choice of which slot — a year's own position among
+  // every included year, for independentYears.
   function colorForYear(year: number, fallbackIndex: number): string {
-    return yearColors[year] ?? INDICATOR_COLORS[((fallbackIndex % INDICATOR_COLORS.length) + INDICATOR_COLORS.length) % INDICATOR_COLORS.length];
+    return yearColors[year] ?? YEAR_PASTEL_COLORS[((fallbackIndex % YEAR_PASTEL_COLORS.length) + YEAR_PASTEL_COLORS.length) % YEAR_PASTEL_COLORS.length];
   }
 
   // The single source of truth for "which color does this year's line actually render in right
