@@ -368,6 +368,31 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                       y1={0}
                       y2={dims.boundedHeight}
                     />
+                    {/* One per series, not the single muted line CandlestickChart's own
+                        hover price line is (see drawPriceCandles.ts) — that convention fits a
+                        single price series with nothing to tell apart; several simultaneous
+                        series here each need their own to actually trace back to the axis-value
+                        badge/dot that share its own color, or overlapping identical gray dashed
+                        lines would be indistinguishable. Only drawn in axisHoverLabels mode —
+                        the one other caller (PortfolioSummaryWidget) uses the floating tooltip
+                        instead and never asked for this. */}
+                    {axisHoverLabels &&
+                      hoverPoint.map(({ series: s, color, point }) =>
+                        point ? (
+                          <line
+                            key={`hline-${s.id}`}
+                            className="lq-chart__crosshair-line"
+                            x1={0}
+                            x2={dims.boundedWidth}
+                            y1={zoomedYScale(point.y)}
+                            y2={zoomedYScale(point.y)}
+                            // A plain `stroke` attribute loses to the class's own stylesheet rule
+                            // (SVG presentation attributes sit below any stylesheet in the cascade,
+                            // even a class selector) — `style` doesn't.
+                            style={{ stroke: color }}
+                          />
+                        ) : null
+                      )}
                     {hoverPoint.map(({ series: s, color, point }) =>
                       point ? (
                         <circle
