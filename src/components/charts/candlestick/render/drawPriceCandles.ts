@@ -6,8 +6,10 @@ import type { IndicatorSupertrendPoint } from "../interfaces/IndicatorSupertrend
 import type { IndicatorIchimokuPoint } from "../interfaces/IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "../interfaces/IndicatorGapPoint.interface";
 import type { IndicatorPivotPointsPoint } from "../interfaces/IndicatorPivotPointsPoint.interface";
+import type { IndicatorChandelierPoint } from "../interfaces/IndicatorChandelierPoint.interface";
 import { snapPixel } from "../drawingGeometry";
-import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
+import { drawPillLabel } from "../drawingRender";
+import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicatorCatalog";
 
 // "gaps"/"parabolicSar"/"pivotPoints" are point-based (a rectangle, a dot, or a single flat
 // segment all render fine on their own) rather than line-shaped like every other indicator here,
@@ -257,6 +259,86 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           ctx.moveTo(zoomedXScale(from.i + 0.5), zoomedPriceScale(from.value.value));
           ctx.lineTo(zoomedXScale(to.i + 0.5), zoomedPriceScale(to.value.value));
           ctx.stroke();
+        }
+      } else if (indicator.kind === "chandelierExit") {
+        // Two *broken* lines (only one active per bar, selected by `dir` — see
+        // IndicatorChandelierPoint's own doc), unlike Supertrend's own single always-connected
+        // line just above: the Pine Script original plots each stop with `style_linebr`, so the
+        // line stops entirely at the last bar of one direction and doesn't resume until that same
+        // direction returns, rather than jumping straight across to the other stop's own level.
+        const cePoints = points as { i: number; value: IndicatorChandelierPoint }[];
+        const strokeStop = (get: (v: IndicatorChandelierPoint) => number | null, lineColor: string) => {
+          ctx.save();
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = 2;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          let drawing = false;
+          for (const p of cePoints) {
+            const v = get(p.value);
+            if (v === null) {
+              drawing = false;
+              continue;
+            }
+            const x = zoomedXScale(p.i + 0.5);
+            const y = zoomedPriceScale(v);
+            if (!drawing) {
+              ctx.moveTo(x, y);
+              drawing = true;
+            } else ctx.lineTo(x, y);
+          }
+          ctx.stroke();
+          ctx.restore();
+        };
+        strokeStop((v) => (v.dir === 1 ? v.longStop : null), colorUp);
+        strokeStop((v) => (v.dir === -1 ? v.shortStop : null), colorDown);
+
+        // Fill between price (Pine's own `ohlc4`) and whichever stop is active, one small quad
+        // per consecutive same-direction pair rather than one big closed path — same technique
+        // Ichimoku's own cloud fill below already uses, since which stop (and so the fill's own
+        // color) is active can flip partway through.
+        if (indicator.chandelierHighlightState ?? true) {
+          ctx.save();
+          ctx.globalAlpha = 0.12;
+          for (let k = 1; k < cePoints.length; k++) {
+            const prev = cePoints[k - 1];
+            const curr = cePoints[k];
+            if (prev.value.dir !== curr.value.dir) continue;
+            const stop0 = prev.value.dir === 1 ? prev.value.longStop : prev.value.shortStop;
+            const stop1 = curr.value.dir === 1 ? curr.value.longStop : curr.value.shortStop;
+            const candle0 = data[prev.i];
+            const candle1 = data[curr.i];
+            const mid0 = (candle0.open + candle0.high + candle0.low + candle0.close) / 4;
+            const mid1 = (candle1.open + candle1.high + candle1.low + candle1.close) / 4;
+            const x0 = zoomedXScale(prev.i + 0.5);
+            const x1 = zoomedXScale(curr.i + 0.5);
+            ctx.fillStyle = curr.value.dir === 1 ? colorUp : colorDown;
+            ctx.beginPath();
+            ctx.moveTo(x0, zoomedPriceScale(mid0));
+            ctx.lineTo(x1, zoomedPriceScale(mid1));
+            ctx.lineTo(x1, zoomedPriceScale(stop1));
+            ctx.lineTo(x0, zoomedPriceScale(stop0));
+            ctx.closePath();
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        // A small dot, plus (optionally) a pill badge ("Achat"/"Vente"), at the exact bar `dir`
+        // flips — Pine's own `plotshape(..., style=shape.circle)` and `shape.labelup/labeldown`.
+        for (const p of cePoints) {
+          if (!p.value.buySignal && !p.value.sellSignal) continue;
+          const isBuy = p.value.buySignal;
+          const x = zoomedXScale(p.i + 0.5);
+          const y = zoomedPriceScale(isBuy ? p.value.longStop : p.value.shortStop);
+          const signalColor = isBuy ? colorUp : colorDown;
+          ctx.beginPath();
+          ctx.fillStyle = signalColor;
+          ctx.arc(x, y, 3, 0, Math.PI * 2);
+          ctx.fill();
+          if (indicator.chandelierShowLabels ?? true) {
+            drawPillLabel(ctx, x, isBuy ? y + 18 : y - 18, isBuy ? "Achat" : "Vente", signalColor, colorBg, fontFamily, "center");
+          }
         }
       } else if (indicator.kind === "ichimoku") {
         const icPoints = points as { i: number; value: IndicatorIchimokuPoint }[];

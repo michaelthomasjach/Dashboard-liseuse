@@ -10,7 +10,7 @@ import {
 } from "../drawingCatalog";
 import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint, rangeForecastMaxMin } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender";
-import { defaultIndicatorColor } from "../indicators";
+import { defaultIndicatorColor } from "../indicatorCatalog";
 import { drawPitchforkDrawings } from "./drawPitchfork";
 import { drawRangeForecastDrawings } from "./drawRangeForecast";
 import { drawHeadShouldersDrawings } from "./drawHeadShoulders";

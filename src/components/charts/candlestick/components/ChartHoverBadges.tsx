@@ -7,7 +7,7 @@ import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorValue } from "../interfaces/IndicatorValue.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { ChartEvent } from "../interfaces/ChartEvent.interface";
-import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
+import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicatorCatalog";
 import { CROSSHAIR_ADD_INSET, LIVE_COUNTDOWN_OFFSET } from "../constants";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS, EVENT_TOOLTIP_WIDTH, EVENT_TOOLTIP_GAP } from "../eventsCatalog";
 import { formatCountdown, formatCompactNumber } from "../formatting";

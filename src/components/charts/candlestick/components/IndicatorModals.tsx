@@ -8,7 +8,7 @@ import { SearchIcon, SettingsIcon, TrashIcon, OverlayBadgeIcon, PaneBadgeIcon } 
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { CustomIndicatorDef } from "../interfaces/CustomIndicatorDef.interface";
-import { INDICATOR_CATALOG, type IndicatorCatalogEntry, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "../indicators";
+import { INDICATOR_CATALOG, type IndicatorCatalogEntry, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "../indicatorCatalog";
 import { drawingToolMeta, drawingLabel } from "../drawingCatalog";
 
 export interface IndicatorModalsProps {
@@ -413,6 +413,33 @@ export function IndicatorModals({
               onChange={(v) => setIndicatorDraft({ ...indicatorDraft, supertrendMultiplier: v === "" ? indicatorDraft.supertrendMultiplier : v })}
             />
           )}
+          {indicatorDraft.kind === "chandelierExit" && (
+            <>
+              <NumberField
+                label="Multiplicateur ATR"
+                min={0.5}
+                max={10}
+                step={0.1}
+                value={indicatorDraft.chandelierMultiplier ?? 3}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, chandelierMultiplier: v === "" ? indicatorDraft.chandelierMultiplier : v })}
+              />
+              <Checkbox
+                label="Utiliser le prix de clôture pour les extrêmes"
+                checked={indicatorDraft.chandelierUseClose ?? true}
+                onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, chandelierUseClose: checked })}
+              />
+              <Checkbox
+                label="Afficher les labels Achat/Vente"
+                checked={indicatorDraft.chandelierShowLabels ?? true}
+                onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, chandelierShowLabels: checked })}
+              />
+              <Checkbox
+                label="Surligner l'état (remplissage)"
+                checked={indicatorDraft.chandelierHighlightState ?? true}
+                onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, chandelierHighlightState: checked })}
+              />
+            </>
+          )}
           {indicatorDraft.kind === "parabolicSar" && (
             <div className="lq-chart__edit-drawing-row">
               <NumberField
@@ -505,10 +532,12 @@ export function IndicatorModals({
             </div>
           )}
           {/* Supertrend always uses the chart's own up/down colors (so its trend flips read
-              consistently with candle coloring) and Parabolic SAR colors each dot by which side
-              of price it's on — neither reads `color` at all, so the picker would be a dead
-              control for them. */}
-          {indicatorDraft.kind !== "supertrend" && indicatorDraft.kind !== "parabolicSar" && (
+              consistently with candle coloring), Parabolic SAR colors each dot by which side of
+              price it's on, and Chandelier Exit colors both its stops/fill/signals the same
+              up/down way — none of the three reads `color` at all, so the picker would be a dead
+              control for them. ADX *does* read it (for its own ADX line only — +DI/-DI stay
+              fixed), so it's deliberately not excluded here. */}
+          {indicatorDraft.kind !== "supertrend" && indicatorDraft.kind !== "parabolicSar" && indicatorDraft.kind !== "chandelierExit" && (
             <div className="lq-field">
               <label className="lq-field__label">Couleur</label>
               <input

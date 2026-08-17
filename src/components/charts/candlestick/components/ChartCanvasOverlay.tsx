@@ -8,7 +8,7 @@ import type { DataPoint } from "../interfaces/DataPoint.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import type { ChartEvent } from "../interfaces/ChartEvent.interface";
 import { allPointsOf, snapPixel } from "../drawingGeometry";
-import { isFundamentalKind, formatFundamentalValue } from "../indicators";
+import { isFundamentalKind, formatFundamentalValue } from "../indicatorCatalog";
 import { AXIS_HANDLE_FRACTION_X, AXIS_HANDLE_FRACTION_Y } from "../constants";
 import { EVENT_MARKER_OFFSET, EVENT_MARKER_RADIUS } from "../eventsCatalog";
 

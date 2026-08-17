@@ -6,7 +6,7 @@ import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import type { SymbolSearchResult } from "../interfaces/SymbolSearchResult.interface";
 import { DRAWING_TOOL_CATEGORIES, categoryOfTool } from "../drawingCatalog";
 import { EMPTY_DRAWINGS } from "../constants";
-import { defaultIndicatorColor } from "../indicators";
+import { defaultIndicatorColor } from "../indicatorCatalog";
 import { offsetDrawingUp } from "../drawingGeometry";
 
 export interface UseDrawingStateArgs {

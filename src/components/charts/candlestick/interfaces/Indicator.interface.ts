@@ -46,6 +46,18 @@ export interface Indicator {
    *  the daily bars most charts here actually show, it produces a new (unreadable) segment every
    *  single candle. */
   pivotPeriod?: "daily" | "weekly" | "monthly";
+  /** "chandelierExit" only — the ATR multiplier both stops are offset by (`period` above doubles
+   *  as its own ATR length and the highest/lowest lookback, same reuse `supertrendMultiplier`'s
+   *  own doc explains for Supertrend). Default 3, the Pine Script original's own default. */
+  chandelierMultiplier?: number;
+  /** "chandelierExit" only — highest/lowest *close* over the lookback (the Pine original's own
+   *  default) instead of highest high / lowest low, before the ATR offset. Default true. */
+  chandelierUseClose?: boolean;
+  /** "chandelierExit" only — a pill badge at each direction flip ("Achat"/"Vente"). Default true. */
+  chandelierShowLabels?: boolean;
+  /** "chandelierExit" only — fills the region between price and whichever stop is currently
+   *  active. Default true. */
+  chandelierHighlightState?: boolean;
   /** Set once this indicator represents a `CustomIndicatorDef` the caller supplied via
    *  `CandlestickChartProps.customIndicators`, rather than one of the library's own built-in
    *  kinds — `kind` itself is meaningless in that case ("custom" exists in `IndicatorKind` purely

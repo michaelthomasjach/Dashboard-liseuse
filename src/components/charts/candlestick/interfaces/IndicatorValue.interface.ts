@@ -5,6 +5,8 @@ import type { IndicatorSupertrendPoint } from "./IndicatorSupertrendPoint.interf
 import type { IndicatorIchimokuPoint } from "./IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "./IndicatorGapPoint.interface";
 import type { IndicatorPivotPointsPoint } from "./IndicatorPivotPointsPoint.interface";
+import type { IndicatorADXPoint } from "./IndicatorADXPoint.interface";
+import type { IndicatorChandelierPoint } from "./IndicatorChandelierPoint.interface";
 
 /** Every shape a single indicator value can take, in one place — every file that used to spell
  *  out this union inline (indicators.ts, useIndicatorPaneScales.ts,
@@ -22,4 +24,6 @@ export type IndicatorValue =
   | IndicatorSupertrendPoint
   | IndicatorIchimokuPoint
   | IndicatorGapPoint
-  | IndicatorPivotPointsPoint;
+  | IndicatorPivotPointsPoint
+  | IndicatorADXPoint
+  | IndicatorChandelierPoint;

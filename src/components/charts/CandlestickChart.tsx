@@ -72,7 +72,7 @@ export type {
 };
 
 import { drawingLabel } from "./candlestick/drawingCatalog";
-import { indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "./candlestick/indicators";
+import { indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "./candlestick/indicatorCatalog";
 import { CHART_DISPLAY_MODES } from "./candlestick/chartModes";
 import { findTimeframeLabel } from "./candlestick/timeframes";
 import {

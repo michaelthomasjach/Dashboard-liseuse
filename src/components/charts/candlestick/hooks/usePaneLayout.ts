@@ -2,8 +2,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import * as d3 from "d3";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { CustomIndicatorDef } from "../interfaces/CustomIndicatorDef.interface";
-import type { IndicatorCatalogEntry } from "../indicators";
-import { indicatorCatalogEntry } from "../indicators";
+import type { IndicatorCatalogEntry } from "../indicatorCatalog";
+import { indicatorCatalogEntry } from "../indicatorCatalog";
 import {
   DEFAULT_PANE_HEIGHT_FRACTION,
   MIN_PANE_HEIGHT_FRACTION,

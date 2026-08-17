@@ -4,7 +4,7 @@ import { ChevronDownIcon, ChevronUpIcon, SettingsIcon, TrashIcon, GripIcon } fro
 import type { Candle } from "../interfaces/Candle.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorValue } from "../interfaces/IndicatorValue.interface";
-import { isFundamentalKind, formatFundamentalValue } from "../indicators";
+import { isFundamentalKind, formatFundamentalValue } from "../indicatorCatalog";
 
 export interface PaneHeadersProps {
   volumeVisible: boolean;
@@ -290,7 +290,9 @@ export function PaneHeaders({
                         ? `MACD ${value.macd.toFixed(2)} · Signal ${value.signal !== null ? value.signal.toFixed(2) : "–"} · Hist ${
                             value.histogram !== null ? value.histogram.toFixed(2) : "–"
                           }`
-                        : null}
+                        : "adx" in value
+                          ? `ADX ${value.adx.toFixed(2)} · +DI ${value.plusDI.toFixed(2)} · -DI ${value.minusDI.toFixed(2)}`
+                          : null}
                   </span>
                 );
               })()}

@@ -6,7 +6,8 @@ import type { Indicator } from "../interfaces/Indicator.interface";
 import type { IndicatorValue } from "../interfaces/IndicatorValue.interface";
 import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
-import { computeIndicatorValues, indicatorLabel } from "../indicators";
+import { computeIndicatorValues } from "../indicators";
+import { indicatorLabel } from "../indicatorCatalog";
 
 export interface UseIndicatorPaneScalesArgs {
   data: Candle[];
@@ -78,7 +79,7 @@ export function useIndicatorPaneScales({
     const scales: Record<string, d3.ScaleLinear<number, number>> = {};
     ownPaneIndicators.forEach((ind, idx) => {
       const height = indicatorPaneHeights[idx];
-      if (ind.kind === "rsi" || ind.kind === "chop") {
+      if (ind.kind === "rsi" || ind.kind === "chop" || ind.kind === "adx") {
         scales[ind.id] = d3.scaleLinear().domain([0, 100]).range([height, 0]);
       } else if (ind.kind === "macd") {
         const points = (visibleIndicators.find((v) => v.indicator.id === ind.id)?.points ?? []) as { i: number; value: IndicatorMACD }[];

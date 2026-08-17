@@ -1,9 +1,10 @@
 import type { RenderCandlestickChartParams } from "../interfaces/RenderCandlestickChartParams.interface";
 import type { ChartCanvasStyle } from "../interfaces/ChartCanvasStyle.interface";
 import type { IndicatorMACD } from "../interfaces/IndicatorMACD.interface";
+import type { IndicatorADXPoint } from "../interfaces/IndicatorADXPoint.interface";
 import { snapPixel } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText } from "../drawingRender";
-import { defaultIndicatorColor } from "../indicators";
+import { defaultIndicatorColor } from "../indicatorCatalog";
 
 /** Phase 3 of `renderCandlestickChart`, painted outside the price section's own clip: the volume
  *  pane's bars and any "horizontal"/"ray" drawing anchored to it, each "own"-pane indicator's
@@ -235,6 +236,31 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
           }
         }
         ctx.stroke();
+      } else if (ind.kind === "adx") {
+        // Three independent lines sharing this pane's own fixed 0-100 scale (see
+        // useIndicatorPaneScales) — the ADX line itself in this indicator's own configurable
+        // color (the "how strong" reading), +DI/-DI in the chart's own up/down colors (the "which
+        // direction" reading, same fixed-by-meaning convention Supertrend/Parabolic SAR already
+        // use for their own directional coloring rather than a single user-picked color).
+        const adxPoints = points as { i: number; value: IndicatorADXPoint }[];
+        const strokeField = (get: (v: IndicatorADXPoint) => number, lineColor: string, lineWidth: number) => {
+          ctx.save();
+          ctx.strokeStyle = lineColor;
+          ctx.lineWidth = lineWidth;
+          ctx.setLineDash([]);
+          ctx.beginPath();
+          adxPoints.forEach((p, k) => {
+            const x = zoomedXScale(p.i + 0.5);
+            const y = scale(get(p.value));
+            if (k === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          });
+          ctx.stroke();
+          ctx.restore();
+        };
+        strokeField((v) => v.plusDI, colorUp, 1);
+        strokeField((v) => v.minusDI, colorDown, 1);
+        strokeField((v) => v.adx, color, 1.5);
       } else if (ind.customData?.draw === "histogram") {
         // Same zero-baseline bar shape as MACD's own histogram above, just against this pane's
         // own auto-fit scale instead of MACD's fixed one — `scale(0)` still works as a baseline
