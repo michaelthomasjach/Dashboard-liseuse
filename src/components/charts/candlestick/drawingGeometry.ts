@@ -114,6 +114,23 @@ export function forecastControlPoint(ax: number, ay: number, bx: number, by: num
   return { x: (ax + bx) / 2 - (dy / len) * bow, y: (ay + by) / 2 + (dx / len) * bow };
 }
 
+// "rangeForecast"'s own Max/Min band width, as a fraction of the 2nd ("direction") click's own
+// price distance from the start — a bigger projected move gets a proportionally wider band.
+const RANGE_FORECAST_BAND_RATIO = 0.25;
+
+// "rangeForecast" only takes 2 clicks — the start and a "direction" click that's never itself
+// stored, only used to derive where Max/Min first land (see TrendLineDrawing.lineType's own doc)
+// — both then ordinary, independently draggable points like any other tool's. Max/Min bracket the
+// direction click's own price symmetrically (by RANGE_FORECAST_BAND_RATIO of its distance from
+// the start), sharing its date, so their own average lands exactly on the direction click itself.
+export function rangeForecastMaxMin(start: DataPoint, direction: DataPoint): { max: DataPoint; min: DataPoint } {
+  const spread = Math.abs(direction.y - start.y) * RANGE_FORECAST_BAND_RATIO;
+  return {
+    max: { x: direction.x, y: round4(direction.y + spread) },
+    min: { x: direction.x, y: round4(direction.y - spread) },
+  };
+}
+
 // "forecast"'s curve, sampled into a polyline for hit-testing (see useDrawingInteractions' own
 // hover-detection, which walks this the same "min distance over consecutive segments" way brush/
 // elliott/symbolOverlay already do for their own multi-point shapes) — a curved line has no single

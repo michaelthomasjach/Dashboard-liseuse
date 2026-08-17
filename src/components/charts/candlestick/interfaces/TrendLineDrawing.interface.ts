@@ -125,11 +125,15 @@ export interface TrendLineDrawing {
    *  free two-point tool like a plain trend line, but drawn as a curved (not straight) arrow from
    *  x1/y1 to x2/y2, each end labeled with its own price/date, and the end additionally with the
    *  price change and elapsed time from the start — a price-projection annotation, not a support/
-   *  resistance line. "rangeForecast" is a 4-point tool — x1/y1 (the starting/"Current" point),
-   *  x2/y2 (the "Max" target), extraPoints[0] ("Avg"), extraPoints[1] ("Min") — drawn as three
-   *  straight lines fanning out from the same start point (Max/Min solid, Avg dotted), the
-   *  triangular area between the Max and Min lines filled, each end labeled with its own price and
-   *  % change from the start. */
+   *  resistance line. "rangeForecast" only takes 2 clicks — x1/y1 (the starting/"Current" point)
+   *  and a 2nd "direction" click that's never itself stored, only used to *derive* x2/y2 (the
+   *  "Max" target) and extraPoints[0] (the "Min" target) — see rangeForecastMaxMin — each then an
+   *  ordinary, independently draggable point like any other tool's. Drawn as three straight lines
+   *  fanning out from the same start point to Max, to Min, and to their own midpoint ("Avg",
+   *  dotted) — Avg is never a stored point of its own, always recomputed from Max/Min at render/
+   *  hit-test time, so dragging Max or Min alone keeps it correct with no extra bookkeeping. The
+   *  triangular area between the Max and Min lines is filled, and every end is labeled with its
+   *  own price and % change from the start. */
   lineType?:
     | "horizontal"
     | "vertical"
@@ -170,7 +174,8 @@ export interface TrendLineDrawing {
    *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
    *  (line 2's own two points — see `lineType` above for how they're derived), "headShoulders" 3
    *  (right shoulder, then the neckline's own two points), every pitchfork variant 1 (P2),
-   *  "rangeForecast" 2 (Avg, then Min). Unused otherwise. */
+   *  "rangeForecast" 1 (its own Min — see `lineType` above for how it and x2/y2's own Max are
+   *  first derived). Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
   /** "zones" only: x1/y1 and x2/y2 are still opposite corners like "rectangle", but split the
    *  price pane into three horizontal bands instead of one filled box — above the higher of the

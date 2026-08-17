@@ -64,10 +64,14 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
   schiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
   modifiedSchiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
   insidePitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
-  // x1/y1 = Current (the fan's own shared start), x2/y2 = Max, extraPoints[0] = Avg,
-  // extraPoints[1] = Min — 3 independently-clicked targets, same "related but separate points"
-  // idea disjointChannel/fibonacciExtension already use.
-  rangeForecast: { extraPoints: 2, labels: ["Point de départ", "Maximum", "Moyenne", "Minimum"] },
+  // Listed here *only* for these labels — same "edit-modal labels only, placement is entirely
+  // custom" reasoning disjointChannel's own doc above already explains. x1/y1 = Point de départ
+  // (Current), x2/y2 = Max, extraPoints[0] = Min — both Max and Min are first *derived*
+  // automatically from the tool's 2nd click (see rangeForecastMaxMin), then freely draggable by
+  // hand afterward like any other point. Avg is never one of this drawing's own stored points —
+  // always the midpoint of Max/Min, recomputed wherever it's needed (rendering, hit-testing) so
+  // it never drifts out of sync after Max/Min are redragged.
+  rangeForecast: { extraPoints: 1, labels: ["Point de départ", "Max", "Min"] },
 };
 
 // Short vertex labels drawn directly on the chart next to each point — distinct from

@@ -5,21 +5,11 @@ import type { Indicator } from "../interfaces/Indicator.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DataPoint } from "../interfaces/DataPoint.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
-import { FIBONACCI_LEVELS, FIBONACCI_EXTENSION_LEVELS, MULTI_POINT_TOOLS } from "../drawingCatalog";
-import {
-  allPointsOf,
-  distanceToSegment,
-  round4,
-  effectiveExtendOf,
-  extendSegmentToEdges,
-  channelOffsetFromClick,
-  forecastCurvePoints,
-} from "../drawingGeometry";
-import { pitchforkLines } from "../pitchforkGeometry";
-import type { PitchforkVariant } from "../pitchforkGeometry";
+import { MULTI_POINT_TOOLS } from "../drawingCatalog";
+import { round4, channelOffsetFromClick, rangeForecastMaxMin } from "../drawingGeometry";
+import { distanceToDrawing } from "../drawingHitTest";
+import type { HitTestContext } from "../drawingHitTest";
 import { DRAWING_HIT_DISTANCE } from "../constants";
-
-const PITCHFORK_LINE_TYPES = new Set(["pitchfork", "schiffPitchfork", "modifiedSchiffPitchfork", "insidePitchfork"]);
 
 /** Plain mutable ref shape (matches what `useRef` in another hook already returns) — used instead
  *  of React's own `RefObject<T>` because that type's `current` is only ever mutable when the ref
@@ -345,6 +335,32 @@ export function useDrawingInteractions({
       return;
     }
 
+    // "rangeForecast" only takes 2 clicks — the start, then a "direction" click that's never
+    // itself stored, only used to derive where Max/Min first land (see rangeForecastMaxMin) —
+    // both then ordinary, independently draggable points like any other tool's.
+    if (activeTool === "rangeForecast") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      const { max, min } = rangeForecastMaxMin(pendingPoint, point);
+      commitDrawings([
+        ...drawings,
+        {
+          id: `drawing-${drawingIdRef.current++}`,
+          x1: pendingPoint.x,
+          y1: pendingPoint.y,
+          x2: max.x,
+          y2: max.y,
+          lineType: "rangeForecast",
+          extraPoints: [min],
+        },
+      ]);
+      cancelDrawingTool();
+      return;
+    }
+
     // "fibonacciExtension"/"elliottCorrection"/"elliottImpulse" all collect more than two points
     // — the first two go through the same pendingPoint/pendingSecondPoint stages "channel" uses
     // above, the rest accumulate into pendingExtraPoints until MULTI_POINT_TOOLS' count for this
@@ -661,201 +677,9 @@ export function useDrawingInteractions({
     } else if (!activeTool && visibleDrawings.length > 0) {
       let closestId: string | null = null;
       let closestDist = DRAWING_HIT_DISTANCE;
+      const hitTestCtx: HitTestContext = { dims, plotBoundedHeight, priceHeight, zoomedXScale, zoomedPriceScale, indexForDate, pixelYForDrawing, overlayProjections };
       for (const dr of visibleDrawings) {
-        // Axis-constrained lines render full-span (see the canvas draw effect below) rather
-        // than between their stored x1/x2 pixel positions, so hit-testing has to match that.
-        let d: number;
-        if (dr.lineType === "horizontal") {
-          const y = pixelYForDrawing(dr);
-          d = distanceToSegment(mouseX, mouseY, 0, y, dims.boundedWidth, y);
-        } else if (dr.lineType === "ray") {
-          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const y = pixelYForDrawing(dr);
-          d = distanceToSegment(mouseX, mouseY, x, y, dims.boundedWidth, y);
-        } else if (dr.lineType === "vertical") {
-          const x = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          d = distanceToSegment(mouseX, mouseY, x, 0, x, plotBoundedHeight);
-        } else if (dr.lineType === "channel") {
-          const cx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const cy1 = zoomedPriceScale(dr.y1);
-          const cx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const cy2 = zoomedPriceScale(dr.y2);
-          const offsetPx = zoomedPriceScale(dr.y1 + (dr.channelOffset ?? 0)) - zoomedPriceScale(dr.y1);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, cx1, cy1, cx2, cy2),
-            distanceToSegment(mouseX, mouseY, cx1, cy1 + offsetPx, cx2, cy2 + offsetPx)
-          );
-        } else if (dr.lineType === "fibonacci") {
-          const fx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const fx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          d = Math.min(
-            // The diagonal x1/y1–x2/y2 line itself, same as a regular trend line...
-            distanceToSegment(mouseX, mouseY, fx1, zoomedPriceScale(dr.y1), fx2, zoomedPriceScale(dr.y2)),
-            // ...plus whichever retracement level line is closest.
-            ...FIBONACCI_LEVELS.map((ratio) => {
-              const y = zoomedPriceScale(dr.y1 + (dr.y2 - dr.y1) * ratio);
-              return distanceToSegment(mouseX, mouseY, fx1, y, fx2, y);
-            })
-          );
-        } else if (
-          dr.lineType === "elliottImpulse" ||
-          dr.lineType === "elliottCorrection" ||
-          dr.lineType === "brush" ||
-          dr.lineType === "elbowArrow" ||
-          dr.lineType === "headShoulders"
-        ) {
-          // Same "polyline through every point" distance for a freehand stroke, an open-ended
-          // elbow-arrow polyline, or an Elliott wave's/Head & Shoulders' own fixed vertices.
-          const screenPoints = allPointsOf(dr).map((p) => ({ x: zoomedXScale(indexForDate(p.x) + 0.5), y: zoomedPriceScale(p.y) }));
-          let minSegmentDist = Infinity;
-          for (let i = 1; i < screenPoints.length; i++) {
-            minSegmentDist = Math.min(
-              minSegmentDist,
-              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
-            );
-          }
-          d = minSegmentDist;
-        } else if (dr.lineType === "rectangle") {
-          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const ry1 = zoomedPriceScale(dr.y1);
-          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const ry2 = zoomedPriceScale(dr.y2);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, rx1, ry1, rx2, ry1),
-            distanceToSegment(mouseX, mouseY, rx2, ry1, rx2, ry2),
-            distanceToSegment(mouseX, mouseY, rx2, ry2, rx1, ry2),
-            distanceToSegment(mouseX, mouseY, rx1, ry2, rx1, ry1)
-          );
-        } else if (dr.lineType === "zones") {
-          // Unlike "rectangle" above (outline-only hit-testing), the three bands together fill
-          // the whole pane height for this x-range — so anywhere inside that column counts as a
-          // direct hit (d = 0), not just near one of the two boundary lines.
-          const rx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const rx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const left = Math.min(rx1, rx2);
-          const right = Math.max(rx1, rx2);
-          d =
-            mouseX >= left && mouseX <= right && mouseY >= 0 && mouseY <= priceHeight
-              ? 0
-              : Math.min(
-                  distanceToSegment(mouseX, mouseY, left, 0, right, 0),
-                  distanceToSegment(mouseX, mouseY, left, priceHeight, right, priceHeight),
-                  distanceToSegment(mouseX, mouseY, left, 0, left, priceHeight),
-                  distanceToSegment(mouseX, mouseY, right, 0, right, priceHeight)
-                );
-        } else if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
-          d = Math.hypot(mouseX - zoomedXScale(indexForDate(dr.x1) + 0.5), mouseY - zoomedPriceScale(dr.y1));
-        } else if (dr.lineType === "symbolOverlay") {
-          // Same "polyline through every point" distance as a freehand stroke — over its own
-          // projected (rebased-to-price-space) points, not x1/y1/x2/y2, which aren't meaningful
-          // for this lineType (see its own doc comment).
-          const projection = overlayProjections.find((p) => p.drawing.id === dr.id);
-          const screenPoints = (projection?.points ?? []).map((p) => ({ x: zoomedXScale(p.i + 0.5), y: zoomedPriceScale(p.price) }));
-          let minSegmentDist = Infinity;
-          for (let i = 1; i < screenPoints.length; i++) {
-            minSegmentDist = Math.min(
-              minSegmentDist,
-              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
-            );
-          }
-          d = minSegmentDist;
-        } else if (dr.lineType === "fibonacciExtension") {
-          const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const ay = zoomedPriceScale(dr.y1);
-          const bx = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const by = zoomedPriceScale(dr.y2);
-          const distances = [distanceToSegment(mouseX, mouseY, ax, ay, bx, by)];
-          const pointC = dr.extraPoints?.[0];
-          if (pointC) {
-            const cx = zoomedXScale(indexForDate(pointC.x) + 0.5);
-            const cy = zoomedPriceScale(pointC.y);
-            distances.push(distanceToSegment(mouseX, mouseY, bx, by, cx, cy));
-            const legDelta = dr.y2 - dr.y1;
-            const levelX1 = Math.min(bx, cx);
-            const levelX2 = Math.max(bx, cx);
-            for (const ratio of FIBONACCI_EXTENSION_LEVELS) {
-              const y = zoomedPriceScale(pointC.y + legDelta * ratio);
-              distances.push(distanceToSegment(mouseX, mouseY, levelX1, y, levelX2, y));
-            }
-          }
-          d = Math.min(...distances);
-        } else if (dr.lineType === "disjointChannel") {
-          const jx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const jy1 = zoomedPriceScale(dr.y1);
-          const jx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const jy2 = zoomedPriceScale(dr.y2);
-          const distances = [distanceToSegment(mouseX, mouseY, jx1, jy1, jx2, jy2)];
-          const [p3, p4] = dr.extraPoints ?? [];
-          if (p3 && p4) {
-            distances.push(
-              distanceToSegment(
-                mouseX,
-                mouseY,
-                zoomedXScale(indexForDate(p3.x) + 0.5),
-                zoomedPriceScale(p3.y),
-                zoomedXScale(indexForDate(p4.x) + 0.5),
-                zoomedPriceScale(p4.y)
-              )
-            );
-          }
-          d = Math.min(...distances);
-        } else if (PITCHFORK_LINE_TYPES.has(dr.lineType ?? "") && dr.extraPoints?.length) {
-          // Same 3 extended lines the renderer itself draws (see pitchforkLines' own doc) —
-          // reused verbatim rather than re-derived here, so hovering always matches what's shown.
-          const p0 = { x: zoomedXScale(indexForDate(dr.x1) + 0.5), y: zoomedPriceScale(dr.y1) };
-          const p1 = { x: zoomedXScale(indexForDate(dr.x2) + 0.5), y: zoomedPriceScale(dr.y2) };
-          const p2Point = dr.extraPoints[0];
-          const p2 = { x: zoomedXScale(indexForDate(p2Point.x) + 0.5), y: zoomedPriceScale(p2Point.y) };
-          const { median, tine1, tine2 } = pitchforkLines(p0, p1, p2, dr.lineType as PitchforkVariant, 0, dims.boundedWidth);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, median.x1, median.y1, median.x2, median.y2),
-            distanceToSegment(mouseX, mouseY, tine1.x1, tine1.y1, tine1.x2, tine1.y2),
-            distanceToSegment(mouseX, mouseY, tine2.x1, tine2.y1, tine2.x2, tine2.y2)
-          );
-        } else if (dr.lineType === "rangeForecast" && (dr.extraPoints?.length ?? 0) >= 2) {
-          // Three independent segments fanning from the same start point (Current) to Max/Avg/
-          // Min — unlike every other polyline type above, they don't chain point-to-point.
-          const [avgPoint, minPoint] = dr.extraPoints!;
-          const sx = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const sy = zoomedPriceScale(dr.y1);
-          d = Math.min(
-            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(dr.x2) + 0.5), zoomedPriceScale(dr.y2)),
-            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(avgPoint.x) + 0.5), zoomedPriceScale(avgPoint.y)),
-            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(minPoint.x) + 0.5), zoomedPriceScale(minPoint.y))
-          );
-        } else if (dr.lineType === "forecast") {
-          // Same "polyline through sampled points" distance as brush/elliott/symbolOverlay above
-          // — "forecast" bows away from its own straight x1/y1→x2/y2 chord by up to 28% of that
-          // chord's own length (see forecastControlPoint's doc), so testing distance-to-the-chord
-          // itself would miss the actually-drawn curve almost entirely.
-          const fcx1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const fcy1 = zoomedPriceScale(dr.y1);
-          const fcx2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const fcy2 = zoomedPriceScale(dr.y2);
-          const screenPoints = forecastCurvePoints(fcx1, fcy1, fcx2, fcy2);
-          let minSegmentDist = Infinity;
-          for (let i = 1; i < screenPoints.length; i++) {
-            minSegmentDist = Math.min(
-              minSegmentDist,
-              distanceToSegment(mouseX, mouseY, screenPoints[i - 1].x, screenPoints[i - 1].y, screenPoints[i].x, screenPoints[i].y)
-            );
-          }
-          d = minSegmentDist;
-        } else {
-          const x1 = zoomedXScale(indexForDate(dr.x1) + 0.5);
-          const y1 = zoomedPriceScale(dr.y1);
-          const x2 = zoomedXScale(indexForDate(dr.x2) + 0.5);
-          const y2 = zoomedPriceScale(dr.y2);
-          // A regular trend line ("extended" included — see effectiveExtendOf) can be extended
-          // past x1/x2 via the Style tab, not only when drawn with the dedicated tool.
-          const extend = effectiveExtendOf(dr);
-          if (extend === "none") {
-            d = distanceToSegment(mouseX, mouseY, x1, y1, x2, y2);
-          } else {
-            const extended = extendSegmentToEdges(x1, y1, x2, y2, 0, dims.boundedWidth, extend);
-            d = distanceToSegment(mouseX, mouseY, extended.x1, extended.y1, extended.x2, extended.y2);
-          }
-        }
+        const d = distanceToDrawing(dr, mouseX, mouseY, hitTestCtx);
         if (d < closestDist) {
           closestDist = d;
           closestId = dr.id;

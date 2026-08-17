@@ -9,7 +9,7 @@ import {
   HEAD_SHOULDERS_VERTEX_LABELS,
   MULTI_POINT_TOOLS,
 } from "../drawingCatalog";
-import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint } from "../drawingGeometry";
+import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint, rangeForecastMaxMin } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender";
 import { defaultIndicatorColor } from "../indicators";
 import { drawPitchforkDrawings } from "./drawPitchfork";
@@ -544,6 +544,24 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);
         const y2 = zoomedPriceScale(previewPoint.y);
         ctx.strokeRect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(x2 - x1), Math.abs(y2 - y1));
+      } else if (activeTool === "rangeForecast") {
+        // Previews exactly what the 2nd ("direction") click would commit — the same Max/Min
+        // bracket rangeForecastMaxMin derives, fanning out from the fixed start point.
+        const sx = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
+        const sy = zoomedPriceScale(pendingPoint.y);
+        const { max, min } = rangeForecastMaxMin(pendingPoint, previewPoint);
+        const maxX = zoomedXScale(indexForDate(max.x) + 0.5);
+        const maxY = zoomedPriceScale(max.y);
+        const minX = zoomedXScale(indexForDate(min.x) + 0.5);
+        const minY = zoomedPriceScale(min.y);
+        ctx.beginPath();
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(maxX, maxY);
+        ctx.moveTo(sx, sy);
+        ctx.lineTo(minX, minY);
+        ctx.moveTo(sx, sy);
+        ctx.lineTo((maxX + minX) / 2, (maxY + minY) / 2);
+        ctx.stroke();
       } else if (activeTool === "elbowArrow") {
         // Open-ended — same "polyline through whatever's placed so far, plus a live segment to
         // the cursor" preview as the fixed-count multi-point tools below, just without a point
