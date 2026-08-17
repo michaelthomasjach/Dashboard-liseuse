@@ -12,32 +12,11 @@ const meta: Meta<typeof Carousel> = {
 export default meta;
 type Story = StoryObj<typeof Carousel>;
 
-// Same offline, local placeholder approach as Jumbotron's own stories — a skyline silhouette
-// against a gradient sky, tinted differently per slide so the three are easy to tell apart.
-function placeholderImage(topColor: string, bottomColor: string) {
-  return (
-    "data:image/svg+xml;utf8," +
-    encodeURIComponent(`
-      <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="700">
-        <defs>
-          <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stop-color="${topColor}"/>
-            <stop offset="1" stop-color="${bottomColor}"/>
-          </linearGradient>
-        </defs>
-        <rect width="1200" height="700" fill="url(#sky)"/>
-        ${Array.from({ length: 14 })
-          .map((_, i) => {
-            const x = i * 90 + (i % 3) * 20;
-            const w = 40 + (i % 4) * 14;
-            const h = 160 + ((i * 53) % 260);
-            return `<rect x="${x}" y="${700 - h}" width="${w}" height="${h}" fill="#141a30" opacity="0.55"/>`;
-          })
-          .join("\n        ")}
-      </svg>
-    `)
-  );
-}
+// Real Unsplash photos (not generated placeholders) — a different one per slide so the three are
+// easy to tell apart, each thematically matched to its own slide's copy.
+const MARKET_IMAGE = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=1600&q=80";
+const ALERTS_IMAGE = "https://images.unsplash.com/photo-1590283603385-17ffb3a7f29f?auto=format&fit=crop&w=1600&q=80";
+const EARNINGS_IMAGE = "https://images.unsplash.com/photo-1522083165195-3424ed129620?auto=format&fit=crop&w=1600&q=80";
 
 export const HeroBanners: Story = {
   name: "Bannières promotionnelles",
@@ -48,7 +27,7 @@ export const HeroBanners: Story = {
           eyebrow="Marché"
           title="Les marchés ouvrent dans 2 heures"
           description="Préparez vos ordres avant l'ouverture de Wall Street."
-          backgroundImage={placeholderImage("#0b1224", "#e08a4f")}
+          backgroundImage={MARKET_IMAGE}
           imageFilter="grayscale"
           actions={<Button selected>Voir le calendrier</Button>}
         />
@@ -56,7 +35,7 @@ export const HeroBanners: Story = {
           eyebrow="Nouveau"
           title="Alertes de prix personnalisées"
           description="Soyez notifié dès qu'un titre atteint votre seuil."
-          backgroundImage={placeholderImage("#1a1440", "#7c5cff")}
+          backgroundImage={ALERTS_IMAGE}
           imageFilter="grayscale"
           actions={<Button selected>Configurer une alerte</Button>}
         />
@@ -64,7 +43,7 @@ export const HeroBanners: Story = {
           eyebrow="Résultats"
           title="Saison des résultats T3"
           description="Consultez le calendrier des publications de vos titres suivis."
-          backgroundImage={placeholderImage("#062018", "#2fae6b")}
+          backgroundImage={EARNINGS_IMAGE}
           imageFilter="grayscale"
           actions={<Button selected>Voir les résultats</Button>}
         />
