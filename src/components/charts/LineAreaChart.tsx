@@ -109,7 +109,12 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
-  const [hover, setHover] = useState<{ index: number; mouseX: number } | null>(null);
+  // `anchorX` is the actual data-space X value under the cursor (visibleSeries[0]'s own closest
+  // point, same as `index` picks out) — kept alongside `index`/`mouseX` (still what positions the
+  // crosshair line and snaps to a candle/bucket, unchanged) so every OTHER series can look up its
+  // own closest point *by X value* instead of reusing this one array index into an array that
+  // isn't guaranteed to line up with it (see closestPointInSeries's own doc for why that matters).
+  const [hover, setHover] = useState<{ index: number; mouseX: number; anchorX: Date | number } | null>(null);
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin, { height: isFullscreen ? undefined : height });
@@ -222,7 +227,25 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
     const bisect = d3.bisector<ChartPoint, number>((d) => +d.x).left;
     const xValue = zoomedXScale.invert(mouseX);
     const index = Math.min(first.data.length - 1, Math.max(0, bisect(first.data, +xValue)));
-    setHover({ index, mouseX: zoomedXScale(first.data[index].x as never) });
+    setHover({ index, mouseX: zoomedXScale(first.data[index].x as never), anchorX: first.data[index].x });
+  }
+
+  // A series' own closest point to `xValue` — bisecting *that series' own* data instead of
+  // reusing another series' array index (see hover.anchorX's own doc): two series only share an
+  // index-to-point mapping when their data arrays are the exact same length with no gaps of their
+  // own, which independently-computed series (e.g. SeasonalityView's own per-year lines, each
+  // only defined for the buckets that year actually has an occurrence in) can't be assumed to be.
+  // Clamps to the nearest end past either edge, same "closest available" reading a hover past a
+  // shorter series' own last point already gets from its permanent endDot.
+  function closestPointInSeries(data: ChartPoint[], xValue: Date | number): ChartPoint | undefined {
+    if (data.length === 0) return undefined;
+    const bisect = d3.bisector<ChartPoint, number>((d) => +d.x).left;
+    const i = bisect(data, +xValue);
+    if (i <= 0) return data[0];
+    if (i >= data.length) return data[data.length - 1];
+    const prev = data[i - 1];
+    const next = data[i];
+    return +xValue - +prev.x <= +next.x - +xValue ? prev : next;
   }
 
   if (dims.width === 0 || series.length === 0 || series.every((s) => s.data.length === 0)) {
@@ -238,7 +261,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   }
 
   const hoverPoint = hover
-    ? visibleSeries.map((s, i) => ({ series: s, color: colorFor(s, i), point: s.data[hover.index] }))
+    ? visibleSeries.map((s, i) => ({ series: s, color: colorFor(s, i), point: closestPointInSeries(s.data, hover.anchorX) }))
     : null;
 
   return (
