@@ -204,10 +204,53 @@
   color: var(--lq-color-text-muted);
 }
 
+.lq-notification-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--lq-space-3);
+  margin-top: var(--lq-space-2);
+}
+
 .lq-notification-card__actions {
   display: flex;
   gap: var(--lq-space-2);
-  margin-top: var(--lq-space-2);
+}
+
+.lq-notification-card__meta {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--lq-color-text-muted);
+}
+
+/* ---------------------------------------------------------------- */
+/* NotificationSource — the small "badges + source name" byline row. */
+/* ---------------------------------------------------------------- */
+
+.lq-notification-source {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-1);
+  margin-bottom: 2px;
+}
+
+.lq-notification-source__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-accent);
+  border-radius: var(--lq-radius-pill);
+}
+
+.lq-notification-source__name {
+  font-size: 0.72rem;
+  color: var(--lq-color-text-muted);
 }
 
 .lq-notification-card__close {

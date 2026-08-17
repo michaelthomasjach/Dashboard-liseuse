@@ -25,7 +25,7 @@ export type { BreadcrumbsProps, BreadcrumbItem } from "./Breadcrumbs";
 export { DataTable } from "./DataTable";
 export type { DataTableProps, DataTableColumn } from "./DataTable";
 
-export { Notification, NotificationProvider, useNotification } from "./Notification";
+export { Notification, NotificationProvider, useNotification, NotificationSource } from "./Notification";
 export type {
   NotificationProps,
   NotificationOptions,
@@ -34,6 +34,7 @@ export type {
   NotificationCorner,
   NotificationBarPosition,
   NotificationTone,
+  NotificationSourceProps,
 } from "./Notification";
 
 export { UserMenu } from "./UserMenu";

@@ -30,14 +30,43 @@ export interface NotificationCardConfig {
   icon?: ReactNode;
   title?: ReactNode;
   description?: ReactNode;
-  /** Buttons row, e.g. "Annuler" / "Voir". */
+  /** Buttons row, e.g. "Annuler" / "Voir" — a plain link (e.g. "Lire la suite" on a news card,
+   *  see `NotificationSource`) works here too, not just `<button>`s. */
   actions?: ReactNode;
+  /** Small text rendered opposite `actions` on the same row, e.g. a timestamp ("22:03") — omit
+   *  for no footer row at all when `actions` is also unset. */
+  meta?: ReactNode;
   /** Shows a close (×) button. Default true. */
   dismissible?: boolean;
   /** Auto-close after this many ms. Omit or pass 0 to require manual dismissal. */
   autoDismissMs?: number;
   /** Countdown progress bar while auto-dismissing. Default true whenever `autoDismissMs` is set. */
   showProgress?: boolean;
+}
+
+export interface NotificationSourceProps {
+  /** Small badges shown before the source name — logos, verification marks, ratings; their
+   *  content and meaning are entirely up to the caller, this just lays them out in a row. */
+  badges?: ReactNode[];
+  /** The publisher/source name, e.g. "Mace News". */
+  name: string;
+}
+
+/** A small "badges + source name" row — for a news-style notification's own byline, placed as
+ *  (part of) `description` above the headline itself. Doesn't render a card of its own; it's
+ *  meant to be composed into a regular `notify({ title, description: <>...</> })` call, e.g.:
+ *  `description: <><NotificationSource badges={[...]} name="Mace News" /><p>{headline}</p></>`. */
+export function NotificationSource({ badges, name }: NotificationSourceProps) {
+  return (
+    <span className="lq-notification-source">
+      {badges?.map((badge, i) => (
+        <span key={i} className="lq-notification-source__badge">
+          {badge}
+        </span>
+      ))}
+      <span className="lq-notification-source__name">{name}</span>
+    </span>
+  );
 }
 
 export interface NotificationProps extends NotificationCardConfig {
@@ -98,6 +127,7 @@ function NotificationCard({
   title,
   description,
   actions,
+  meta,
   dismissible = true,
   autoDismissMs,
   showProgress = true,
@@ -120,8 +150,16 @@ function NotificationCard({
       {resolvedIcon && <span className="lq-notification-card__icon">{resolvedIcon}</span>}
       <div className="lq-notification-card__body">
         {title && <strong className="lq-notification-card__title">{title}</strong>}
-        {description && <p className="lq-notification-card__description">{description}</p>}
-        {actions && <div className="lq-notification-card__actions">{actions}</div>}
+        {/* A `<div>`, not a `<p>` — `description` is free-form `ReactNode` (e.g.
+            `NotificationSource` + a headline paragraph for a news-style card), and a `<p>`
+            wrapping block content would auto-close early, producing broken markup. */}
+        {description && <div className="lq-notification-card__description">{description}</div>}
+        {(actions || meta) && (
+          <div className="lq-notification-card__footer">
+            {actions && <div className="lq-notification-card__actions">{actions}</div>}
+            {meta && <span className="lq-notification-card__meta">{meta}</span>}
+          </div>
+        )}
       </div>
       {dismissible && (
         <button type="button" className="lq-notification-card__close" onClick={onClose} aria-label="Fermer">

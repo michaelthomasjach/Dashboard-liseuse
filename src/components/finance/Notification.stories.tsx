@@ -1,7 +1,8 @@
 import { useState } from "react";
 import type { Meta, StoryObj } from "@storybook/react";
-import { Notification, NotificationProvider, useNotification, type NotificationCorner } from "./Notification";
+import { Notification, NotificationProvider, useNotification, NotificationSource, type NotificationCorner } from "./Notification";
 import { Button } from "../primitives/Button";
+import { FileIcon } from "../icons";
 
 const meta: Meta = {
   title: "Finance/Notification",
@@ -145,6 +146,67 @@ export const QueuedViaProvider: Story = {
     <NotificationProvider>
       <div style={{ padding: 24 }}>
         <ProviderDemo />
+      </div>
+    </NotificationProvider>
+  ),
+};
+
+// Sample newsfeed for the story below — three items, fired one after another so they visibly
+// stack (see `NotificationProvider`'s own doc: newest at the bottom of a bottom-anchored corner).
+const SAMPLE_NEWS = [
+  {
+    badges: ["F", "●"],
+    source: "Mace News",
+    headline: "⚡ US TSY JUNE TICS RPT: ADJUSTED FGN ACQUISITIONS OF L-T US SECURITIES, US STOCKS +$172.7 BLN VS +$231.2 BLN/MAY",
+    time: "22:03",
+  },
+  {
+    badges: ["R"],
+    source: "Reuters",
+    headline: "🛢️ OPEC+ confirme le maintien de ses quotas de production pour le mois prochain",
+    time: "22:05",
+  },
+  {
+    badges: ["B", "★"],
+    source: "Bloomberg",
+    headline: "📈 La Fed signale une pause probable lors de sa prochaine réunion, selon plusieurs responsables",
+    time: "22:11",
+  },
+];
+
+function NewsAlertsDemo() {
+  const { notify } = useNotification();
+  return (
+    <Button
+      onClick={() => SAMPLE_NEWS.forEach((news, i) => setTimeout(() => notify({
+        corner: "bottom-left",
+        icon: <FileIcon size={16} />,
+        title: "News on AAPL",
+        description: (
+          <>
+            <NotificationSource badges={news.badges} name={news.source} />
+            <p style={{ margin: 0 }}>{news.headline}</p>
+          </>
+        ),
+        actions: <a href="#">Lire la suite</a>,
+        meta: news.time,
+        // 15s (vs. the 4s a plain toast defaults to, see notify's own default) — a news headline
+        // takes longer to read than "Ordre exécuté", so it stays up longer before auto-dismissing;
+        // still fully overridable per call like any other `autoDismissMs`.
+        autoDismissMs: 15000,
+      }), i * 500))}
+    >
+      Simuler 3 alertes d'actualité
+    </Button>
+  );
+}
+
+export const NewsAlerts: Story = {
+  name: "Alertes d'actualité (empilées, 15s)",
+  render: () => (
+    <NotificationProvider>
+      <div style={{ padding: 24 }}>
+        <NewsAlertsDemo />
       </div>
     </NotificationProvider>
   ),
