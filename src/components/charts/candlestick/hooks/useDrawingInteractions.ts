@@ -344,7 +344,7 @@ export function useDrawingInteractions({
         setPreviewPoint(point);
         return;
       }
-      const { max, min } = rangeForecastMaxMin(pendingPoint, point);
+      const { max, min } = rangeForecastMaxMin(point);
       commitDrawings([
         ...drawings,
         {

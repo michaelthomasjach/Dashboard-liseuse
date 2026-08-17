@@ -527,7 +527,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         // bracket rangeForecastMaxMin derives, fanning out from the fixed start point.
         const sx = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
         const sy = zoomedPriceScale(pendingPoint.y);
-        const { max, min } = rangeForecastMaxMin(pendingPoint, previewPoint);
+        const { max, min } = rangeForecastMaxMin(previewPoint);
         const maxX = zoomedXScale(indexForDate(max.x) + 0.5);
         const maxY = zoomedPriceScale(max.y);
         const minX = zoomedXScale(indexForDate(min.x) + 0.5);

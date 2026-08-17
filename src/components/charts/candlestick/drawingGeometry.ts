@@ -110,21 +110,29 @@ export function forecastControlPoint(ax: number, ay: number, bx: number, by: num
   const dx = bx - ax;
   const dy = by - ay;
   const len = Math.hypot(dx, dy) || 1;
-  const bow = len * 0.28;
+  // The offset's own sign bows a *rising* A→B (B's own price above A's) the intended way by
+  // default; a *declining* one needs it mirrored to read the same way visually instead of bowing
+  // toward the "outside" of the falling line — declining means A's own price is higher than B's,
+  // i.e. in pixel terms A's own pixel-Y sits *below* B's numerically (price and pixel-Y are
+  // inverted), so `ay < by`.
+  const bow = len * 0.28 * (ay < by ? -1 : 1);
   return { x: (ax + bx) / 2 - (dy / len) * bow, y: (ay + by) / 2 + (dx / len) * bow };
 }
 
-// "rangeForecast"'s own Max/Min band width, as a fraction of the 2nd ("direction") click's own
-// price distance from the start — a bigger projected move gets a proportionally wider band.
-const RANGE_FORECAST_BAND_RATIO = 0.25;
+// "rangeForecast"'s own default Max/Min band width — 5% of the 2nd ("direction") click's own
+// price, the level their own average always lands on exactly, not of its distance from the start
+// (a direction click landing barely off the start's own price would otherwise get an almost-zero
+// band). Only ever applied once, at creation — Max/Min are freely, independently draggable by
+// hand afterward, same as any other point.
+const RANGE_FORECAST_BAND_RATIO = 0.05;
 
 // "rangeForecast" only takes 2 clicks — the start and a "direction" click that's never itself
 // stored, only used to derive where Max/Min first land (see TrendLineDrawing.lineType's own doc)
 // — both then ordinary, independently draggable points like any other tool's. Max/Min bracket the
-// direction click's own price symmetrically (by RANGE_FORECAST_BAND_RATIO of its distance from
-// the start), sharing its date, so their own average lands exactly on the direction click itself.
-export function rangeForecastMaxMin(start: DataPoint, direction: DataPoint): { max: DataPoint; min: DataPoint } {
-  const spread = Math.abs(direction.y - start.y) * RANGE_FORECAST_BAND_RATIO;
+// direction click's own price symmetrically (see RANGE_FORECAST_BAND_RATIO), sharing its date, so
+// their own average lands exactly on the direction click itself.
+export function rangeForecastMaxMin(direction: DataPoint): { max: DataPoint; min: DataPoint } {
+  const spread = Math.abs(direction.y) * RANGE_FORECAST_BAND_RATIO;
   return {
     max: { x: direction.x, y: round4(direction.y + spread) },
     min: { x: direction.x, y: round4(direction.y - spread) },
