@@ -373,46 +373,53 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             undiscoverable, see this file's own git history) for whichever years currently render
             as their own line. Floats over the plot's own top-left corner, right next to the
             rail, only while there's actually something to show. */}
+        {/* Same look and interaction pattern as CandlestickChart's own price-overlay indicator
+            legend (see ChartLegend.tsx / .lq-chart__indicator-legend in charts-shared.css) —
+            plain colored text, no swatch/box/border, actions revealed on hover, double-click the
+            label as a shortcut into the same settings modal the gear opens. Positioned inline
+            (top/left) the same way ChartLegend's own wrapper is, since this file has no
+            `dims.margin` of its own to read a position from. */}
         {managedYears.length > 0 && (
-          <div className="lq-chart__seasonality-years-panel" style={{ left: TOOLS_RAIL_WIDTH + 8 }}>
+          <div className="lq-chart__indicator-legend" style={{ position: "absolute", top: 8, left: TOOLS_RAIL_WIDTH + 8, zIndex: 6 }}>
             {managedYears.map((year) => {
               const hidden = hiddenYears.has(year);
-              const color = displayColorForYear(year);
+              const label = `${year}${year === currentYear ? " (en cours)" : ""}`;
               return (
-                <div className="lq-chart__indicators-manager-row" key={year}>
-                  <span className="lq-chart__indicators-manager-badge">
-                    <span className="lq-chart__seasonality-year-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+                <div
+                  key={year}
+                  className="lq-chart__indicator-legend-item"
+                  style={{ color: displayColorForYear(year) }}
+                  onDoubleClick={() => setColorModalYear(year)}
+                >
+                  <span className={["lq-chart__indicator-legend-label", hidden && "lq-chart__indicator-legend-label--hidden"].filter(Boolean).join(" ")}>
+                    {label}
                   </span>
-                  <span className="lq-chart__indicators-manager-name">
-                    {year}
-                    {year === currentYear ? " (en cours)" : ""}
-                  </span>
-                  <span className="lq-chart__indicators-manager-actions">
+                  <div className="lq-chart__indicator-legend-actions">
                     <button
                       type="button"
-                      className="lq-chart__pane-header-action"
+                      className="lq-chart__indicator-legend-action"
                       onClick={() => toggleHiddenYear(year)}
-                      aria-label={hidden ? `Afficher ${year}` : `Masquer ${year}`}
+                      aria-label={hidden ? `Afficher ${label}` : `Masquer ${label}`}
                     >
-                      {hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
+                      {hidden ? <EyeOffIcon size={11} /> : <EyeIcon size={11} />}
                     </button>
                     <button
                       type="button"
-                      className="lq-chart__pane-header-action"
-                      onClick={() => setColorModalYear(year)}
-                      aria-label={`Paramètres de ${year}`}
-                    >
-                      <SettingsIcon size={13} />
-                    </button>
-                    <button
-                      type="button"
-                      className="lq-chart__pane-header-action"
+                      className="lq-chart__indicator-legend-action"
                       onClick={() => removeYear(year)}
-                      aria-label={`Supprimer ${year} du graphique`}
+                      aria-label={`Supprimer ${label}`}
                     >
-                      <TrashIcon size={13} />
+                      <TrashIcon size={11} />
                     </button>
-                  </span>
+                    <button
+                      type="button"
+                      className="lq-chart__indicator-legend-action"
+                      onClick={() => setColorModalYear(year)}
+                      aria-label={`Paramètres ${label}`}
+                    >
+                      <SettingsIcon size={11} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
