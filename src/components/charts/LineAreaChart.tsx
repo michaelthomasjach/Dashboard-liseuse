@@ -116,17 +116,36 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
-  // `anchorX` is the actual data-space X value under the cursor (visibleSeries[0]'s own closest
-  // point, same as `index` picks out) — kept alongside `index`/`mouseX` (still what positions the
-  // crosshair line and snaps to a candle/bucket, unchanged) so every OTHER series can look up its
-  // own closest point *by X value* instead of reusing this one array index into an array that
-  // isn't guaranteed to line up with it (see closestPointInSeries's own doc for why that matters).
+  // `anchorX` is the actual data-space X value under the cursor — the closest snapped point in
+  // `allXValues` (the union of every visible series' own X's, see its own doc), not any one
+  // series' data (no single series is guaranteed to cover the full domain — see allXValues' own
+  // doc for why that matters). Every series then looks up its own closest point to this shared
+  // `anchorX` independently (see closestPointInSeries), and the X-axis label/tooltip title reads
+  // `anchorX` directly rather than any one series' own point, so it always names whatever's
+  // actually under the cursor even where a particular series has no data of its own.
   const [hover, setHover] = useState<{ index: number; mouseX: number; anchorX: Date | number } | null>(null);
 
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
   const [ref, dims] = useChartDimensions(margin, { height: isFullscreen ? undefined : height });
 
   const visibleSeries = series.filter((s) => !hiddenIds.has(s.id));
+
+  // Every unique X across every visible series, sorted — what the crosshair itself snaps to (see
+  // handlePointerMove), instead of just one series' own data. A single reference series only
+  // covers the whole domain when every series shares the exact same X's, which isn't true here:
+  // SeasonalityView's own per-year lines are each only defined for the buckets that year actually
+  // has an occurrence in (e.g. a year whose data starts partway through the reference year), so
+  // picking whichever series happens to be first left every X before its own first point
+  // impossible to hover — the crosshair just snapped to that series' first point instead of
+  // moving. Each series still looks up its own closest point independently (closestPointInSeries)
+  // once the shared X is picked.
+  const allXValues = useMemo(() => {
+    const byValue = new Map<number, Date | number>();
+    for (const s of visibleSeries) {
+      for (const p of s.data) byValue.set(+p.x, p.x);
+    }
+    return Array.from(byValue.values()).sort((a, b) => +a - +b);
+  }, [visibleSeries]);
 
   const xScale = useMemo(() => {
     const allX = visibleSeries.flatMap((s) => s.data.map((d) => d.x));
@@ -229,12 +248,13 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     const rect = e.currentTarget.getBoundingClientRect();
     const mouseX = e.clientX - rect.left;
-    const first = visibleSeries[0];
-    if (!first || first.data.length === 0) return;
-    const bisect = d3.bisector<ChartPoint, number>((d) => +d.x).left;
+    if (allXValues.length === 0) return;
+    const bisect = d3.bisector<Date | number, number>((d) => +d).left;
     const xValue = zoomedXScale.invert(mouseX);
-    const index = Math.min(first.data.length - 1, Math.max(0, bisect(first.data, +xValue)));
-    setHover({ index, mouseX: zoomedXScale(first.data[index].x as never), anchorX: first.data[index].x });
+    const i = bisect(allXValues, +xValue);
+    const index =
+      i <= 0 ? 0 : i >= allXValues.length ? allXValues.length - 1 : +xValue - +allXValues[i - 1] <= +allXValues[i] - +xValue ? i - 1 : i;
+    setHover({ index, mouseX: zoomedXScale(allXValues[index] as never), anchorX: allXValues[index] });
   }
 
   // A series' own closest point to `xValue` — bisecting *that series' own* data instead of
@@ -366,8 +386,6 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             {hover &&
               hoverPoint &&
               (() => {
-                const p = hoverPoint[0]?.point;
-                if (!p) return null;
                 return (
                   <>
                     <line
@@ -459,9 +477,15 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
         hoverPoint &&
         (axisHoverLabels ? (
           (() => {
-            const anchor = hoverPoint[0]?.point;
-            if (!anchor) return null;
-            const formattedX = formatX ? formatX(anchor.x) : xType === "time" ? d3.timeFormat("%d %b %Y")(anchor.x as Date) : String(anchor.x);
+            // The hovered X itself — not any one series' own closest point (see hover.anchorX's
+            // own doc): a series that doesn't happen to have a point exactly here (e.g. a year
+            // whose own data doesn't reach back to January) would otherwise leak its own nearest
+            // point in as if it were what's actually under the cursor.
+            const formattedX = formatX
+              ? formatX(hover.anchorX)
+              : xType === "time"
+                ? d3.timeFormat("%d %b %Y")(hover.anchorX as Date)
+                : String(hover.anchorX);
             return (
               <>
                 <div
@@ -492,8 +516,6 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
           })()
         ) : (
           (() => {
-            const anchor = hoverPoint[0]?.point;
-            if (!anchor) return null;
             const nearRightEdge = hover.mouseX > dims.boundedWidth * 0.65;
             return (
               <ChartTooltip
@@ -503,7 +525,11 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                 align={nearRightEdge ? "left" : "right"}
               >
                 <div className="lq-chart-tooltip__title">
-                  {formatX ? formatX(anchor.x) : xType === "time" ? d3.timeFormat("%d %b %Y")(anchor.x as Date) : String(anchor.x)}
+                  {formatX
+                    ? formatX(hover.anchorX)
+                    : xType === "time"
+                      ? d3.timeFormat("%d %b %Y")(hover.anchorX as Date)
+                      : String(hover.anchorX)}
                 </div>
                 {hoverPoint.map(({ series: s, color, point }) => (
                   <div key={s.id} className="lq-chart-tooltip__row">

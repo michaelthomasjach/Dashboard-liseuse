@@ -21,7 +21,11 @@ export interface SeasonalityOccurrence {
 
 export interface SeasonalityBucket {
   /** 0-based position within the reference year — 0-51 for "week", 0-11 for "month", 0-3 for
-   *  "quarter", always 0 for "year" (a single bucket covering the whole thing). */
+   *  "quarter", always 0 for "year" (a single bucket covering the whole thing) — except -1, the
+   *  synthetic "start of year" reference bucket every included year gets an `average`/every own
+   *  `occurrences[].value` of exactly 0 at (see `computeSeasonality`'s own doc), so every line
+   *  visibly starts from the same shared anchor instead of wherever its own first real bucket
+   *  happens to already be. */
   index: number;
   /** Display label, e.g. "Semaine 12", "Mars", "T2", "Année". */
   label: string;
@@ -101,6 +105,17 @@ function bucketLabel(index: number, granularity: SeasonalityGranularity): string
  * `SeasonalityOccurrence`'s doc comment for how future features (dispersion bands, individual
  * occurrences, weighted averages, automatic filters) are meant to build on the same `occurrences`
  * array instead of changing this traversal.
+ *
+ * `buckets[0]` (the earliest real bucket some year actually has data for) is *not* necessarily
+ * every included year's own 0% starting point — it's already that year's cumulative change by the
+ * end of that bucket, which is rarely exactly 0. Without an explicit anchor, every line would
+ * appear to "start" wherever its own first real bucket already happens to be (visibly already up
+ * or down), with no shared reference the way every year trivially shares one at its own true
+ * start. A synthetic bucket at index -1 is prepended for that: every year that contributed at
+ * least one real occurrence gets an entry there too, always exactly 0 by construction (it *is*
+ * each year's own reference point, divided by itself) — so every line visibly starts from the same
+ * shared (-1, 0%) anchor before diverging into its own real buckets. Skipped for "year"
+ * granularity, whose single real bucket is meant to read as one summary number, not a line.
  */
 export function computeSeasonality(
   data: Candle[],
@@ -141,6 +156,14 @@ export function computeSeasonality(
   }
 
   const buckets: SeasonalityBucket[] = [];
+  // Every contributing year is 0% at its own true start, by construction — see this function's
+  // own doc comment for why that needs an explicit bucket rather than relying on `buckets[0]`.
+  if (granularity !== "year" && contributingYears.size > 0) {
+    const referenceOccurrences = Array.from(contributingYears)
+      .sort((a, b) => a - b)
+      .map((year) => ({ year, value: 0 }));
+    buckets.push({ index: -1, label: "Réf.", average: 0, occurrences: referenceOccurrences });
+  }
   for (let idx = 0; idx < bucketCount; idx++) {
     const occurrences = occurrencesByBucket[idx];
     if (occurrences.length === 0) continue;
