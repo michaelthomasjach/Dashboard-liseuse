@@ -21,6 +21,11 @@ import {
   OverlayBadgeIcon,
   HeadShouldersIcon,
   ForecastIcon,
+  RangeForecastIcon,
+  PitchforkIcon,
+  SchiffPitchforkIcon,
+  ModifiedSchiffPitchforkIcon,
+  InsidePitchforkIcon,
 } from "../../icons";
 import type { DrawingToolType } from "./interfaces/DrawingToolType.interface";
 import type { TrendLineDrawing } from "./interfaces/TrendLineDrawing.interface";
@@ -52,6 +57,17 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
   elliottImpulse: { extraPoints: 4, labels: ["Point 0", "Point 1", "Point 2", "Point 3", "Point 4", "Point 5"] },
   disjointChannel: { extraPoints: 2, labels: ["Point 1", "Point 2", "Point 3", "Point 4"] },
   headShoulders: { extraPoints: 3, labels: ["Épaule gauche", "Tête", "Épaule droite", "Ligne de cou (début)", "Ligne de cou (fin)"] },
+  // The 3 pitchfork points: P0 (x1/y1) is the "manche" (handle) every variant's own median starts
+  // from or targets; P1/P2 (x2/y2, extraPoints[0]) are the two points the parallel tine lines pass
+  // through, unchanged across all 4 variants (see pitchforkGeometry.ts).
+  pitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
+  schiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
+  modifiedSchiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
+  insidePitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
+  // x1/y1 = Current (the fan's own shared start), x2/y2 = Max, extraPoints[0] = Avg,
+  // extraPoints[1] = Min — 3 independently-clicked targets, same "related but separate points"
+  // idea disjointChannel/fibonacciExtension already use.
+  rangeForecast: { extraPoints: 2, labels: ["Point de départ", "Maximum", "Moyenne", "Minimum"] },
 };
 
 // Short vertex labels drawn directly on the chart next to each point — distinct from
@@ -73,15 +89,22 @@ export interface DrawingToolCategory {
   /** Stable key — also what tracks each category's own "last picked tool" and open/closed
    *  dropdown state, so it has to stay unique and never change once shipped. */
   id: string;
+  /** Shown as a non-interactive header at the top of the category's own dropdown, above its
+   *  list of tools. */
+  label: string;
   tools: DrawingToolDef[];
 }
 
 // Each category gets its own button + chevron + dropdown in the rail (see the JSX below) —
 // the button represents whichever of its own tools was picked last (defaulting to the first),
-// same as the single button used to for the whole flat list before categories existed.
+// same as the single button used to for the whole flat list before categories existed. Exactly
+// 4 categories by design: "shapes" and "measure" (once their own top-level groups) folded into
+// "lines" as its generalist catch-all, and "elliott" was renamed/repurposed into "chartPatterns"
+// (gaining headShoulders) since Elliott waves are themselves one kind of chart pattern.
 export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
   {
     id: "lines",
+    label: "Lines",
     tools: [
       { type: "trendline", label: "Ligne de tendance", icon: TrendLineIcon },
       { type: "extended", label: "Ligne étendue", icon: ExtendedLineIcon },
@@ -90,25 +113,10 @@ export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "horizontal", label: "Ligne horizontale", icon: HorizontalLineIcon },
       { type: "ray", label: "Ligne horizontale (à partir d'une date)", icon: HorizontalRayIcon },
       { type: "vertical", label: "Ligne verticale", icon: VerticalLineIcon },
-    ],
-  },
-  {
-    id: "fibonacci",
-    tools: [
-      { type: "fibonacci", label: "Retracement de Fibonacci", icon: FibonacciIcon },
-      { type: "fibonacciExtension", label: "Extension de Fibonacci", icon: FibonacciExtensionIcon },
-    ],
-  },
-  {
-    id: "elliott",
-    tools: [
-      { type: "elliottImpulse", label: "Vague d'Elliott (impulsive)", icon: ElliottImpulseIcon },
-      { type: "elliottCorrection", label: "Vague d'Elliott (correctrice)", icon: ElliottCorrectionIcon },
-    ],
-  },
-  {
-    id: "shapes",
-    tools: [
+      { type: "pitchfork", label: "Pitchfork", icon: PitchforkIcon },
+      { type: "schiffPitchfork", label: "Schiff Pitchfork", icon: SchiffPitchforkIcon },
+      { type: "modifiedSchiffPitchfork", label: "Modified Schiff Pitchfork", icon: ModifiedSchiffPitchforkIcon },
+      { type: "insidePitchfork", label: "Inside Pitchfork", icon: InsidePitchforkIcon },
       { type: "rectangle", label: "Rectangle", icon: RectangleShapeIcon },
       { type: "zones", label: "Zones (positif/neutre/négatif)", icon: ZonesIcon },
       { type: "elbowArrow", label: "Flèche coudée", icon: ElbowArrowIcon },
@@ -116,13 +124,33 @@ export const DRAWING_TOOL_CATEGORIES: DrawingToolCategory[] = [
       { type: "arrowUp", label: "Flèche haut", icon: ArrowUpIcon },
       { type: "arrowDown", label: "Flèche bas", icon: ArrowDownIcon },
       { type: "arrowLine", label: "Ligne fléchée", icon: ArrowLineIcon },
-      { type: "headShoulders", label: "ETE (Épaule-Tête-Épaule)", icon: HeadShouldersIcon },
-      { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
+      { type: "measure", label: "Mesure", icon: MeasureIcon },
     ],
   },
   {
-    id: "measure",
-    tools: [{ type: "measure", label: "Mesure", icon: MeasureIcon }],
+    id: "fibonacci",
+    label: "Fibonacci",
+    tools: [
+      { type: "fibonacci", label: "Retracement de Fibonacci", icon: FibonacciIcon },
+      { type: "fibonacciExtension", label: "Extension de Fibonacci", icon: FibonacciExtensionIcon },
+    ],
+  },
+  {
+    id: "chartPatterns",
+    label: "Chart patterns",
+    tools: [
+      { type: "elliottImpulse", label: "Vague d'Elliott (impulsive)", icon: ElliottImpulseIcon },
+      { type: "elliottCorrection", label: "Vague d'Elliott (correctrice)", icon: ElliottCorrectionIcon },
+      { type: "headShoulders", label: "ETE (Épaule-Tête-Épaule)", icon: HeadShouldersIcon },
+    ],
+  },
+  {
+    id: "forecasting",
+    label: "Forecasting",
+    tools: [
+      { type: "forecast", label: "Projection de prix", icon: ForecastIcon },
+      { type: "rangeForecast", label: "Range forecast", icon: RangeForecastIcon },
+    ],
   },
 ];
 

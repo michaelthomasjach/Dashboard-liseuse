@@ -19,4 +19,9 @@ export type DrawingToolType =
   | "arrowLine"
   | "zones"
   | "headShoulders"
-  | "forecast";
+  | "forecast"
+  | "rangeForecast"
+  | "pitchfork"
+  | "schiffPitchfork"
+  | "modifiedSchiffPitchfork"
+  | "insidePitchfork";

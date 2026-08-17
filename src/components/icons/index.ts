@@ -89,4 +89,9 @@ export {
   ZonesIcon,
   HeadShouldersIcon,
   ForecastIcon,
+  RangeForecastIcon,
+  PitchforkIcon,
+  SchiffPitchforkIcon,
+  ModifiedSchiffPitchforkIcon,
+  InsidePitchforkIcon,
 } from "./icons";

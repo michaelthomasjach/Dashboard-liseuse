@@ -715,3 +715,75 @@ export const ForecastIcon = (props: IconProps) => (
     <circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+/** Three lines fanning from one point — a "max" (top), dashed "avg" (middle), "min" (bottom) —
+ *  same three-level fan a "Range forecast" drawing itself projects, the space between the outer
+ *  two tinted to match that drawing's own filled triangle. */
+export const RangeForecastIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 20 21 5 21 20Z" fill="currentColor" fillOpacity="0.15" stroke="none" />
+    <path d="M3 20 21 5" />
+    <path d="M3 20 21 12" strokeDasharray="2 2" />
+    <path d="M3 20 21 20" />
+    <circle cx="3" cy="20" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Three lines fanning from one handle point — the median (dashed, the middle one) plus two
+ *  parallel "tine" lines — the standard/Andrews' Pitchfork's own silhouette. */
+export const PitchforkIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 12 20 4" />
+    <path d="M3 12 20 12" strokeDasharray="2.5 2.5" />
+    <path d="M3 12 20 20" />
+    <circle cx="3" cy="12" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="4" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="20" r="1.2" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Same fork silhouette as PitchforkIcon, but its own handle sits partway along a faint line back
+ *  to the original point — Schiff's own median starts from the *midpoint* of that line instead of
+ *  the handle itself. */
+export const SchiffPitchforkIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M1 18 8 10" strokeDasharray="1.5 2" />
+    <circle cx="1" cy="18" r="1" fill="currentColor" stroke="none" />
+    <path d="M8 10 20 4" />
+    <path d="M8 10 20 12" strokeDasharray="2.5 2.5" />
+    <path d="M8 10 20 20" />
+    <circle cx="8" cy="10" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="4" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="20" r="1.2" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** Same idea as SchiffPitchforkIcon, its own handle sitting a shorter distance along the faint
+ *  line back to the original point — Modified Schiff's median starts closer to the standard
+ *  form's own handle than Schiff's does. */
+export const ModifiedSchiffPitchforkIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M2 15 6 11" strokeDasharray="1.5 2" />
+    <circle cx="2" cy="15" r="1" fill="currentColor" stroke="none" />
+    <path d="M6 11 20 4" />
+    <path d="M6 11 20 12" strokeDasharray="2.5 2.5" />
+    <path d="M6 11 20 20" />
+    <circle cx="6" cy="11" r="1.4" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="4" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="20" cy="20" r="1.2" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
+/** The fork reversed — two parallel tines starting on the left, converging toward one point on
+ *  the right, instead of one handle fanning out to two tines — Inside Pitchfork swaps the
+ *  median's own start and target entirely. */
+export const InsidePitchforkIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 4 21 12" strokeDasharray="2.5 2.5" />
+    <path d="M3 8 21 12" />
+    <path d="M3 16 21 12" />
+    <circle cx="3" cy="8" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="3" cy="16" r="1.2" fill="currentColor" stroke="none" />
+    <circle cx="21" cy="12" r="1.4" fill="currentColor" stroke="none" />
+  </IconBase>
+);

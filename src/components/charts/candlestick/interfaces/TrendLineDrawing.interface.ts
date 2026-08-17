@@ -76,7 +76,15 @@ export interface TrendLineDrawing {
    *  dragged horizontally (its date changes, never its price span, which always covers the full
    *  height); "ray" is a "horizontal" that starts at x1 instead of the dataset's own start —
    *  drawn from there to the right edge only, not spanning the full width — draggable in both
-   *  price and its start date, unlike "horizontal"/"vertical"'s single-axis handle. "extended" is
+   *  price and its start date, unlike "horizontal"/"vertical"'s single-axis handle. "pitchfork"/
+   *  "schiffPitchfork"/"modifiedSchiffPitchfork"/"insidePitchfork" all share the same 3-point
+   *  shape — x1/y1 (P0, the "handle"), x2/y2 (P1), extraPoints[0] (P2) — and the same two parallel
+   *  "tine" lines through P1/P2, differing only in where their own median line starts from (see
+   *  pitchforkGeometry.ts): "pitchfork" (the standard/Andrews' form) starts at P0 itself, heading
+   *  through the midpoint of P1-P2; "schiffPitchfork" starts at the midpoint of P0-P1 instead;
+   *  "modifiedSchiffPitchfork" starts at the midpoint of P0 and the midpoint of P1-P2 (a point
+   *  between the standard and Schiff starting points); "insidePitchfork" swaps the median's own
+   *  start/target entirely, starting at the midpoint of P1-P2 and heading through P0. "extended" is
    *  a free two-point line like a regular trend line, except it's drawn all the way to the
    *  price section's left/right edges instead of stopping at x1/x2 — those two points still
    *  define its slope and are still what's draggable, the line just keeps going past them.
@@ -117,7 +125,11 @@ export interface TrendLineDrawing {
    *  free two-point tool like a plain trend line, but drawn as a curved (not straight) arrow from
    *  x1/y1 to x2/y2, each end labeled with its own price/date, and the end additionally with the
    *  price change and elapsed time from the start — a price-projection annotation, not a support/
-   *  resistance line. */
+   *  resistance line. "rangeForecast" is a 4-point tool — x1/y1 (the starting/"Current" point),
+   *  x2/y2 (the "Max" target), extraPoints[0] ("Avg"), extraPoints[1] ("Min") — drawn as three
+   *  straight lines fanning out from the same start point (Max/Min solid, Avg dotted), the
+   *  triangular area between the Max and Min lines filled, each end labeled with its own price and
+   *  % change from the start. */
   lineType?:
     | "horizontal"
     | "vertical"
@@ -137,6 +149,11 @@ export interface TrendLineDrawing {
     | "zones"
     | "headShoulders"
     | "forecast"
+    | "rangeForecast"
+    | "pitchfork"
+    | "schiffPitchfork"
+    | "modifiedSchiffPitchfork"
+    | "insidePitchfork"
     | "symbolOverlay";
   /** Which pane's own value scale y is expressed in — "price" (default), "volume", or the id of
    *  an "own"-pane indicator (RSI/CHOP/MACD) to anchor a "horizontal"/"ray" line to that pane
@@ -152,7 +169,8 @@ export interface TrendLineDrawing {
   /** Points beyond x1/y1 (the 1st) and x2/y2 (the 2nd), in click order — "fibonacciExtension"
    *  needs 1 (its 3rd point), "elliottCorrection" 2, "elliottImpulse" 4, "disjointChannel" 2
    *  (line 2's own two points — see `lineType` above for how they're derived), "headShoulders" 3
-   *  (right shoulder, then the neckline's own two points). Unused otherwise. */
+   *  (right shoulder, then the neckline's own two points), every pitchfork variant 1 (P2),
+   *  "rangeForecast" 2 (Avg, then Min). Unused otherwise. */
   extraPoints?: { x: Date; y: number }[];
   /** "zones" only: x1/y1 and x2/y2 are still opposite corners like "rectangle", but split the
    *  price pane into three horizontal bands instead of one filled box — above the higher of the

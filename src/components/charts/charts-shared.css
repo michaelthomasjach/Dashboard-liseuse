@@ -283,13 +283,6 @@
   position: relative;
 }
 
-.lq-chart__tool-separator {
-  width: 20px;
-  height: 1px;
-  margin: 2px 0;
-  background-color: var(--lq-color-border-subtle);
-}
-
 /* Invisible until the tool button or the chevron itself is hovered/focused — the group covers
    both, since the chevron is a descendant of it (hovering the chevron always also counts as
    hovering the group). Forced visible while its own menu is open so it doesn't vanish out from
@@ -330,6 +323,15 @@
   gap: 2px;
   padding: var(--lq-space-2);
   min-width: 170px;
+}
+
+.lq-chart__tool-menu-header {
+  padding: 4px 8px 6px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--lq-color-text-muted);
 }
 
 .lq-chart__tool-menu-option {

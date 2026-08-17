@@ -32,10 +32,11 @@ export interface ToolsRailProps {
 }
 
 /** The left-docked drawing-tools rail (`drawingTools` prop): one button + chevron + flyout menu
- *  per tool category (Lignes/Fibonacci/Vagues d'Elliott/Formes/Mesure), then the persistent
- *  aimant/hide-drawings/lock-drawings/event-visibility toggles, then the "Dessins et indicateurs"
- *  manager button pinned to the rail's own bottom edge. Purely presentational — every interaction
- *  is a callback prop from `useDrawingState`/`useChartEvents`. */
+ *  per tool category (see DRAWING_TOOL_CATEGORIES — Lines/Fibonacci/Chart patterns/Forecasting,
+ *  each menu headed by its own category name), then the persistent aimant/hide-drawings/
+ *  lock-drawings/event-visibility toggles, then the "Dessins et indicateurs" manager button
+ *  pinned to the rail's own bottom edge. Purely presentational — every interaction is a callback
+ *  prop from `useDrawingState`/`useChartEvents`. */
 export function ToolsRail({
   drawingTools,
   dims,
@@ -80,10 +81,6 @@ export function ToolsRail({
           const menuOpen = openToolMenu === category.id;
           return (
             <Fragment key={category.id}>
-              {/* A thin rule ahead of "Mesure" only — visually separates the shape/marker
-                  tools above from the standalone measuring tool, which doesn't add a
-                  drawing to the chart the way every category above it does. */}
-              {category.id === "measure" && <div className="lq-chart__tool-separator" aria-hidden="true" />}
               <div className="lq-chart__tool-group">
               <button
                 type="button"
@@ -119,6 +116,7 @@ export function ToolsRail({
                     placement="bottom"
                   >
                     <div className="lq-chart__tool-menu">
+                      <div className="lq-chart__tool-menu-header">{category.label}</div>
                       {category.tools.map((opt) => {
                         const OptionIcon = opt.icon;
                         return (

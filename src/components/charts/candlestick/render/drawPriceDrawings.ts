@@ -12,6 +12,10 @@ import {
 import { allPointsOf, snapPixel, extendSegmentToEdges, effectiveExtendOf, channelOffsetFromClick, forecastControlPoint } from "../drawingGeometry";
 import { lineDashArray, drawDrawingText, drawArrowhead } from "../drawingRender";
 import { defaultIndicatorColor } from "../indicators";
+import { drawPitchforkDrawings } from "./drawPitchfork";
+import { drawRangeForecastDrawings } from "./drawRangeForecast";
+
+const PITCHFORK_LINE_TYPES = new Set(["pitchfork", "schiffPitchfork", "modifiedSchiffPitchfork", "insidePitchfork"]);
 
 /** Phase 2 of `renderCandlestickChart`, continuing directly inside the price clip
  *  `drawPriceCandles` left open (closes it at the end, see that function's own doc comment):
@@ -48,13 +52,15 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
     // own-pane indicator are drawn within that pane's own clipped section instead, "vertical"
     // ones are drawn full-height further down, outside any clip).
     for (const dr of visibleDrawings) {
-      // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown"/"forecast" have their own
-      // geometry entirely unlike the "diagonal x1/y1–x2/y2, optionally extended, plus per-lineType
-      // extras" shape every other type below shares — drawn in their own dedicated loops further
-      // down instead, same reasoning "vertical" (full-height, outside this clip) already skips
-      // this one for. "forecast" specifically draws a *curved* line between the same two points
-      // instead of a straight one, so it can't share this loop's own straight moveTo/lineTo call
-      // the way even every other excluded type here still visually builds on in its own loop.
+      // "rectangle"/"zones"/"elbowArrow"/"brush"/"arrowUp"/"arrowDown"/"forecast"/every pitchfork
+      // variant/"rangeForecast" have their own geometry entirely unlike the "diagonal x1/y1–x2/y2,
+      // optionally extended, plus per-lineType extras" shape every other type below shares —
+      // drawn in their own dedicated loops (or, for the pitchfork family and "rangeForecast",
+      // dedicated files — see drawPitchfork.ts/drawRangeForecast.ts) further down instead, same
+      // reasoning "vertical" (full-height, outside this clip) already skips this one for.
+      // "forecast" specifically draws a *curved* line between the same two points instead of a
+      // straight one, so it can't share this loop's own straight moveTo/lineTo call the way even
+      // every other excluded type here still visually builds on in its own loop.
       if (
         dr.lineType === "vertical" ||
         dr.lineType === "rectangle" ||
@@ -64,6 +70,8 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         dr.lineType === "arrowUp" ||
         dr.lineType === "arrowDown" ||
         dr.lineType === "forecast" ||
+        dr.lineType === "rangeForecast" ||
+        PITCHFORK_LINE_TYPES.has(dr.lineType ?? "") ||
         // Its x1/y1/x2/y2 aren't real coordinates (see the lineType's own doc comment) — just
         // the overlay's own first/last raw points, unrelated to the main series' price space.
         // Drawn separately, correctly rebased, by the dedicated symbol-overlay loop further
@@ -476,6 +484,9 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.restore();
       }
     }
+
+    drawPitchforkDrawings(ctx, params, style);
+    drawRangeForecastDrawings(ctx, params, style);
 
     if (activeTool && pendingPoint && previewPoint) {
       ctx.save();

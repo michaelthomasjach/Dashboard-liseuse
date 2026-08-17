@@ -15,7 +15,11 @@ import {
   channelOffsetFromClick,
   forecastCurvePoints,
 } from "../drawingGeometry";
+import { pitchforkLines } from "../pitchforkGeometry";
+import type { PitchforkVariant } from "../pitchforkGeometry";
 import { DRAWING_HIT_DISTANCE } from "../constants";
+
+const PITCHFORK_LINE_TYPES = new Set(["pitchfork", "schiffPitchfork", "modifiedSchiffPitchfork", "insidePitchfork"]);
 
 /** Plain mutable ref shape (matches what `useRef` in another hook already returns) — used instead
  *  of React's own `RefObject<T>` because that type's `current` is only ever mutable when the ref
@@ -371,11 +375,20 @@ export function useDrawingInteractions({
           y1: pendingPoint.y,
           x2: pendingSecondPoint.x,
           y2: pendingSecondPoint.y,
-          // MULTI_POINT_TOOLS only has entries for these four (disjointChannel's own 4th point is
+          // MULTI_POINT_TOOLS only has entries for these (disjointChannel's own 4th point is
           // computed, not clicked, so it never reaches this generic branch — see MULTI_POINT_TOOLS'
           // own doc), guaranteed by `multiPoint` above — narrower than what TS can infer just from
           // the (wider-keyed) lookup being truthy.
-          lineType: activeTool as "fibonacciExtension" | "elliottCorrection" | "elliottImpulse" | "headShoulders",
+          lineType: activeTool as
+            | "fibonacciExtension"
+            | "elliottCorrection"
+            | "elliottImpulse"
+            | "headShoulders"
+            | "pitchfork"
+            | "schiffPitchfork"
+            | "modifiedSchiffPitchfork"
+            | "insidePitchfork"
+            | "rangeForecast",
           extraPoints: nextExtra,
         },
       ]);
@@ -786,6 +799,30 @@ export function useDrawingInteractions({
             );
           }
           d = Math.min(...distances);
+        } else if (PITCHFORK_LINE_TYPES.has(dr.lineType ?? "") && dr.extraPoints?.length) {
+          // Same 3 extended lines the renderer itself draws (see pitchforkLines' own doc) —
+          // reused verbatim rather than re-derived here, so hovering always matches what's shown.
+          const p0 = { x: zoomedXScale(indexForDate(dr.x1) + 0.5), y: zoomedPriceScale(dr.y1) };
+          const p1 = { x: zoomedXScale(indexForDate(dr.x2) + 0.5), y: zoomedPriceScale(dr.y2) };
+          const p2Point = dr.extraPoints[0];
+          const p2 = { x: zoomedXScale(indexForDate(p2Point.x) + 0.5), y: zoomedPriceScale(p2Point.y) };
+          const { median, tine1, tine2 } = pitchforkLines(p0, p1, p2, dr.lineType as PitchforkVariant, 0, dims.boundedWidth);
+          d = Math.min(
+            distanceToSegment(mouseX, mouseY, median.x1, median.y1, median.x2, median.y2),
+            distanceToSegment(mouseX, mouseY, tine1.x1, tine1.y1, tine1.x2, tine1.y2),
+            distanceToSegment(mouseX, mouseY, tine2.x1, tine2.y1, tine2.x2, tine2.y2)
+          );
+        } else if (dr.lineType === "rangeForecast" && (dr.extraPoints?.length ?? 0) >= 2) {
+          // Three independent segments fanning from the same start point (Current) to Max/Avg/
+          // Min — unlike every other polyline type above, they don't chain point-to-point.
+          const [avgPoint, minPoint] = dr.extraPoints!;
+          const sx = zoomedXScale(indexForDate(dr.x1) + 0.5);
+          const sy = zoomedPriceScale(dr.y1);
+          d = Math.min(
+            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(dr.x2) + 0.5), zoomedPriceScale(dr.y2)),
+            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(avgPoint.x) + 0.5), zoomedPriceScale(avgPoint.y)),
+            distanceToSegment(mouseX, mouseY, sx, sy, zoomedXScale(indexForDate(minPoint.x) + 0.5), zoomedPriceScale(minPoint.y))
+          );
         } else if (dr.lineType === "forecast") {
           // Same "polyline through sampled points" distance as brush/elliott/symbolOverlay above
           // — "forecast" bows away from its own straight x1/y1→x2/y2 chord by up to 28% of that
