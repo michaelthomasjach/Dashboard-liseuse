@@ -8,6 +8,7 @@ import type { IndicatorZigZagPoint } from "./interfaces/IndicatorZigZagPoint.int
 import type { IndicatorSupertrendPoint } from "./interfaces/IndicatorSupertrendPoint.interface";
 import type { IndicatorIchimokuPoint } from "./interfaces/IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "./interfaces/IndicatorGapPoint.interface";
+import type { IndicatorPivotPointsPoint } from "./interfaces/IndicatorPivotPointsPoint.interface";
 import type { IndicatorValue } from "./interfaces/IndicatorValue.interface";
 import type { Indicator } from "./interfaces/Indicator.interface";
 import type { CustomIndicatorDef } from "./interfaces/CustomIndicatorDef.interface";
@@ -247,6 +248,19 @@ export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     pane: "price",
     category: "Tendance",
   },
+  // Own value shape (IndicatorPivotPointsPoint — a fixed set of horizontal levels, not a line)
+  // and its own two settings (pivotType/pivotPeriod, not period/stdDev) — same "hasPeriod/
+  // hasStdDev both false" reasoning as every other indicator here with its own bespoke settings.
+  {
+    kind: "pivotPoints",
+    label: "Points Pivots",
+    shortLabel: "Pivots",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "price",
+    category: "Structure",
+  },
   // Fundamentals: reported-period figures (see `FundamentalDataPoint`), not computed from `data`
   // at all — `hasPeriod`/`hasStdDev` both false, same as VWAP/MACD, since there's no rolling
   // window to configure on a raw reported number.
@@ -366,6 +380,11 @@ export function indicatorLabel(indicator: Indicator): string {
   if (indicator.kind === "supertrend") return `${entry.shortLabel}(${indicator.period},${indicator.supertrendMultiplier ?? 3})`;
   if (indicator.kind === "parabolicSar") return `${entry.shortLabel}(${indicator.sarStep ?? 0.02},${indicator.sarMax ?? 0.2})`;
   if (indicator.kind === "gaps") return `${entry.shortLabel}(${indicator.gapsMinPercent ?? 0.1}%)`;
+  if (indicator.kind === "pivotPoints") {
+    const typeLabel = { classic: "Classic", fibonacci: "Fibonacci", woodie: "Woodie", camarilla: "Camarilla" }[indicator.pivotType ?? "classic"];
+    const periodLabel = { daily: "J", weekly: "S", monthly: "M" }[indicator.pivotPeriod ?? "weekly"];
+    return `${entry.shortLabel}(${typeLabel}, ${periodLabel})`;
+  }
   if (indicator.kind === "ichimoku")
     return `${entry.shortLabel}(${indicator.ichimokuConversionPeriod ?? 9},${indicator.ichimokuBasePeriod ?? 26},${indicator.ichimokuSpanPeriod ?? 52})`;
   if (!entry.hasPeriod) return entry.shortLabel;
@@ -682,6 +701,113 @@ export function computeGapValues(data: Candle[], minPercent: number): (Indicator
   return result;
 }
 
+// Which reference period a candle belongs to, as a plain grouping key (not itself a date) — a
+// Monday-anchored week (not a true ISO week number, which nobody reading this indicator would
+// actually recognize a plotted level by) for "weekly", calendar year+month for "monthly", the
+// calendar day itself for "daily".
+function pivotPeriodKey(date: Date, period: "daily" | "weekly" | "monthly"): string {
+  if (period === "monthly") return `${date.getUTCFullYear()}-${date.getUTCMonth()}`;
+  if (period === "weekly") {
+    const monday = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+    monday.setUTCDate(monday.getUTCDate() - ((monday.getUTCDay() + 6) % 7));
+    return monday.toISOString().slice(0, 10);
+  }
+  return date.toISOString().slice(0, 10);
+}
+
+// Each pivot type's own formula, applied to one reference period's own high/low/close — every
+// type produces the same 7-level shape (a pivot plus 3 resistance/support levels on each side) so
+// the rest of this indicator (grouping, rendering, settings) never needs to know which formula
+// actually produced them. Classic and Woodie share every level past their own differently-weighted
+// pivot; Fibonacci scales the period's own high-low range by the standard retracement ratios
+// instead of Classic's fixed multiples; Camarilla anchors every level off the close (not the
+// pivot) by a fixed set of range fractions, the one type here whose R/S levels don't reduce to a
+// simple function of `pp` alone.
+function pivotLevelsFor(
+  type: "classic" | "fibonacci" | "woodie" | "camarilla",
+  high: number,
+  low: number,
+  close: number
+): Omit<IndicatorPivotPointsPoint, "periodStart"> {
+  const range = high - low;
+  switch (type) {
+    case "fibonacci": {
+      const pp = (high + low + close) / 3;
+      return { pp, r1: pp + 0.382 * range, r2: pp + 0.618 * range, r3: pp + range, s1: pp - 0.382 * range, s2: pp - 0.618 * range, s3: pp - range };
+    }
+    case "woodie": {
+      const pp = (high + low + 2 * close) / 4;
+      return { pp, r1: 2 * pp - low, r2: pp + range, r3: high + 2 * (pp - low), s1: 2 * pp - high, s2: pp - range, s3: low - 2 * (high - pp) };
+    }
+    case "camarilla": {
+      const pp = (high + low + close) / 3;
+      return {
+        pp,
+        r1: close + (range * 1.1) / 12,
+        r2: close + (range * 1.1) / 6,
+        r3: close + (range * 1.1) / 4,
+        s1: close - (range * 1.1) / 12,
+        s2: close - (range * 1.1) / 6,
+        s3: close - (range * 1.1) / 4,
+      };
+    }
+    case "classic":
+    default: {
+      const pp = (high + low + close) / 3;
+      return { pp, r1: 2 * pp - low, r2: pp + range, r3: high + 2 * (pp - low), s1: 2 * pp - high, s2: pp - range, s3: low - 2 * (high - pp) };
+    }
+  }
+}
+
+// One flat set of levels per reference period (see `pivotPeriodKey`), derived from the *previous*
+// period's own high/low/close and held constant across every candle of the current one — the
+// "staircase" every trading platform draws for this indicator (see IndicatorPivotPointsPoint's own
+// doc). The very first period has no previous one to derive levels from, so its own candles stay
+// null, same "nothing to show until there's enough history" reasoning a moving average's own
+// warm-up period already follows.
+export function computePivotPointsValues(
+  data: Candle[],
+  pivotType: "classic" | "fibonacci" | "woodie" | "camarilla",
+  pivotPeriod: "daily" | "weekly" | "monthly"
+): (IndicatorPivotPointsPoint | null)[] {
+  const n = data.length;
+  const result: (IndicatorPivotPointsPoint | null)[] = new Array(n).fill(null);
+  if (n === 0) return result;
+
+  interface PeriodSummary {
+    firstIndex: number;
+    lastIndex: number;
+    high: number;
+    low: number;
+    close: number;
+  }
+  const periods: PeriodSummary[] = [];
+  let currentKey: string | null = null;
+  for (let i = 0; i < n; i++) {
+    const key = pivotPeriodKey(data[i].date, pivotPeriod);
+    if (key !== currentKey) {
+      periods.push({ firstIndex: i, lastIndex: i, high: data[i].high, low: data[i].low, close: data[i].close });
+      currentKey = key;
+    } else {
+      const current = periods[periods.length - 1];
+      current.lastIndex = i;
+      current.high = Math.max(current.high, data[i].high);
+      current.low = Math.min(current.low, data[i].low);
+      current.close = data[i].close;
+    }
+  }
+
+  for (let k = 1; k < periods.length; k++) {
+    const previous = periods[k - 1];
+    const current = periods[k];
+    const levels = pivotLevelsFor(pivotType, previous.high, previous.low, previous.close);
+    for (let i = current.firstIndex; i <= current.lastIndex; i++) {
+      result[i] = { periodStart: current.firstIndex, ...levels };
+    }
+  }
+  return result;
+}
+
 // Hand-rolled rather than routed through `technicalindicators`' own IchimokuCloud (which trims
 // its warm-up period from the front the same way RSI/MACD do, same convention every other
 // indicator here null-pads back in) — the reason is the two Senkou spans' own *displacement*:
@@ -772,6 +898,8 @@ export function computeIndicatorValues(
       return computeParabolicSARValues(data, indicator.sarStep ?? 0.02, indicator.sarMax ?? 0.2);
     case "gaps":
       return computeGapValues(data, indicator.gapsMinPercent ?? 0.1);
+    case "pivotPoints":
+      return computePivotPointsValues(data, indicator.pivotType ?? "classic", indicator.pivotPeriod ?? "weekly");
     case "ichimoku":
       return computeIchimokuValues(
         data,

@@ -4,6 +4,7 @@ import type { IndicatorZigZagPoint } from "./IndicatorZigZagPoint.interface";
 import type { IndicatorSupertrendPoint } from "./IndicatorSupertrendPoint.interface";
 import type { IndicatorIchimokuPoint } from "./IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "./IndicatorGapPoint.interface";
+import type { IndicatorPivotPointsPoint } from "./IndicatorPivotPointsPoint.interface";
 
 /** Every shape a single indicator value can take, in one place — every file that used to spell
  *  out this union inline (indicators.ts, useIndicatorPaneScales.ts,
@@ -13,4 +14,12 @@ import type { IndicatorGapPoint } from "./IndicatorGapPoint.interface";
  *  single-line indicator (SMA/EMA/WMA/VWAP/RSI/CHOP/ATR/Parabolic SAR/every fundamental,
  *  built-in or custom) — only the ones with a genuinely richer per-point shape get their own
  *  member. */
-export type IndicatorValue = number | IndicatorBand | IndicatorMACD | IndicatorZigZagPoint | IndicatorSupertrendPoint | IndicatorIchimokuPoint | IndicatorGapPoint;
+export type IndicatorValue =
+  | number
+  | IndicatorBand
+  | IndicatorMACD
+  | IndicatorZigZagPoint
+  | IndicatorSupertrendPoint
+  | IndicatorIchimokuPoint
+  | IndicatorGapPoint
+  | IndicatorPivotPointsPoint;

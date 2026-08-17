@@ -37,6 +37,15 @@ export interface Indicator {
   ichimokuBasePeriod?: number;
   ichimokuSpanPeriod?: number;
   ichimokuDisplacement?: number;
+  /** "pivotPoints" only — which formula turns the reference period's own high/low/close into
+   *  levels (see `computePivotPointsValues`'s own doc for each one's exact math). Default
+   *  "classic". */
+  pivotType?: "classic" | "fibonacci" | "woodie" | "camarilla";
+  /** "pivotPoints" only — which prior period's own high/low/close the current period's levels are
+   *  derived from. Default "weekly" — "daily" only reads as useful against intraday data; against
+   *  the daily bars most charts here actually show, it produces a new (unreadable) segment every
+   *  single candle. */
+  pivotPeriod?: "daily" | "weekly" | "monthly";
   /** Set once this indicator represents a `CustomIndicatorDef` the caller supplied via
    *  `CandlestickChartProps.customIndicators`, rather than one of the library's own built-in
    *  kinds — `kind` itself is meaningless in that case ("custom" exists in `IndicatorKind` purely

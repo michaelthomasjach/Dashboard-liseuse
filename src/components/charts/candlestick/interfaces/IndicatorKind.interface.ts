@@ -13,6 +13,7 @@ export type IndicatorKind =
   | "parabolicSar"
   | "gaps"
   | "ichimoku"
+  | "pivotPoints"
   /** Reserved for an `Indicator` carrying its own `customData` (see that field's own doc) — this
    *  value itself is never actually read for those, just needed to satisfy the type. */
   | "custom"

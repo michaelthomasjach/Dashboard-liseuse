@@ -3,6 +3,7 @@ import { Modal } from "../../../primitives/Modal";
 import { Checkbox } from "../../../forms/Checkbox";
 import { TextField } from "../../../forms/TextField";
 import { NumberField } from "../../../forms/NumberField";
+import { Select } from "../../../forms/Select";
 import { SearchIcon, SettingsIcon, TrashIcon, OverlayBadgeIcon, PaneBadgeIcon } from "../../../icons";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
@@ -441,6 +442,31 @@ export function IndicatorModals({
               value={indicatorDraft.gapsMinPercent ?? 0.1}
               onChange={(v) => setIndicatorDraft({ ...indicatorDraft, gapsMinPercent: v === "" ? indicatorDraft.gapsMinPercent : v })}
             />
+          )}
+          {indicatorDraft.kind === "pivotPoints" && (
+            <div className="lq-chart__edit-drawing-row">
+              <Select
+                label="Type"
+                value={indicatorDraft.pivotType ?? "classic"}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, pivotType: v })}
+                options={[
+                  { value: "classic", label: "Classic" },
+                  { value: "fibonacci", label: "Fibonacci" },
+                  { value: "woodie", label: "Woodie" },
+                  { value: "camarilla", label: "Camarilla" },
+                ]}
+              />
+              <Select
+                label="Période de référence"
+                value={indicatorDraft.pivotPeriod ?? "weekly"}
+                onChange={(v) => setIndicatorDraft({ ...indicatorDraft, pivotPeriod: v })}
+                options={[
+                  { value: "daily", label: "Journalière" },
+                  { value: "weekly", label: "Hebdomadaire" },
+                  { value: "monthly", label: "Mensuelle" },
+                ]}
+              />
+            </div>
           )}
           {indicatorDraft.kind === "ichimoku" && (
             <div className="lq-chart__edit-drawing-row">

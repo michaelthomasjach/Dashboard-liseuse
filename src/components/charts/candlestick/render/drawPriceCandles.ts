@@ -5,13 +5,14 @@ import type { IndicatorZigZagPoint } from "../interfaces/IndicatorZigZagPoint.in
 import type { IndicatorSupertrendPoint } from "../interfaces/IndicatorSupertrendPoint.interface";
 import type { IndicatorIchimokuPoint } from "../interfaces/IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "../interfaces/IndicatorGapPoint.interface";
+import type { IndicatorPivotPointsPoint } from "../interfaces/IndicatorPivotPointsPoint.interface";
 import { snapPixel } from "../drawingGeometry";
 import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicators";
 
-// "gaps"/"parabolicSar" are point-based (a rectangle or a dot renders fine on its own) rather
-// than line-shaped like every other indicator here, so they're exempt from the "needs at least 2
-// points to draw anything" gate below.
-const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar"]);
+// "gaps"/"parabolicSar"/"pivotPoints" are point-based (a rectangle, a dot, or a single flat
+// segment all render fine on their own) rather than line-shaped like every other indicator here,
+// so they're exempt from the "needs at least 2 points to draw anything" gate below.
+const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints"]);
 
 /** Phase 1 of `renderCandlestickChart`: opens the price section's own clip (left open — closed by
  *  `drawPriceDrawings`, always called right after this in the same synchronous pass, see
@@ -347,6 +348,49 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
           ctx.restore();
         }
+      } else if (indicator.kind === "pivotPoints") {
+        // Grouped into one segment per reference period (shared `periodStart` — see
+        // IndicatorPivotPointsPoint's own doc) rather than one continuous line: each period's own
+        // levels only ever apply across its own date range, the "staircase" every trading platform
+        // draws for this indicator, unlike every line-shaped indicator above which is a single
+        // continuous series spanning the whole visible window.
+        const ppPoints = points as { i: number; value: IndicatorPivotPointsPoint }[];
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1;
+        ctx.font = `600 10px ${fontFamily}`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        let groupStart = 0;
+        for (let k = 0; k <= ppPoints.length; k++) {
+          if (k < ppPoints.length && ppPoints[k].value.periodStart === ppPoints[groupStart].value.periodStart) continue;
+          const first = ppPoints[groupStart];
+          const last = ppPoints[k - 1];
+          const x0 = zoomedXScale(first.i);
+          const x1 = zoomedXScale(last.i + 1);
+          const levels: [string, number][] = [
+            ["R3", first.value.r3],
+            ["R2", first.value.r2],
+            ["R1", first.value.r1],
+            ["PP", first.value.pp],
+            ["S1", first.value.s1],
+            ["S2", first.value.s2],
+            ["S3", first.value.s3],
+          ];
+          for (const [label, price] of levels) {
+            const y = snapPixel(zoomedPriceScale(price));
+            const levelColor = label === "PP" ? color : colorMuted;
+            ctx.strokeStyle = levelColor;
+            ctx.beginPath();
+            ctx.moveTo(x0, y);
+            ctx.lineTo(x1, y);
+            ctx.stroke();
+            ctx.fillStyle = levelColor;
+            ctx.fillText(label, x0 + 2, y - 2);
+          }
+          groupStart = k;
+        }
+        ctx.restore();
       } else if (indicator.customData?.draw === "histogram") {
         // A custom overlay indicator drawn as bars — the price pane has no meaningful "zero"
         // baseline to bar-chart against the way an own-pane one does (see the own-pane branch's
