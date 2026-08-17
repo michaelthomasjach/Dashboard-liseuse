@@ -217,6 +217,28 @@
   font-size: 0.8rem;
 }
 
+/* The floating "years" panel (see SeasonalityView's own managedYears) — an always-on overlay
+   pinned to the plot's own top-left corner (its `left` is set inline, just past the tools rail;
+   `top` is this rule's own fixed offset) rather than a modal behind a rail button, so it's
+   visible the moment there's something for it to show instead of requiring a separate discovery
+   step. z-index only needs to clear the chart's own SVG (a plain stacking context, nothing of its
+   own) — well below any popover/modal, which this deliberately never fights with since it isn't
+   one itself. */
+.lq-chart__seasonality-years-panel {
+  position: absolute;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--lq-space-2);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-md);
+  box-shadow: var(--lq-shadow-modal);
+  max-width: 220px;
+}
+
 /* "Années affichées" list (see SeasonalityView) — a plain color dot standing in for the badge
    icon every other row in .lq-chart__indicators-manager uses, since a year's own identity here
    *is* its line color rather than a tool/indicator kind. */
@@ -225,19 +247,6 @@
   width: 10px;
   height: 10px;
   border-radius: var(--lq-radius-sm);
-}
-
-/* The native color picker trigger for that same row's own "Paramètres" (gear) action — kept in
-   the DOM (not display:none, which would drop it from the label/input association some browsers
-   rely on to open the picker on click) but visually invisible and pinned to zero size so only the
-   gear icon it's layered under is actually seen. */
-.lq-chart__seasonality-year-color-input {
-  position: absolute;
-  width: 0;
-  height: 0;
-  padding: 0;
-  border: none;
-  opacity: 0;
 }
 
 .lq-chart__legend {

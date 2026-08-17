@@ -6,7 +6,7 @@ import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
 import { Modal } from "../primitives/Modal";
-import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon } from "../icons";
+import { ChevronLeftIcon, CalendarIcon, LayersIcon, ActivityIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
@@ -125,7 +125,8 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // `result.years` entirely (e.g. via `excludedYears`), just leaves an inert, harmless entry here.
   const [hiddenYears, setHiddenYears] = useState<Set<number>>(new Set());
   const [yearColors, setYearColors] = useState<Record<number, string>>({});
-  const [yearsManagerOpen, setYearsManagerOpen] = useState(false);
+  // Which year's own settings modal (currently just a color picker) is open — null when none is.
+  const [colorModalYear, setColorModalYear] = useState<number | null>(null);
 
   const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
@@ -206,6 +207,15 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
       else next.add(year);
       return next;
     });
+  }
+
+  // The years panel's own trash action — unlike toggleHiddenYear (a soft, reversible show/hide),
+  // this drops the year from `excludedYears` itself, the same set "Années incluses" own checkbox
+  // list manages — so it stops contributing to the average too, not just its own individual line,
+  // and its row here simply stops existing on the next render (managedYears is derived from
+  // result.years, which this shrinks) rather than needing its own "removed" state to track.
+  function removeYear(year: number) {
+    setExcludedYears((prev) => new Set(prev).add(year));
   }
 
   // Every footer preset works the same way: decide which years should end up *included*, then
@@ -356,26 +366,58 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                 <ActivityIcon size={14} />
               </button>
             )}
-            {/* Always present, not gated on managedYears.length like the two toggles above —
-                hiding it until the user had already found and enabled "Années indépendantes" (or
-                the current-year overlay) left this list undiscoverable from the plain "average"
-                view, its own starting state. Clicking it while nothing is individually displayed
-                yet turns independentYears on first, so it always opens to a populated list rather
-                than requiring that discovery step beforehand. */}
-            <button
-              type="button"
-              className={["lq-chart__icon-button", yearsManagerOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-              onClick={() => {
-                if (managedYears.length === 0) setIndependentYears(true);
-                setYearsManagerOpen(true);
-              }}
-              aria-label="Années affichées"
-              title="Afficher/masquer ou recolorer chaque année affichée individuellement"
-            >
-              <EyeIcon size={14} />
-            </button>
           </div>
         </div>
+
+        {/* Inline, always-on overlay (not a modal behind a rail button — that left it
+            undiscoverable, see this file's own git history) for whichever years currently render
+            as their own line. Floats over the plot's own top-left corner, right next to the
+            rail, only while there's actually something to show. */}
+        {managedYears.length > 0 && (
+          <div className="lq-chart__seasonality-years-panel" style={{ left: TOOLS_RAIL_WIDTH + 8 }}>
+            {managedYears.map((year) => {
+              const hidden = hiddenYears.has(year);
+              const color = displayColorForYear(year);
+              return (
+                <div className="lq-chart__indicators-manager-row" key={year}>
+                  <span className="lq-chart__indicators-manager-badge">
+                    <span className="lq-chart__seasonality-year-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+                  </span>
+                  <span className="lq-chart__indicators-manager-name">
+                    {year}
+                    {year === currentYear ? " (en cours)" : ""}
+                  </span>
+                  <span className="lq-chart__indicators-manager-actions">
+                    <button
+                      type="button"
+                      className="lq-chart__pane-header-action"
+                      onClick={() => toggleHiddenYear(year)}
+                      aria-label={hidden ? `Afficher ${year}` : `Masquer ${year}`}
+                    >
+                      {hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
+                    </button>
+                    <button
+                      type="button"
+                      className="lq-chart__pane-header-action"
+                      onClick={() => setColorModalYear(year)}
+                      aria-label={`Paramètres de ${year}`}
+                    >
+                      <SettingsIcon size={13} />
+                    </button>
+                    <button
+                      type="button"
+                      className="lq-chart__pane-header-action"
+                      onClick={() => removeYear(year)}
+                      aria-label={`Supprimer ${year} du graphique`}
+                    >
+                      <TrashIcon size={13} />
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         {result.buckets.length === 0 ? (
           <div className="lq-chart__empty" style={{ paddingLeft: TOOLS_RAIL_WIDTH }}>
@@ -406,10 +448,11 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             formatX={(x) => result.buckets.find((b) => b.index === x)?.label ?? String(x)}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
-            // The "Années affichées" list below already covers "which color is which year" (plus
-            // hide/recolor, which the plain legend can't do) — showing both would be two
-            // separately-stateful ways to hide the same line (LineAreaChart's own click-to-fade
-            // legend item vs. this file's own `hiddenYears`), so the built-in legend stays off.
+            // The floating years panel (see managedYears, above the chart in this file's own
+            // JSX) already covers "which color is which year" (plus hide/recolor/remove, which
+            // the plain legend can't do) — showing both would be two separately-stateful ways to
+            // hide the same line (LineAreaChart's own click-to-fade legend item vs. this file's
+            // own `hiddenYears`), so the built-in legend stays off.
             showLegend={false}
             fullscreenToggle={false}
             yAxisOrientation="right"
@@ -423,51 +466,16 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
         )}
       </div>
 
-      {yearsManagerOpen && (
-        <Modal open onClose={() => setYearsManagerOpen(false)} title="Années affichées" footer={null}>
-          <div className="lq-chart__indicators-manager">
-            {managedYears.length === 0 && (
-              <p className="lq-chart__indicator-picker-empty">Aucune année disponible pour l'instant.</p>
-            )}
-            {managedYears.map((year) => {
-              const hidden = hiddenYears.has(year);
-              const color = displayColorForYear(year);
-              return (
-                <div className="lq-chart__indicators-manager-row" key={year}>
-                  <span className="lq-chart__indicators-manager-badge">
-                    <span className="lq-chart__seasonality-year-swatch" style={{ backgroundColor: color }} aria-hidden="true" />
-                  </span>
-                  <span className="lq-chart__indicators-manager-name">
-                    {year}
-                    {year === currentYear ? " (en cours)" : ""}
-                  </span>
-                  <span className="lq-chart__indicators-manager-actions">
-                    {/* A <label> wrapping a visually-hidden color <input> — clicking the gear
-                        activates the input directly (standard label/input association), opening
-                        the browser's own native color picker with no extra popover of our own to
-                        build or position. */}
-                    <label className="lq-chart__pane-header-action" title={`Couleur de ${year}`}>
-                      <SettingsIcon size={13} />
-                      <input
-                        type="color"
-                        value={color}
-                        onChange={(e) => setYearColors((prev) => ({ ...prev, [year]: e.target.value }))}
-                        className="lq-chart__seasonality-year-color-input"
-                        aria-label={`Couleur de ${year}`}
-                      />
-                    </label>
-                    <button
-                      type="button"
-                      className="lq-chart__pane-header-action"
-                      onClick={() => toggleHiddenYear(year)}
-                      aria-label={hidden ? `Afficher ${year}` : `Masquer ${year}`}
-                    >
-                      {hidden ? <EyeOffIcon size={13} /> : <EyeIcon size={13} />}
-                    </button>
-                  </span>
-                </div>
-              );
-            })}
+      {colorModalYear !== null && (
+        <Modal open onClose={() => setColorModalYear(null)} title={`Paramètres — ${colorModalYear}`} footer={null}>
+          <div className="lq-field">
+            <label className="lq-field__label">Couleur</label>
+            <input
+              type="color"
+              className="lq-chart__color-input"
+              value={displayColorForYear(colorModalYear)}
+              onChange={(e) => setYearColors((prev) => ({ ...prev, [colorModalYear]: e.target.value }))}
+            />
           </div>
         </Modal>
       )}
