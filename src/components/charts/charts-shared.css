@@ -1025,6 +1025,34 @@
   touch-action: none;
 }
 
+.lq-chart__indicator-category-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--lq-space-2);
+  margin: var(--lq-space-3) 0;
+}
+
+.lq-chart__indicator-category-filter {
+  padding: 4px 10px;
+  font-family: inherit;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-hover);
+  border: 1px solid transparent;
+  border-radius: var(--lq-radius-pill);
+  cursor: pointer;
+}
+
+.lq-chart__indicator-category-filter:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__indicator-category-filter--selected {
+  color: var(--lq-color-accent-contrast);
+  background-color: var(--lq-color-fill);
+}
+
 .lq-chart__indicator-picker {
   display: flex;
   flex-direction: column;

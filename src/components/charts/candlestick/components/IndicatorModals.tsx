@@ -85,6 +85,10 @@ export function IndicatorModals({
   saveIndicatorSettings,
 }: IndicatorModalsProps) {
   const [confirmDeleteAllOpen, setConfirmDeleteAllOpen] = useState(false);
+  // A second, independent filter alongside the search box — `null` ("Toutes") shows every
+  // category. Local state (unlike `indicatorSearchQuery`, lifted to the caller): nothing outside
+  // this modal ever needs to read or reset it.
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null);
 
   // Scoped to exactly what the manager list itself shows (visibleDrawings, not every drawing that
   // ever existed — a drawing outside the current view has no row here to have deleted it from) so
@@ -110,10 +114,46 @@ export function IndicatorModals({
             leadingIcon={<SearchIcon size={14} />}
             autoFocus
           />
+          {/* Predefined, stable filters — every built-in category (in catalog order) plus
+              whichever custom sections the caller's own `customIndicators` bring in, computed
+              from the full catalog regardless of the current search text so the row itself
+              doesn't reshuffle as the user types, only the results below it do. A second click on
+              the already-selected one clears back to "Toutes", same toggle convention the
+              category filter buttons elsewhere in this library already use. */}
+          <div className="lq-chart__indicator-category-filters">
+            <button
+              type="button"
+              className={["lq-chart__indicator-category-filter", categoryFilter === null && "lq-chart__indicator-category-filter--selected"]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => setCategoryFilter(null)}
+            >
+              Toutes
+            </button>
+            {Array.from(new Set([...INDICATOR_CATALOG.map((entry) => entry.category), ...(customIndicators ?? []).map((def) => def.section)])).map(
+              (category) => (
+                <button
+                  key={category}
+                  type="button"
+                  className={[
+                    "lq-chart__indicator-category-filter",
+                    categoryFilter === category && "lq-chart__indicator-category-filter--selected",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => setCategoryFilter((c) => (c === category ? null : category))}
+                >
+                  {category}
+                </button>
+              )
+            )}
+          </div>
           <div className="lq-chart__indicator-picker">
             {(() => {
               const query = indicatorSearchQuery.trim().toLowerCase();
-              const showVolumeOption = showVolume && "volume".includes(query);
+              // Volume has no category of its own (see its own doc below), so it only ever shows
+              // up under "Toutes", not under any specific category filter.
+              const showVolumeOption = showVolume && categoryFilter === null && "volume".includes(query);
               // Built-in and custom entries merged into one tagged list before grouping, so a
               // custom indicator's own `section` slots it in alongside the built-in categories
               // exactly like any other — each entry keeps a reference to whichever of
@@ -133,7 +173,9 @@ export function IndicatorModals({
                   pane: def.type === "overlay" ? "price" : "own",
                   onSelect: () => addCustomIndicator(def),
                 }));
-              const allOptions = [...builtinOptions, ...customOptions];
+              const allOptions = [...builtinOptions, ...customOptions].filter(
+                (option) => categoryFilter === null || option.category === categoryFilter
+              );
               const groups: { category: string; options: PickerOption[] }[] = [];
               for (const option of allOptions) {
                 const group = groups.find((g) => g.category === option.category);
