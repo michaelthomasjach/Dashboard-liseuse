@@ -203,6 +203,32 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   }));
 }
 
+// Placeholder content for `sidePanel` — the prop takes any ReactNode (see its own doc on
+// CandlestickChartProps), the component has no opinion on what goes there. A short watchlist-
+// shaped list is just the easiest thing to visually verify the panel's own resize/collapse
+// mechanics against, echoing the reference screenshot this feature was built from without the
+// story needing a real positions/watchlist data source of its own.
+function SidePanelPlaceholder() {
+  const rows = [
+    { ticker: "MSFT", price: "412.88", change: "+1.24%", up: true },
+    { ticker: "NVDA", price: "128.47", change: "+2.61%", up: true },
+    { ticker: "AAPL", price: "231.05", change: "-0.38%", up: false },
+    { ticker: "BTCUSD", price: "64 210", change: "-1.02%", up: false },
+  ];
+  return (
+    <div style={{ fontSize: 12.5 }}>
+      <div style={{ fontWeight: 600, marginBottom: 8 }}>Mes positions</div>
+      {rows.map((r) => (
+        <div key={r.ticker} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--lq-color-border-subtle)" }}>
+          <span>{r.ticker}</span>
+          <span>{r.price}</span>
+          <span style={{ color: r.up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{r.change}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export const AllFeatures: Story = {
   name: "Toutes les options",
   render: () => {
@@ -247,6 +273,7 @@ export const AllFeatures: Story = {
             }}
             seasonality
             showTemplates
+            sidePanel={<SidePanelPlaceholder />}
           />
         </ChartWorkspace>
       </div>

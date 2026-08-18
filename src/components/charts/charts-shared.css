@@ -12,6 +12,12 @@
      panels — see ChartWorkspace.css). Clipping here keeps every panel's own badges/canvas
      strictly inside its own bounds regardless of exactly where the underlying value lands. */
   overflow: hidden;
+  /* A row of (up to) two children — .lq-chart__main and, when `sidePanel` is set and open,
+     .lq-chart__side-panel — so the panel can genuinely take its own share of the width via
+     ordinary flexbox instead of any JS-computed margin. Always a row, fullscreen included: the
+     panel stays beside the chart rather than below it even then (see .lq-chart--fullscreen
+     .lq-chart__main below for where that state's own vertical-centering behavior moved to). */
+  display: flex;
 }
 
 /* For a chart embedded inside another `.lq-chart` that already provides the outer border (see
@@ -21,6 +27,31 @@
   border: none;
 }
 
+/* Everything the chart itself renders (header, plot, modals) — a flex sibling of the optional
+   side panel inside the outer row (.lq-chart, above); `useChartDimensions`' own `ref` attaches
+   here, not to `.lq-chart` directly, so its ResizeObserver measures whatever width is left after
+   the panel's own share instead of the whole widget's — see CandlestickChart.tsx's own doc on
+   why (in short: this is what lets the panel genuinely shrink the plot via plain flexbox, with
+   zero changes needed to any of the axis/margin math everything downstream of `dims` reads
+   from). `min-width: 0` overrides a flex item's own default (content's intrinsic width, which a
+   wide canvas can make very large) — without it this could refuse to shrink below that. */
+.lq-chart__main {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Only while fullscreen — outside it, .lq-chart__main is a plain block box (header/plot already
+   stack top-to-bottom on their own) and centering would be a no-op anyway (there's no extra
+   height to distribute unless a caller's own `height` prop exceeds the content's natural size).
+   Moved here from `.lq-chart` itself (which now needs to stay a plain row, side panel included,
+   even while fullscreen) — same vertical-centering behavior as before, just retargeted. */
+.lq-chart--fullscreen .lq-chart__main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
 .lq-chart__svg {
   display: block;
   width: 100%;
@@ -28,15 +59,60 @@
 }
 
 /* Positioning context for the canvas + svg pair — deliberately its own element rather than
-   `.lq-chart` itself, which carries fullscreen's `position: fixed` (see .lq-chart--fullscreen):
-   an absolutely-positioned canvas is placed relative to its nearest positioned ancestor's
-   padding box, so if `.lq-chart` ever gained padding again the canvas (absolute) and the svg
-   (normal flow, starts after any padding) would drift apart by that amount. Neither element
-   has padding today, but keeping the canvas/svg pair's own positioning context separate from
-   the fixed/bordered box means it stays that way regardless of what `.lq-chart` itself does. */
+   `.lq-chart__main` itself, which carries fullscreen's own centering (see above): an
+   absolutely-positioned canvas is placed relative to its nearest positioned ancestor's padding
+   box, so if `.lq-chart__main` ever gained padding the canvas (absolute) and the svg (normal
+   flow, starts after any padding) would drift apart by that amount. Neither element has padding
+   today, but keeping the canvas/svg pair's own positioning context separate keeps it that way
+   regardless of what `.lq-chart__main` itself does. */
 .lq-chart__plot {
   position: relative;
   flex-shrink: 0;
+}
+
+/* The optional right-docked panel (CandlestickChartProps.sidePanel) — a flex sibling of
+   `.lq-chart__main` in the outer `.lq-chart` row. `flex-basis`/`flex` itself is set inline by
+   ChartSidePanel.tsx (20% by default, a fixed px once the user has dragged — see useSidePanel's
+   own widthPx doc); the min/max here bound *both* of those the same way, so a very narrow
+   `.lq-chart` can't squeeze the default 20% below a usable width, and a drag can't exceed it
+   either. `overflow: auto` rather than `hidden`: unlike the plot (which owns its own scaling and
+   never needs to scroll), the panel's content is caller-supplied and arbitrary — a watchlist
+   longer than the panel is tall should scroll, not clip. */
+.lq-chart__side-panel {
+  position: relative;
+  min-width: 200px;
+  max-width: 560px;
+  border-left: 1px solid var(--lq-color-border-subtle);
+  overflow: auto;
+}
+
+/* Thin strip on the panel's own left edge — drag to resize (see useSidePanel's startResize).
+   Absolutely positioned against `.lq-chart__side-panel` itself (not a sibling of the content),
+   straddling the border so the hit area isn't limited to whichever side of the 1px line the
+   pointer happens to land on. */
+.lq-chart__side-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+/* A wider hit strip on a coarse (touch) pointer — same centering trick as
+   .lq-chart__pane-resize-handle's own @media block above. */
+@media (pointer: coarse) {
+  .lq-chart__side-panel-resize-handle {
+    left: -8px;
+    width: 16px;
+  }
+}
+
+.lq-chart__side-panel-content {
+  height: 100%;
+  padding: var(--lq-space-3);
 }
 
 .lq-chart__canvas {
@@ -221,9 +297,6 @@
      fullscreen — it painted, just behind the chart. Still comfortably above ordinary
      in-flow page content. */
   z-index: 500;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
   background-color: var(--lq-color-bg);
   animation: lq-chart-fullscreen-in 150ms ease;
 }

@@ -48,3 +48,13 @@ export const DEFAULT_PANE_HEIGHT_FRACTION = 0.22;
 /** Drag-to-resize bounds for a sub-pane, same fraction units as DEFAULT_PANE_HEIGHT_FRACTION. */
 export const MIN_PANE_HEIGHT_FRACTION = 0.08;
 export const MAX_PANE_HEIGHT_FRACTION = 0.6;
+/** The `sidePanel` column's own default width (20%, see CandlestickChartProps.sidePanel) — a CSS
+ *  flex-basis percentage, not a pixel value, so it always reads as "1/5 of the chart" regardless
+ *  of container size with no JS measurement needed; only overridden once the user actually drags
+ *  the resize handle (see useSidePanel's own widthPx). */
+export const SIDE_PANEL_DEFAULT_WIDTH_FRACTION = "20%";
+/** Drag-to-resize bounds for the side panel, plain pixels (unlike the pane-height fractions
+ *  above) since there's no single "bounded" dimension already in scope to take a fraction of at
+ *  the point the drag starts — see useSidePanel's own startResize. */
+export const SIDE_PANEL_MIN_WIDTH = 200;
+export const SIDE_PANEL_MAX_WIDTH = 560;

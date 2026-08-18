@@ -2,6 +2,8 @@ import { useRef, useState, type RefObject, type Dispatch, type SetStateAction } 
 import { Popover } from "../../../forms/Popover";
 import {
   ChevronDownIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
   ActivityIcon,
   CalendarIcon,
   MaximizeIcon,
@@ -43,6 +45,9 @@ export interface ChartHeaderProps {
   fullscreenToggle: boolean;
   toggleFullscreen: () => void;
   isFullscreen: boolean;
+  sidePanel: boolean;
+  sidePanelOpen: boolean;
+  onToggleSidePanel: () => void;
   showTemplates: boolean;
   templates: ChartTemplate[];
   activeTemplateId: string | null;
@@ -98,6 +103,9 @@ export function ChartHeader({
   fullscreenToggle,
   toggleFullscreen,
   isFullscreen,
+  sidePanel,
+  sidePanelOpen,
+  onToggleSidePanel,
   showTemplates,
   templates,
   activeTemplateId,
@@ -242,6 +250,22 @@ export function ChartHeader({
           aria-label={isFullscreen ? "Quitter le plein écran" : "Plein écran"}
         >
           {isFullscreen ? <MinimizeIcon size={14} /> : <MaximizeIcon size={14} />}
+        </button>
+      )}
+      {/* Shown whenever the caller passed `sidePanel` content at all, regardless of its current
+          open/collapsed state — same reasoning the volume pane's own collapse toggle stays
+          reachable from its still-visible header strip once collapsed: a button that could hide
+          itself along with the thing it opens would leave no way back. Chevron direction points
+          toward how the panel would move if toggled (right = collapse toward/off the edge, left =
+          it's already collapsed, clicking brings it back open). */}
+      {sidePanel && (
+        <button
+          type="button"
+          className="lq-chart__icon-button"
+          onClick={onToggleSidePanel}
+          aria-label={sidePanelOpen ? "Réduire le panneau latéral" : "Ouvrir le panneau latéral"}
+        >
+          {sidePanelOpen ? <ChevronRightIcon size={14} /> : <ChevronLeftIcon size={14} />}
         </button>
       )}
       {/* `margin-left: auto` lives on this one wrapper, not the individual pieces inside it — see

@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { ChartMargin } from "../../internal/useChartDimensions";
 import type { Candle } from "./Candle.interface";
 import type { TrendLineDrawing, OverlayDataPoint } from "./TrendLineDrawing.interface";
@@ -227,6 +228,18 @@ export interface CandlestickChartProps {
   /** Current panel count, to highlight the active choice in the menu. */
   splitScreenPanels?: 1 | 2 | 4 | 6 | 8;
   onSplitScreenChange?: (panels: 1 | 2 | 4 | 6 | 8) => void;
+  /** Content for a collapsible, resizable panel docked to the chart's own right edge, sharing the
+   *  same outer bordered widget rather than floating separately — a watchlist, an order ticket,
+   *  notes, anything the caller wants alongside the chart (same "structure only, bring your own
+   *  content" shape as `ChartWorkspace.children`). Defaults to 1/5 of the chart's own total
+   *  width, draggable narrower/wider from a handle on its own left edge. Omit entirely for no
+   *  panel at all (default). */
+  sidePanel?: ReactNode;
+  /** Uncontrolled initial open/collapsed state for `sidePanel` — collapsing gives the chart back
+   *  its full width; a header button (shown whenever `sidePanel` is set) toggles it either way.
+   *  Default true (open). */
+  defaultSidePanelOpen?: boolean;
+  onSidePanelOpenChange?: (open: boolean) => void;
   margin?: Partial<ChartMargin>;
   className?: string;
 }

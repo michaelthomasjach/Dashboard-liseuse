@@ -19,7 +19,9 @@ import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScal
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
 import { useDrawingToolMenuAnchors } from "./candlestick/hooks/useDrawingToolMenuAnchors";
+import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartHeader } from "./candlestick/components/ChartHeader";
+import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
 import { ToolsRail } from "./candlestick/components/ToolsRail";
 import { ChartLegend } from "./candlestick/components/ChartLegend";
 import { PaneHeaders } from "./candlestick/components/PaneHeaders";
@@ -133,6 +135,7 @@ export function CandlestickChart({
   showSplitScreen = false,
   splitScreenPanels,
   onSplitScreenChange, fillHeight = false,
+  sidePanel, defaultSidePanelOpen, onSidePanelOpenChange,
   margin,
   className,
 }: CandlestickChartProps) {
@@ -225,20 +228,19 @@ export function CandlestickChart({
     futureZoneVisible, setFutureZoneVisible,
     now,
   } = useChartAppearance({ YAutoScaling, livePrice });
-  // Swaps the whole chart body for SeasonalityView — its own top-level flag, not folded into
-  // `chartDisplayMode`, since its x-axis (position within a reference year) has no meaningful
-  // relationship to drawings/indicators/volume/events the way candle/line/Renko share one.
+  // Swaps the whole chart body for SeasonalityView — its own flag, not folded into
+  // `chartDisplayMode`: its x-axis shares no meaningful relationship with candle/line/Renko's.
   const [seasonalityOpen, setSeasonalityOpen] = useState(false);
   const { symbolSearchOpen, setSymbolSearchOpen, symbolSearchQuery, setSymbolSearchQuery, symbolSearchCategory, setSymbolSearchCategory, favoriteSymbolIds, toggleFavoriteSymbol } =
     useSymbolSearchState({ defaultFavoriteSymbolIds, onFavoriteSymbolIdsChange, onSymbolSearchChange });
   // Tickers whose "+" is currently awaiting onAddSymbolOverlay — a Set (not one at a time) since
-  // there's no reason comparing against AAPL should block also comparing against GOOGL while its
-  // own fetch is still in flight. Purely for each row's own spinner; not read anywhere that
-  // affects the chart itself.
+  // comparing against AAPL shouldn't block also comparing against GOOGL mid-fetch. Just drives
+  // each row's own spinner.
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const tfAnchorRef = useRef<HTMLButtonElement>(null);
   const { menuAnchorRefFor } = useDrawingToolMenuAnchors();
   const { isFullscreen, toggle: toggleFullscreen } = useFullscreen();
+  const sidePanelState = useSidePanel({ defaultSidePanelOpen, onSidePanelOpenChange });
   const baseMargin = margin ?? DEFAULT_MARGIN;
   const resolvedMargin = drawingTools
     ? { ...baseMargin, left: (baseMargin.left ?? DEFAULT_MARGIN.left ?? 0) + TOOLS_RAIL_WIDTH }
@@ -379,10 +381,9 @@ export function CandlestickChart({
   const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
     useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
 
-  // The bottom axis's own scale is index-based, so its automatic tick generator would label ticks
-  // with raw indices (0, 100, 200…) instead of dates — same fix BarChart/DeltaChart already use
-  // for their categorical axis: explicit tickValues (see useZoomAndScales' own dateTickValues)
-  // plus a tickFormat that looks the date up by index, this one.
+  // The bottom axis's own scale is index-based, so its auto tick generator would label raw
+  // indices (0, 100, 200…) instead of dates — explicit tickValues (dateTickValues) plus this
+  // index-to-date lookup, same fix BarChart/DeltaChart already use for their categorical axis.
   function dateTickFormat(v: number): string {
     const idx = Math.min(data.length - 1, Math.max(0, Math.round(v - 0.5)));
     return dFmt(data[idx].date);
@@ -563,64 +564,48 @@ export function CandlestickChart({
       indexForDate, futureZoneVisible,
     });
   }, [
-    visible,
-    zoomedXScale,
-    zoomedPriceScale,
-    candleWidth,
-    chartDisplayMode,
-    heikinAshiCandles,
-    renkoBricks,
-    lineBreakBricks,
-    tpoProfile,
-    data,
-    visibleRange,
-    upColorOverride,
-    downColorOverride,
-    volumeUpColorOverride,
-    volumeDownColorOverride,
-    volumeVisible,
-    volumeCollapsed,
-    zoomedVolumeScale,
-    volumeHeight,
-    volumeTop,
-    priceHeight,
-    ownPaneIndicators,
-    indicatorPaneHeights,
-    indicatorPaneTops,
-    zoomedOwnPaneScales,
-    indicators,
-    overlayProjections,
-    symbolOverlays,
-    effectiveHovered,
-    effectiveHoverY,
-    hoverVolumeY,
-    hoverIndicatorPaneId,
-    hoverIndicatorPaneY,
-    effectiveHoverIndex,
-    visibleDrawings,
-    hoveredDrawingId,
-    activeTool,
-    pendingPoint,
-    previewPoint,
-    pendingSecondPoint,
-    pendingExtraPoints,
-    brushPreview,
-    measurePoints,
-    livePrice,
-    visibleIndicators,
-    indexForDate, futureZoneVisible,
-    dims,
-    plotBoundedHeight,
-    themeTick,
-    ref,
+    visible, zoomedXScale,
+    zoomedPriceScale, candleWidth,
+    chartDisplayMode, heikinAshiCandles,
+    renkoBricks, lineBreakBricks,
+    tpoProfile, data,
+    visibleRange, upColorOverride,
+    downColorOverride, volumeUpColorOverride,
+    volumeDownColorOverride, volumeVisible,
+    volumeCollapsed, zoomedVolumeScale,
+    volumeHeight, volumeTop,
+    priceHeight, ownPaneIndicators,
+    indicatorPaneHeights, indicatorPaneTops,
+    zoomedOwnPaneScales, indicators,
+    overlayProjections, symbolOverlays,
+    effectiveHovered, effectiveHoverY,
+    hoverVolumeY, hoverIndicatorPaneId,
+    hoverIndicatorPaneY, effectiveHoverIndex,
+    visibleDrawings, hoveredDrawingId,
+    activeTool, pendingPoint,
+    previewPoint, pendingSecondPoint,
+    pendingExtraPoints, brushPreview,
+    measurePoints, livePrice,
+    visibleIndicators, indexForDate, futureZoneVisible,
+    dims, plotBoundedHeight,
+    themeTick, ref,
   ]);
 
-  if (dims.width === 0)
-    return <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width, height: isFullscreen ? undefined : height }} />;
-  if (data.length === 0) {
+  // `ref` always lands on .lq-chart__main (never the outer .lq-chart directly) in every return
+  // path here — useChartDimensions' own ResizeObserver effect doesn't re-run on a ref retarget
+  // (its deps are just options.width/height/aspectRatio), so it'd silently keep watching whatever
+  // stale element it first attached to if this ever moved between branches on the same mount.
+  if (dims.width === 0 || data.length === 0) {
     return (
-      <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width, height: isFullscreen ? undefined : height }}>
-        <div className="lq-chart__empty">Aucune donnée</div>
+      <div className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width, height: isFullscreen ? undefined : height }}>
+        <div ref={ref} className="lq-chart__main">
+          {data.length === 0 && <div className="lq-chart__empty">Aucune donnée</div>}
+        </div>
+        {sidePanel && sidePanelState.open && (
+          <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
+            {sidePanel}
+          </ChartSidePanel>
+        )}
       </div>
     );
   }
@@ -628,9 +613,8 @@ export function CandlestickChart({
   const dFmt = formatDate ?? d3.timeFormat("%d %b %Y");
   const pFmt = formatPrice ?? ((v: number) => v.toFixed(2));
   const vFmt = formatVolume ?? ((v: number) => d3.format(".2s")(v));
-  // Every price-axis-pinned badge (hover, live price, price-overlay indicator values, horizontal/
-  // ray drawing values) reads through this instead of `pFmt` directly, so they always agree with
-  // the axis right beside them (see the price ChartAxis' own tickFormat, same compareMode check).
+  // Every price-axis-pinned badge reads through this instead of `pFmt` directly, so they always
+  // agree with the axis right beside them (same compareMode check as its own tickFormat).
   const priceAxisFmt = (v: number) => (compareMode ? formatPercentFromReference(v, overlayProjections[0]?.mainReference ?? v) : pFmt(v));
   const currentTimeframeLabel = findTimeframeLabel(timeframes, timeframe);
   const currentModeEntry = CHART_DISPLAY_MODES.find((m) => m.mode === chartDisplayMode) ?? CHART_DISPLAY_MODES[0];
@@ -641,7 +625,12 @@ export function CandlestickChart({
   const { candle: ohlcCandle, delta: ohlcDelta, deltaPct: ohlcDeltaPct, sign: ohlcSign } = computeOhlcReadout(data, effectiveHoverIndex);
 
   return (
-    <div ref={ref} className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
+    <div className={["lq-chart", isFullscreen && "lq-chart--fullscreen", className].filter(Boolean).join(" ")} style={{ width: isFullscreen ? undefined : width }}>
+      {/* `ref` (useChartDimensions) lives here, not on the outer .lq-chart — flexbox (outer div
+          is a row, this + ChartSidePanel its children) hands this whatever width the panel
+          doesn't take, so the plot genuinely shrinks with zero changes to any downstream
+          axis/margin math (see ChartSidePanel.tsx's own doc). */}
+      <div ref={ref} className="lq-chart__main">
       {showHeader && !seasonalityOpen && (
         <ChartHeader
           dims={dims}
@@ -670,6 +659,9 @@ export function CandlestickChart({
           fullscreenToggle={fullscreenToggle}
           toggleFullscreen={toggleFullscreen}
           isFullscreen={isFullscreen}
+          sidePanel={!!sidePanel}
+          sidePanelOpen={sidePanelState.open}
+          onToggleSidePanel={() => sidePanelState.commitOpen(!sidePanelState.open)}
           showTemplates={showTemplates}
           templates={templates}
           activeTemplateId={activeTemplateId}
@@ -695,9 +687,8 @@ export function CandlestickChart({
         style={{ width: dims.width, height: plotHeight }}
         onPointerLeave={(e) => {
           // Touch "leave" fires the instant a finger lifts — pin instead of clear (mouse still
-          // clears normally) so the crosshair's "+" badges and the volume pane's hover-gated
-          // actions survive long enough for a follow-up tap; the next tap elsewhere already
-          // recomputes this via handlePointerMove/handleOverlayPointerDown.
+          // clears normally) so the "+"/pane-action badges survive for a follow-up tap; the
+          // next tap elsewhere already recomputes this via handlePointerMove.
           if (e.pointerType === "touch") return;
           setHoverIndex(null);
           setHoverY(null);
@@ -706,17 +697,13 @@ export function CandlestickChart({
           setHoverIndicatorPaneY(null);
         }}
       >
-        {/* Positioned relative to .lq-chart__plot (not the outer .lq-chart), same reason the
-            canvas is: .lq-chart carries fullscreen's own position:fixed/border and only
-            .lq-chart__plot's box lines up with where the svg/canvas content actually starts.
-            Explicitly sized (not left to intrinsic sizing from its svg child) so it can never
-            drift from `dims` regardless of how the fullscreen flex container's own
-            stretch/centering behaves. */}
-        {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its
-            right border lands exactly where the plot content starts — sizing it to the
-            constant alone left an unstyled gap equal to the base margin between the rail
-            and the first candle. Height spans the full plot (candles + volume + the date-axis
-            label strip below them), reaching all the way down to the chart's own bottom border. */}
+        {/* Positioned relative to .lq-chart__plot (not .lq-chart__main), same reason the canvas
+            is: only .lq-chart__plot's own box lines up with where the svg/canvas content starts.
+            Explicitly sized (not left to intrinsic sizing from its svg child) so it never drifts
+            from `dims` regardless of how the fullscreen flex container's own centering behaves. */}
+        {/* Width is the *entire* reserved left margin (not just TOOLS_RAIL_WIDTH) so its right
+            border lands exactly where the plot content starts, not a bare-constant-sized gap
+            short of it. Height spans the full plot down to the chart's own bottom border. */}
         <ToolsRail
           drawingTools={drawingTools}
           dims={dims}
@@ -896,12 +883,11 @@ export function CandlestickChart({
       </div>
       )}
 
-      {/* Own positioned ancestor is the root .lq-chart (this sits outside .lq-chart__plot, which
-          would otherwise become the nearer positioned ancestor and confine it to the plot area
-          alone) — "fills the whole chart" is meant to include the header/toolbar too, same
-          footprint as the native fullscreen overlay. Closing it also clears activeEventStack
-          (not just eventModalOpen) so the popover never reappears underneath once the modal that
-          replaced it is dismissed. */}
+      {/* Own positioned ancestor is .lq-chart__main (sits outside .lq-chart__plot, which would
+          otherwise confine it to the plot area alone) — "fills the whole chart" means
+          header+plot together, same footprint as the native fullscreen overlay; not the side
+          panel too, which isn't part of what this event happened on. Closing it also clears
+          activeEventStack so the popover doesn't reappear once the replacing modal is dismissed. */}
       {eventModalOpen && activeEventStack && (
         <ChartEventTooltip
           events={activeEventStack.events}
@@ -995,6 +981,13 @@ export function CandlestickChart({
         handleAddSymbolOverlay={handleAddSymbolOverlay}
         removeSymbolOverlay={removeSymbolOverlay}
       />
+      </div>
+
+      {sidePanel && sidePanelState.open && (
+        <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
+          {sidePanel}
+        </ChartSidePanel>
+      )}
     </div>
   );
 }
