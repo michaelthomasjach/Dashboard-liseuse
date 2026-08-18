@@ -348,9 +348,13 @@ export const AllFeatures: Story = {
           watchlists={watchlists}
           watchlistSymbolSearchResults={watchlistSearchResults}
           onWatchlistSymbolSearchChange={(query, category) => setWatchlistSearchResults(filterMockSymbols(query, category, []))}
+          // A fresh id per insertion (not `result.id`, the *symbol's* own stable catalog id) —
+          // reusing that would give two rows the same id the moment the same symbol gets added
+          // twice (same watchlist or section), and removing either one via `r.id !== rowId`
+          // (see handleRemoveWatchlistSymbol above) would then drop both at once.
           onAddWatchlistSymbol={(watchlistId, result) =>
             setWatchlists((prev) =>
-              prev.map((w) => (w.id === watchlistId ? { ...w, rows: [...w.rows, { id: result.id, ticker: result.ticker, values: {} }] } : w))
+              prev.map((w) => (w.id === watchlistId ? { ...w, rows: [...w.rows, { id: `row-${Date.now()}`, ticker: result.ticker, values: {} }] } : w))
             )
           }
           onWatchlistRowClick={(row) => setCurrentSymbol(row.ticker)}

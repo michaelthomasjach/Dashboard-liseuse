@@ -1302,6 +1302,33 @@
   }
 }
 
+/* "You can drag this" affordance — two short bars straddling the divider, centered on the
+   handle, invisible until the handle itself is hovered (see .lq-chart__pane-resize-handle:hover
+   below) rather than shown constantly, so it doesn't clutter every pane boundary at once. */
+.lq-chart__pane-resize-grip {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform: translate(-50%, -50%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lq-chart__pane-resize-handle:hover .lq-chart__pane-resize-grip {
+  opacity: 1;
+}
+
+.lq-chart__pane-resize-grip::before,
+.lq-chart__pane-resize-grip::after {
+  content: "";
+  width: 16px;
+  height: 1px;
+  background-color: var(--lq-color-border);
+}
+
 .lq-chart__indicator-category-filters {
   display: flex;
   flex-wrap: wrap;

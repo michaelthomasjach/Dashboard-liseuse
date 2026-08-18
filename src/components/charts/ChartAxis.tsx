@@ -50,7 +50,15 @@ export function ChartAxis<Domain extends d3.AxisDomain = d3.AxisDomain>({
 
     const selection = d3.select(g);
     selection.call(axis);
-    selection.select(".domain").attr("class", "lq-chart-axis__domain");
+    // `.classed(name, true)` (add a class) rather than `.attr("class", name)` (replace the whole
+    // attribute) — d3-axis's own re-entry logic finds its previous domain path via `.domain`
+    // (a class selector, unlike its tick lookup below which matches by tag name and so isn't
+    // affected). Overwriting that class here used to strip it away every time, so on the next
+    // re-render (this effect has no dependency array — it re-runs on every render) d3-axis could
+    // no longer find the path it drew last time and inserted a brand new one instead of updating
+    // it in place, silently piling up duplicate overlapping domain paths for as long as the axis
+    // stayed mounted.
+    selection.select(".domain").classed("lq-chart-axis__domain", true);
     selection.selectAll(".tick line").attr("class", grid ? "lq-chart-axis__grid-line" : "lq-chart-axis__tick-line");
     selection.selectAll(".tick text").attr("class", "lq-chart-axis__label");
 

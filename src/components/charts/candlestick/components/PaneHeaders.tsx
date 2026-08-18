@@ -87,7 +87,9 @@ export function PaneHeaders({
               className="lq-chart__pane-resize-handle"
               onPointerDown={(e) => startPaneResize("volume", e)}
               aria-hidden="true"
-            />
+            >
+              <span className="lq-chart__pane-resize-grip" aria-hidden="true" />
+            </div>
           )}
           <div className="lq-chart__pane-header-primary">
             {/* Same drag-to-reorder grip as every indicator pane's own header — volume is just
@@ -217,7 +219,9 @@ export function PaneHeaders({
               className="lq-chart__pane-resize-handle"
               onPointerDown={(e) => startPaneResize(ind.id, e)}
               aria-hidden="true"
-            />
+            >
+              <span className="lq-chart__pane-resize-grip" aria-hidden="true" />
+            </div>
           )}
           <div className="lq-chart__pane-header-primary">
             <button
