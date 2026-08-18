@@ -1,9 +1,10 @@
 import type { Candle } from "../CandlestickChart";
 
-/** How the reference year is sliced into buckets — never finer than a week (no "day" option):
- *  daily-resolution seasonality is mostly noise (weekday effects, holiday drift between years)
- *  without a lot of extra smoothing machinery this doesn't try to provide. */
-export type SeasonalityGranularity = "week" | "month" | "quarter" | "year";
+/** How the reference year is sliced into buckets — "day" is the finest and what SeasonalityView
+ *  actually renders with today (a real per-trading-day curve, not smoothed away — most calendar
+ *  days a given year has a candle on land in their own bucket, so the result reads about as
+ *  granular as the underlying data's own trading-day frequency lets it). */
+export type SeasonalityGranularity = "day" | "week" | "month" | "quarter" | "year";
 
 /** One year's own contribution to a bucket — kept around (not collapsed into just the average)
  *  so future features can be built as pure consumption of this same shape, without touching the
@@ -20,12 +21,12 @@ export interface SeasonalityOccurrence {
 }
 
 export interface SeasonalityBucket {
-  /** 0-based position within the reference year — 0-51 for "week", 0-11 for "month", 0-3 for
-   *  "quarter", always 0 for "year" (a single bucket covering the whole thing) — except -1, the
-   *  synthetic "start of year" reference bucket every included year gets an `average`/every own
-   *  `occurrences[].value` of exactly 0 at (see `computeSeasonality`'s own doc), so every line
-   *  visibly starts from the same shared anchor instead of wherever its own first real bucket
-   *  happens to already be. */
+  /** 0-based position within the reference year — 0-364 for "day", 0-51 for "week", 0-11 for
+   *  "month", 0-3 for "quarter", always 0 for "year" (a single bucket covering the whole thing)
+   *  — except -1, the synthetic "start of year" reference bucket every included year gets an
+   *  `average`/every own `occurrences[].value` of exactly 0 at (see `computeSeasonality`'s own
+   *  doc), so every line visibly starts from the same shared anchor instead of wherever its own
+   *  first real bucket happens to already be. */
   index: number;
   /** Display label, e.g. "Semaine 12", "Mars", "T2", "Année". */
   label: string;
@@ -47,11 +48,23 @@ export interface SeasonalityResult {
   years: number[];
 }
 
+const DAY_BUCKET_COUNT = 365;
 const WEEK_BUCKET_COUNT = 52;
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
+// Shared by both "day" and "week" bucketing below — a date's own 0-based offset from Jan 1 of
+// its *own* year (so Dec 31 of a leap year is 365, folded down to the last bucket by each
+// caller rather than getting a sparse 366th bucket only leap years could ever contribute to).
+function dayOfYear(date: Date): number {
+  const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
+  const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
+  return Math.round((today - yearStart) / 86_400_000);
+}
+
 function bucketCountFor(granularity: SeasonalityGranularity): number {
   switch (granularity) {
+    case "day":
+      return DAY_BUCKET_COUNT;
     case "week":
       return WEEK_BUCKET_COUNT;
     case "month":
@@ -65,14 +78,12 @@ function bucketCountFor(granularity: SeasonalityGranularity): number {
 
 function bucketIndexFor(date: Date, granularity: SeasonalityGranularity): number {
   switch (granularity) {
-    case "week": {
-      const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
-      const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
-      const dayOfYear = Math.round((today - yearStart) / 86_400_000);
+    case "day":
+      return Math.min(dayOfYear(date), DAY_BUCKET_COUNT - 1);
+    case "week":
       // A leap-ish 53rd week's worth of overflow days folds into the last bucket instead of
       // getting a sparse bucket of its own that only a handful of years could ever contribute to.
-      return Math.min(Math.floor(dayOfYear / 7), WEEK_BUCKET_COUNT - 1);
-    }
+      return Math.min(Math.floor(dayOfYear(date) / 7), WEEK_BUCKET_COUNT - 1);
     case "month":
       return date.getUTCMonth();
     case "quarter":
@@ -84,6 +95,8 @@ function bucketIndexFor(date: Date, granularity: SeasonalityGranularity): number
 
 function bucketLabel(index: number, granularity: SeasonalityGranularity): string {
   switch (granularity) {
+    case "day":
+      return `Jour ${index + 1}`;
     case "week":
       return `Semaine ${index + 1}`;
     case "month":

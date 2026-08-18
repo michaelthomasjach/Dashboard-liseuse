@@ -12,32 +12,32 @@ import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
 // The only granularity offered now (see this file's own git history for the Semaine/Trimestre/
-// Année options this replaced) — always computed at "week" resolution (52 buckets) internally
-// for a genuinely detailed curve, see MONTH_TICK_INDEXES below for how the X axis still only
-// *labels* the 12 month boundaries among those 52 points.
+// Année options this replaced) — always computed at "day" resolution (365 buckets) internally
+// for a curve as detailed as the underlying trading-day data actually supports, see
+// MONTH_TICK_INDEXES below for how the X axis still only *labels* the 12 month boundaries among
+// those 365 points.
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Any non-leap year works as the template — this never names a real year, just the shape one
 // has (Jan 1 is day 0, and no Feb 29 to throw month-start days off from every *other* year's own
-// week-bucket math, which computeSeasonality's own bucketIndexFor already ignores leap years
-// for the same reason).
+// day-bucket math, which computeSeasonality's own bucketIndexFor already ignores leap years for
+// the same reason).
 const REFERENCE_YEAR = 2001;
-const WEEK_BUCKET_COUNT = 52;
+const DAY_BUCKET_COUNT = 365;
 
-// Which week-bucket (0-51) each month starts in — mirrors computeSeasonality's own
-// bucketIndexFor("week") math exactly (Math.floor(dayOfYear / 7), clamped to the last bucket) so
-// the two can never silently drift apart. Used both to label the X axis sparsely (see
-// xTickFormat below) and to size the "space before January/after December" padding (see
-// xDomainPadding).
-function monthStartWeekIndex(monthIdx: number): number {
+// Which day-bucket (0-364) each month starts in — mirrors computeSeasonality's own
+// bucketIndexFor("day") math exactly (a date's own 0-based offset from Jan 1) so the two can
+// never silently drift apart. Used both to label the X axis sparsely (see xTickFormat below) and
+// to size the "space before January/after December" padding (see xDomainPadding).
+function monthStartDayIndex(monthIdx: number): number {
   const dayOfYear = Math.round((Date.UTC(REFERENCE_YEAR, monthIdx, 1) - Date.UTC(REFERENCE_YEAR, 0, 1)) / 86_400_000);
-  return Math.min(Math.floor(dayOfYear / 7), WEEK_BUCKET_COUNT - 1);
+  return Math.min(dayOfYear, DAY_BUCKET_COUNT - 1);
 }
-const MONTH_TICK_INDEXES = MONTH_LABELS.map((_, i) => monthStartWeekIndex(i));
+const MONTH_TICK_INDEXES = MONTH_LABELS.map((_, i) => monthStartDayIndex(i));
 
-// Every real week-bucket index gets a tick mark; xTickFormat below is what actually keeps all
-// but the 12 month-boundary ones unlabeled.
-const WEEK_TICK_VALUES = Array.from({ length: WEEK_BUCKET_COUNT }, (_, i) => i);
+// Every real day-bucket index gets a tick mark; xTickFormat below is what actually keeps all but
+// the 12 month-boundary ones unlabeled.
+const DAY_TICK_VALUES = Array.from({ length: DAY_BUCKET_COUNT }, (_, i) => i);
 
 // "the space between 2 months (January-February)" — the user's own chosen unit for how wide a
 // margin to leave before January and after December (see xDomainPadding below), applied
@@ -45,19 +45,23 @@ const WEEK_TICK_VALUES = Array.from({ length: WEEK_BUCKET_COUNT }, (_, i) => i);
 // width.
 const MONTH_GAP_WIDTH = MONTH_TICK_INDEXES[1] - MONTH_TICK_INDEXES[0];
 
-// A week-bucket index's own approximate calendar date within the reference year (its
-// representative day landing mid-week) — the hover crosshair/ruler's own denser per-point label,
-// as opposed to xTickFormat's sparse month-only axis labels. -1 is the synthetic "Réf." anchor
-// bucket (see computeSeasonality's own doc) rather than a real week.
-function formatWeekBucket(index: number): string {
+// A day-bucket index's own calendar date within the reference year — the hover crosshair/ruler's
+// own denser per-point label, as opposed to xTickFormat's sparse month-only axis labels. -1 is
+// the synthetic "Réf." anchor bucket (see computeSeasonality's own doc) rather than a real day.
+function formatDayBucket(index: number): string {
   if (index === -1) return "Réf.";
-  const date = new Date(Date.UTC(REFERENCE_YEAR, 0, 1 + index * 7 + 3));
+  const date = new Date(Date.UTC(REFERENCE_YEAR, 0, 1 + index));
   return d3.timeFormat("%d %b")(date);
 }
 
 // US presidential elections land every 4 years on the nose (1788, 1792, … 2024, 2028…) — no
-// lookup table needed, just the one arithmetic fact.
+// lookup table needed, just the one arithmetic fact; the other three phases of the same 4-year
+// cycle follow from it (post-election the year right after, midterm two years after, pre-election
+// the year right before the next one).
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
+const isUSPostElectionYear = (year: number) => year % 4 === 1;
+const isUSMidtermElectionYear = (year: number) => year % 4 === 2;
+const isUSPreElectionYear = (year: number) => year % 4 === 3;
 
 // Dedicated pastel tones for the two conditional area-fill settings (see fillUnderCurve/
 // fillBetweenCurves below) — independent of YEAR_PASTEL_COLORS just below (that palette identi-
@@ -167,7 +171,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   const [fillUnderCurve, setFillUnderCurve] = useState(false);
   const [fillBetweenCurves, setFillBetweenCurves] = useState(false);
 
-  const result = useMemo(() => computeSeasonality(data, "week", excludedYears), [data, excludedYears]);
+  const result = useMemo(() => computeSeasonality(data, "day", excludedYears), [data, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
   const currentYear = new Date().getUTCFullYear();
   const hasCurrentYear = result.years.includes(currentYear);
@@ -372,41 +376,72 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
               onClose={() => setYearPickerOpen(false)}
               anchorRef={yearPickerAnchorRef}
               placement="bottom"
+              // The preset/filter buttons live in `header` now, ahead of the year checkboxes
+              // below in `children` — swapped from the original header-then-body-then-footer
+              // order (filters used to be the footer, after the checkbox list) since the filters
+              // are what most people reach for first, before hand-picking individual years.
+              // `DropdownPanel` itself has no "a 4th section before the body" slot of its own, so
+              // this reuses the same .lq-dropdown-panel__footer row style (border-top, wrapping
+              // button row) nested inside `header` instead of passed as its own `footer` prop.
               header={
-                <div className="lq-dropdown-panel__header-row">
-                  <span>Années incluses</span>
-                  <span className="lq-dropdown-panel__header-count">{yearsLabel}</span>
-                </div>
-              }
-              footer={
                 <>
-                  <button type="button" className="lq-dropdown-panel__footer-action" onClick={() => setExcludedYears(new Set())}>
-                    Tout cocher
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-dropdown-panel__footer-action"
-                    onClick={() => setExcludedYears(new Set(availableYears))}
-                  >
-                    Tout décocher
-                  </button>
-                  <button
-                    type="button"
-                    className="lq-dropdown-panel__footer-action"
-                    onClick={() => includeOnly(isUSPresidentialElectionYear)}
-                    title="Ne garder que les années d'élection présidentielle américaine (1988, 1992, 1996…)"
-                  >
-                    Années d'élection (US)
-                  </button>
-                  {recentYearsCount < availableYears.length && (
+                  <div className="lq-dropdown-panel__header-row">
+                    <span>Années incluses</span>
+                    <span className="lq-dropdown-panel__header-count">{yearsLabel}</span>
+                  </div>
+                  <div className="lq-dropdown-panel__footer">
+                    <button type="button" className="lq-dropdown-panel__footer-action" onClick={() => setExcludedYears(new Set())}>
+                      Tout cocher
+                    </button>
                     <button
                       type="button"
                       className="lq-dropdown-panel__footer-action"
-                      onClick={() => includeOnly((y) => y >= recentYearsCutoff)}
+                      onClick={() => setExcludedYears(new Set(availableYears))}
                     >
-                      {recentYearsCount} dernières années
+                      Tout décocher
                     </button>
-                  )}
+                    <button
+                      type="button"
+                      className="lq-dropdown-panel__footer-action"
+                      onClick={() => includeOnly(isUSPresidentialElectionYear)}
+                      title="Ne garder que les années d'élection présidentielle américaine (1988, 1992, 1996…)"
+                    >
+                      Années d'élection (US)
+                    </button>
+                    <button
+                      type="button"
+                      className="lq-dropdown-panel__footer-action"
+                      onClick={() => includeOnly(isUSMidtermElectionYear)}
+                      title="Ne garder que les années de mi-mandat américaines (1990, 1994, 1998…)"
+                    >
+                      Mi-mandat (US)
+                    </button>
+                    <button
+                      type="button"
+                      className="lq-dropdown-panel__footer-action"
+                      onClick={() => includeOnly(isUSPreElectionYear)}
+                      title="Ne garder que les années précédant une élection présidentielle américaine (1991, 1995, 1999…)"
+                    >
+                      Pré-élection (US)
+                    </button>
+                    <button
+                      type="button"
+                      className="lq-dropdown-panel__footer-action"
+                      onClick={() => includeOnly(isUSPostElectionYear)}
+                      title="Ne garder que les années suivant une élection présidentielle américaine (1989, 1993, 1997…)"
+                    >
+                      Post-élection (US)
+                    </button>
+                    {recentYearsCount < availableYears.length && (
+                      <button
+                        type="button"
+                        className="lq-dropdown-panel__footer-action"
+                        onClick={() => includeOnly((y) => y >= recentYearsCutoff)}
+                      >
+                        {recentYearsCount} dernières années
+                      </button>
+                    )}
+                  </div>
                 </>
               }
             >
@@ -505,19 +540,19 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             ref={lineChartRef}
             series={series}
             xType="linear"
-            // The hover crosshair/ruler's own denser per-point label (every real week-bucket,
-            // not just the 12 month boundaries xTickFormat below labels on the axis itself).
+            // The hover crosshair/ruler's own denser per-point label (every real day-bucket, not
+            // just the 12 month boundaries xTickFormat below labels on the axis itself).
             // Rounded, not an exact `===` match: the regular hover crosshair only ever passes an
             // exact bucket index (snapped via allXValues), but the ruler's own points are raw,
             // unsnapped pixel positions (see LineAreaChart's `measureActive`) that land between
             // buckets more often than not.
-            formatX={(x) => formatWeekBucket(Math.round(Number(x)))}
+            formatX={(x) => formatDayBucket(Math.round(Number(x)))}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
-            // 52 real tick marks (one per week-bucket, see WEEK_TICK_VALUES) but only the 12
-            // that land on a month boundary get an actual label — everything else reads "" via
-            // xTickFormat, so the axis stays a bare mark there instead of a crowded 52-label row.
-            xTickValues={WEEK_TICK_VALUES}
+            // 365 real tick marks (one per day-bucket, see DAY_TICK_VALUES) but only the 12 that
+            // land on a month boundary get an actual label — everything else reads "" via
+            // xTickFormat, so the axis stays a bare mark there instead of a crowded 365-label row.
+            xTickValues={DAY_TICK_VALUES}
             xTickFormat={(x) => {
               const monthIdx = MONTH_TICK_INDEXES.indexOf(Math.round(Number(x)));
               return monthIdx >= 0 ? MONTH_LABELS[monthIdx] : "";
