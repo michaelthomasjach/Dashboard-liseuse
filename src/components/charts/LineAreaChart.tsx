@@ -8,6 +8,7 @@ import { useFullscreen } from "./internal/useFullscreen";
 import { ChartAxis } from "./ChartAxis";
 import { ChartTooltip } from "./ChartTooltip";
 import { CHART_PALETTE } from "./internal/palette";
+import { splitAtReference, splitBetweenSeries } from "./internal/areaFillSegments";
 import { MaximizeIcon, MinimizeIcon } from "../icons";
 import "./charts-shared.css";
 import "./LineAreaChart.css";
@@ -32,6 +33,14 @@ export interface ChartSeries {
    *  whose data simply stops at "today", short of every other series' full range) so that stop
    *  point reads as "still going, paused here" rather than an unexplained dangling line end. */
   endDot?: boolean;
+  /** Fills the area between this series and the chart-level `referenceLineY` (which must also be
+   *  set — a no-op without it), split at every point the line actually crosses it: segments above
+   *  use `positiveColor`, segments below use `negativeColor` (see SeasonalityView's own "colorer
+   *  l'aire sous la courbe" setting — green/red relative to 0%). Independent of `area`/the
+   *  chart-level `area` prop (a flat single-color fill down to the plot's own bottom edge
+   *  regardless of sign) — this one fills toward the reference line specifically, in one of two
+   *  colors depending on which side of it the curve currently sits on. */
+  fillSignedAtReference?: { positiveColor: string; negativeColor: string };
   data: ChartPoint[];
 }
 
@@ -77,9 +86,33 @@ export interface LineAreaChartProps {
   axisHoverLabels?: boolean;
   /** Roughly how many ticks to request on each axis — a hint, not an exact count (d3's own
    *  `.ticks(n)` rounds to whichever "nice" step lands closest to it, same as ChartAxis's own
-   *  default already works). Default 5 (ChartAxis's own default) for both when omitted. */
+   *  default already works). Default 5 (ChartAxis's own default) for both when omitted. Ignored
+   *  on the X axis when `xTickValues` is set (explicit positions override the automatic count). */
   xTicks?: number;
   yTicks?: number;
+  /** Explicit X-axis tick positions, overriding `xTicks`'s automatic count — e.g. one per
+   *  week-bucket on a finer-resolution curve while only some of them get a real label via
+   *  `xTickFormat` returning "" for the rest (see SeasonalityView's own month-only labeling). */
+  xTickValues?: (Date | number)[];
+  /** X-axis tick label formatter, distinct from `formatX` (which also drives the hover
+   *  crosshair/tooltip's own, typically denser, per-point label) — falls back to `formatX` when
+   *  omitted. Split out so a caller can label the axis sparsely (e.g. only 12 of 52 ticks) while
+   *  still giving every individual point hovered/measured its own full label. */
+  xTickFormat?: (x: Date | number) => string;
+  /** Extends the X domain beyond the data's own min/max by this many x-units on each side (same
+   *  units as the data — index/bucket units for a "linear" xType, milliseconds for "time"),
+   *  rendered as a diagonal-hatched background matching CandlestickChart's own "future zone"
+   *  hatching — for a caller that wants dedicated empty margin before/after its real data rather
+   *  than the domain hugging it exactly (see SeasonalityView's own space before January/after
+   *  December). Omit for no padding. */
+  xDomainPadding?: { start: number; end: number };
+  /** Fills the region between two named series (by `ChartSeries.id`), colored by which one is
+   *  currently higher — `aAboveColor` wherever `seriesIdA`'s own value exceeds `seriesIdB`'s at
+   *  that x, `aBelowColor` wherever it's under (see SeasonalityView's own "colorer l'aire entre
+   *  les deux courbes" setting). Only fills the x-range both series actually share an *exact*
+   *  matching x for — both need to already sit on the same x grid (true for two seasonality
+   *  buckets series, not a general cross-grid interpolation). */
+  fillBetween?: { seriesIdA: string; seriesIdB: string; aAboveColor: string; aBelowColor: string };
   /** Click-to-place ruler: the first click on the plot area sets a start point, the second sets
    *  an end point and shows the delta between them (each point's own formatted X, plus the Y
    *  delta) — a third click starts a new measurement instead of adding a third point. Neither
@@ -119,11 +152,16 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   axisHoverLabels = false,
   xTicks,
   yTicks,
+  xTickValues,
+  xTickFormat,
+  xDomainPadding,
+  fillBetween,
   measureActive = false,
   margin,
   className,
 }, handleRef) {
   const clipId = useId();
+  const hatchId = useId();
   const [transform, setTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [yTransform, setYTransform] = useState<d3.ZoomTransform>(d3.zoomIdentity);
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
@@ -174,21 +212,26 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
     return Array.from(byValue.values()).sort((a, b) => +a - +b);
   }, [visibleSeries]);
 
-  const xScale = useMemo(() => {
+  // The data's own raw extent, before xDomainPadding widens it — also what the hatch rendering
+  // below reads to know where "real data" ends and its own padding zones begin, in the same
+  // units xScale's domain uses (a Date for "time", a plain number for "linear").
+  const dataExtent = useMemo(() => {
     const allX = visibleSeries.flatMap((s) => s.data.map((d) => d.x));
+    return xType === "time" ? (d3.extent(allX as Date[]) as [Date, Date]) : (d3.extent(allX as number[]) as [number, number]);
+  }, [visibleSeries, xType]);
+
+  const xScale = useMemo(() => {
+    const padStart = xDomainPadding?.start ?? 0;
+    const padEnd = xDomainPadding?.end ?? 0;
     if (xType === "time") {
-      const extent = d3.extent(allX as Date[]) as [Date, Date];
-      return d3
-        .scaleTime()
-        .domain(extent[0] && extent[1] ? extent : [new Date(), new Date()])
-        .range([0, dims.boundedWidth]);
+      const [min, max] = dataExtent as [Date, Date];
+      const domain: [Date, Date] = min && max ? [new Date(min.getTime() - padStart), new Date(max.getTime() + padEnd)] : [new Date(), new Date()];
+      return d3.scaleTime().domain(domain).range([0, dims.boundedWidth]);
     }
-    const extent = d3.extent(allX as number[]) as [number, number];
-    return d3
-      .scaleLinear()
-      .domain(extent[0] !== undefined ? extent : [0, 1])
-      .range([0, dims.boundedWidth]);
-  }, [visibleSeries, xType, dims.boundedWidth]);
+    const [min, max] = dataExtent as [number, number];
+    const domain: [number, number] = min !== undefined ? [min - padStart, max + padEnd] : [0, 1];
+    return d3.scaleLinear().domain(domain).range([0, dims.boundedWidth]);
+  }, [dataExtent, xType, dims.boundedWidth, xDomainPadding?.start, xDomainPadding?.end]);
 
   const zoomedXScale = transform.rescaleX(xScale as unknown as d3.ScaleLinear<number, number>);
 
@@ -269,6 +312,27 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
     .y0(dims.boundedHeight)
     .y1((d) => zoomedYScale(d.y))
     .curve(d3.curveMonotoneX);
+
+  // Toward `referenceLineY` (not the plot's own bottom edge like `areaGen` above) — used by
+  // `fillSignedAtReference`'s own per-segment fills. `curveLinear`, not `curveMonotoneX` like
+  // every other generator here: each segment is only ever a handful of points bounded by an
+  // exact interpolated crossing (see splitAtReference's own doc on why linear is close enough
+  // and avoids kinks a re-started monotone curve would introduce right at that boundary).
+  const referenceAreaGen = d3
+    .area<ChartPoint>()
+    .x((d) => zoomedXScale(d.x as never))
+    .y0(() => zoomedYScale(referenceLineY ?? 0))
+    .y1((d) => zoomedYScale(d.y))
+    .curve(d3.curveLinear);
+
+  // Between two series' own values directly (not a fixed reference) — used by `fillBetween`'s
+  // own per-segment fills. Same curveLinear reasoning as referenceAreaGen above.
+  const betweenAreaGen = d3
+    .area<{ x: Date | number; yA: number; yB: number }>()
+    .x((d) => zoomedXScale(d.x as never))
+    .y0((d) => zoomedYScale(d.yB))
+    .y1((d) => zoomedYScale(d.yA))
+    .curve(d3.curveLinear);
 
   const colorFor = (s: ChartSeries, i: number) => s.color ?? CHART_PALETTE[i % CHART_PALETTE.length];
 
@@ -371,6 +435,14 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
           <clipPath id={clipId}>
             <rect x={0} y={0} width={dims.boundedWidth} height={dims.boundedHeight} />
           </clipPath>
+          {/* Same diagonal-hatch look as CandlestickChart's own "future zone" (see
+              drawFutureZone.ts) — that one's canvas-drawn, this one's the SVG-pattern equivalent
+              for xDomainPadding's own two margin zones below. */}
+          {xDomainPadding && (
+            <pattern id={hatchId} patternUnits="userSpaceOnUse" width={10} height={10} patternTransform="rotate(45)">
+              <line x1={0} y1={0} x2={0} y2={10} className="lq-chart__hatch-line" />
+            </pattern>
+          )}
         </defs>
         <g transform={`translate(${dims.margin.left}, ${dims.margin.top})`}>
           <ChartAxis
@@ -399,11 +471,41 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             scale={zoomedXScale}
             orientation="bottom"
             transform={`translate(0, ${dims.boundedHeight})`}
-            tickFormat={formatX ? (v) => formatX(xType === "time" ? (v as Date) : Number(v)) : undefined}
+            tickFormat={
+              xTickFormat || formatX
+                ? (v) => (xTickFormat ?? formatX!)(xType === "time" ? (v as Date) : Number(v))
+                : undefined
+            }
             ticks={xTicks}
+            tickValues={xTickValues}
           />
 
           <g clipPath={`url(#${clipId})`}>
+            {/* xDomainPadding's own two margin zones — drawn first, before the reference
+                line/series/everything else, so they read as a background layer everything
+                else paints over (same convention as CandlestickChart's own future zone). Only
+                the gap between the plot's own edge and where real data starts/ends is hatched;
+                a Math.max(0, …) width keeps a fully zoomed/panned-out view (where the padding
+                itself might scroll off-screen entirely) from ever going negative. */}
+            {xDomainPadding &&
+              dataExtent[0] !== undefined &&
+              (() => {
+                const dataStartPx = zoomedXScale(dataExtent[0] as never);
+                const dataEndPx = zoomedXScale(dataExtent[1] as never);
+                return (
+                  <>
+                    <rect x={0} y={0} width={Math.max(0, dataStartPx)} height={dims.boundedHeight} fill={`url(#${hatchId})`} />
+                    <rect
+                      x={dataEndPx}
+                      y={0}
+                      width={Math.max(0, dims.boundedWidth - dataEndPx)}
+                      height={dims.boundedHeight}
+                      fill={`url(#${hatchId})`}
+                    />
+                  </>
+                );
+              })()}
+
             {referenceLineY !== undefined && (
               <line
                 className="lq-chart__reference-line"
@@ -414,12 +516,42 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
               />
             )}
 
+            {/* The region between two named series, colored by which one is on top at each x —
+                drawn before every series' own line/fill below so both lines' own strokes sit
+                crisply on top of it. */}
+            {fillBetween &&
+              (() => {
+                const dataA = series.find((s) => s.id === fillBetween.seriesIdA)?.data;
+                const dataB = series.find((s) => s.id === fillBetween.seriesIdB)?.data;
+                if (!dataA || !dataB) return null;
+                return splitBetweenSeries(dataA, dataB).map((segment, i) => (
+                  <path
+                    key={i}
+                    d={betweenAreaGen(segment.points) ?? undefined}
+                    fill={segment.aAbove ? fillBetween.aAboveColor : fillBetween.aBelowColor}
+                    fillOpacity={0.25}
+                    stroke="none"
+                  />
+                ));
+              })()}
+
             {visibleSeries.map((s, i) => {
               const color = colorFor(s, i);
               const fillArea = s.area ?? area;
               return (
                 <g key={s.id}>
                   {fillArea && <path d={areaGen(s.data) ?? undefined} fill={color} fillOpacity={0.12} stroke="none" />}
+                  {s.fillSignedAtReference &&
+                    referenceLineY !== undefined &&
+                    splitAtReference(s.data, referenceLineY).map((segment, i) => (
+                      <path
+                        key={i}
+                        d={referenceAreaGen(segment.points) ?? undefined}
+                        fill={segment.positive ? s.fillSignedAtReference!.positiveColor : s.fillSignedAtReference!.negativeColor}
+                        fillOpacity={0.25}
+                        stroke="none"
+                      />
+                    ))}
                   <path d={lineGen(s.data) ?? undefined} fill="none" stroke={color} strokeWidth={s.strokeWidth ?? 2} />
                   {s.endDot &&
                     s.data.length > 0 &&

@@ -76,7 +76,11 @@ export function ToolsRail({
             a category's menu both changes what its button represents *and* activates it
             immediately (see handleSelectToolType) — clicking the button itself afterward
             just toggles that same tool on/off, same as any other tool selection. */}
-        {DRAWING_TOOL_CATEGORIES.map((category) => {
+        {/* "measure" is filtered out here — rendered separately below the separator instead
+            (see its own button further down), grouped with the persistent modifier toggles
+            rather than the drawing-tool categories, since it doesn't add a drawing to the chart
+            the way every other category does. */}
+        {DRAWING_TOOL_CATEGORIES.filter((category) => category.id !== "measure").map((category) => {
           const selectedType = selectedToolByCategory[category.id] ?? category.tools[0].type;
           const selectedInCategory = category.tools.find((t) => t.type === selectedType) ?? category.tools[0];
           const CategoryIcon = selectedInCategory.icon;
@@ -157,6 +161,27 @@ export function ToolsRail({
             unconditional (always sits right here) rather than tied to whichever category happens
             to render last, so it can't silently disappear if the category list itself changes. */}
         <div className="lq-chart__tool-separator" aria-hidden="true" />
+        {/* Moved out of the drawing-tool categories above (see the filter on that map) — doesn't
+            add a drawing to the chart the way every other category does, which reads closer to a
+            utility tool like the magnet right below it than a "drawing" pick. Still driven by
+            the same handleToolClick/activeTool as any other tool, just its own plain button
+            instead of a DRAWING_TOOL_CATEGORIES map entry, since it's guaranteed single-tool
+            (no chevron/flyout ever applies to it). */}
+        {(() => {
+          const measureTool = DRAWING_TOOL_CATEGORIES.find((c) => c.id === "measure")!.tools[0];
+          const MeasureToolIcon = measureTool.icon;
+          return (
+            <button
+              type="button"
+              className={["lq-chart__icon-button", activeTool === "measure" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => handleToolClick("measure")}
+              aria-label={measureTool.label}
+              aria-pressed={activeTool === "measure"}
+            >
+              <MeasureToolIcon size={14} />
+            </button>
+          );
+        })()}
         {/* A persistent modifier, not a tool of its own — stays on across tool switches
             (see toDataPoint/magnetSnapPrice) until toggled off again, so it lives outside
             DRAWING_TOOL_CATEGORIES' button+chevron+menu pattern as a plain toggle. */}

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
+import * as d3 from "d3";
 import type { Candle } from "./CandlestickChart";
-import { computeSeasonality, type SeasonalityGranularity, type SeasonalityBucket } from "./internal/seasonality";
+import { computeSeasonality, type SeasonalityBucket } from "./internal/seasonality";
 import { LineAreaChart, type LineAreaChartHandle, type ChartSeries, type ChartPoint } from "./LineAreaChart";
 import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
@@ -10,30 +11,61 @@ import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, Se
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
-const GRANULARITY_OPTIONS: { value: SeasonalityGranularity; label: string }[] = [
-  { value: "week", label: "Semaine" },
-  { value: "month", label: "Mois" },
-  { value: "quarter", label: "Trimestre" },
-  { value: "year", label: "Année" },
-];
+// The only granularity offered now (see this file's own git history for the Semaine/Trimestre/
+// Année options this replaced) — always computed at "week" resolution (52 buckets) internally
+// for a genuinely detailed curve, see MONTH_TICK_INDEXES below for how the X axis still only
+// *labels* the 12 month boundaries among those 52 points.
+const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-// LineAreaChart's own X-axis default (5, see ChartAxis) reads as sparse against a whole reference
-// year of buckets — one tick per bucket for month/quarter (small counts, room for all of them);
-// week stays short of one-per-bucket (52 would be unreadably dense) but still far denser than the
-// default. "year" never actually reaches the chart (single-bucket granularities render the
-// one-number summary instead, see result.buckets.length === 1 below) — its own entry here is
-// unused in practice, just kept for this map's own type completeness.
-const X_TICKS_BY_GRANULARITY: Record<SeasonalityGranularity, number> = { week: 13, month: 12, quarter: 4, year: 1 };
+// Any non-leap year works as the template — this never names a real year, just the shape one
+// has (Jan 1 is day 0, and no Feb 29 to throw month-start days off from every *other* year's own
+// week-bucket math, which computeSeasonality's own bucketIndexFor already ignores leap years
+// for the same reason).
+const REFERENCE_YEAR = 2001;
+const WEEK_BUCKET_COUNT = 52;
 
-// One letter per granularity, shown on the rail button in place of a generic calendar glyph so
-// the button reads its own current value at a glance (same idea as a toggle button showing its
-// own state) — spelled out here rather than derived from GRANULARITY_OPTIONS' own French label
-// (its first letter) so a future label wording change can't silently change the letter too.
-const GRANULARITY_LETTERS: Record<SeasonalityGranularity, string> = { week: "S", month: "M", quarter: "T", year: "A" };
+// Which week-bucket (0-51) each month starts in — mirrors computeSeasonality's own
+// bucketIndexFor("week") math exactly (Math.floor(dayOfYear / 7), clamped to the last bucket) so
+// the two can never silently drift apart. Used both to label the X axis sparsely (see
+// xTickFormat below) and to size the "space before January/after December" padding (see
+// xDomainPadding).
+function monthStartWeekIndex(monthIdx: number): number {
+  const dayOfYear = Math.round((Date.UTC(REFERENCE_YEAR, monthIdx, 1) - Date.UTC(REFERENCE_YEAR, 0, 1)) / 86_400_000);
+  return Math.min(Math.floor(dayOfYear / 7), WEEK_BUCKET_COUNT - 1);
+}
+const MONTH_TICK_INDEXES = MONTH_LABELS.map((_, i) => monthStartWeekIndex(i));
+
+// Every real week-bucket index gets a tick mark; xTickFormat below is what actually keeps all
+// but the 12 month-boundary ones unlabeled.
+const WEEK_TICK_VALUES = Array.from({ length: WEEK_BUCKET_COUNT }, (_, i) => i);
+
+// "the space between 2 months (January-February)" — the user's own chosen unit for how wide a
+// margin to leave before January and after December (see xDomainPadding below), applied
+// symmetrically on both ends rather than each end using its own neighboring months' particular
+// width.
+const MONTH_GAP_WIDTH = MONTH_TICK_INDEXES[1] - MONTH_TICK_INDEXES[0];
+
+// A week-bucket index's own approximate calendar date within the reference year (its
+// representative day landing mid-week) — the hover crosshair/ruler's own denser per-point label,
+// as opposed to xTickFormat's sparse month-only axis labels. -1 is the synthetic "Réf." anchor
+// bucket (see computeSeasonality's own doc) rather than a real week.
+function formatWeekBucket(index: number): string {
+  if (index === -1) return "Réf.";
+  const date = new Date(Date.UTC(REFERENCE_YEAR, 0, 1 + index * 7 + 3));
+  return d3.timeFormat("%d %b")(date);
+}
 
 // US presidential elections land every 4 years on the nose (1788, 1792, … 2024, 2028…) — no
 // lookup table needed, just the one arithmetic fact.
 const isUSPresidentialElectionYear = (year: number) => year % 4 === 0;
+
+// Dedicated pastel tones for the two conditional area-fill settings (see fillUnderCurve/
+// fillBetweenCurves below) — independent of YEAR_PASTEL_COLORS just below (that palette identi-
+// fies *which year* a line is; these two identify a *sign*, green for "up"/"outperforming",
+// red for "down"/"underperforming", so reusing a slot from that other palette by coincidence
+// would be confusing/fragile if it were ever reordered).
+const PASTEL_GREEN = "#a8d8b8";
+const PASTEL_RED = "#e8a8a8";
 
 /** The chart body's own display mode — "current" (the default: the average line, plus the current
  *  (in-progress) year's own line overlaid on top of it, when there is one), "independent" (one
@@ -50,22 +82,6 @@ type SeasonalityViewMode = "independent" | "current";
 // attention — only the current year (drawn thicker, see `series` below) is meant to stand out.
 // Literal hex, not a CSS var: a native `<input type="color">` can't open on a `var()` reference.
 const YEAR_PASTEL_COLORS = ["#a8c3e8", "#a8d8b8", "#f0c99a", "#e8b4c8", "#c9b8e8", "#9ed9d3"];
-
-/** A single letter rendered through the same 24x24/currentColor convention every other icon in
- *  this library follows (see IconBase) — filled text instead of a stroked glyph, since there's no
- *  static-path precedent for dynamic per-instance content in the shared icon catalog. Kept local
- *  to this file rather than added to icons.tsx: every entry there is a fixed SVG shape with no
- *  props of its own, and a parameterized "draw this exact letter" component doesn't fit that
- *  pattern. */
-function LetterIcon({ letter, size = 24 }: { letter: string; size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-      <text x="12" y="17" textAnchor="middle" fontSize="15" fontWeight="700">
-        {letter}
-      </text>
-    </svg>
-  );
-}
 
 /** One year's own occurrence value at every bucket it has data for — gaps (a bucket that year
  *  never reached, e.g. an in-progress current year past "today") are simply omitted rather than
@@ -113,15 +129,12 @@ export interface SeasonalityViewProps {
  * (`embedded`) since it's nested inside CandlestickChart's own bordered root.
  */
 export function SeasonalityView({ data, symbol, onBack, showHeader = true, height = 380, className }: SeasonalityViewProps) {
-  const [granularity, setGranularity] = useState<SeasonalityGranularity>("month");
   const availableYears = useMemo(() => Array.from(new Set(data.map((d) => d.date.getUTCFullYear()))).sort((a, b) => a - b), [data]);
   // Excluded, not included: unchecking a handful of years (an election year, a crash) out of a
   // long history is the common case — a whitelist would make every *other* year the odd one out.
   const [excludedYears, setExcludedYears] = useState<Set<number>>(new Set());
   const [yearPickerOpen, setYearPickerOpen] = useState(false);
   const yearPickerAnchorRef = useRef<HTMLButtonElement>(null);
-  const [granularityMenuOpen, setGranularityMenuOpen] = useState(false);
-  const granularityAnchorRef = useRef<HTMLButtonElement>(null);
   // The chart's own built-in reset button (`LineAreaChart`'s `showZoomReset`) is hidden in favor
   // of this one, rendered in the header instead — same spot the main (non-seasonality) chart's
   // own "Réinitialiser le zoom" lives, rather than floating over the plot's own top-right corner
@@ -146,10 +159,16 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // same reasoning CandlestickChart's own drawing tools already suspend zoom while an `activeTool`
   // is set: the two gesture sets would otherwise fight over the same clicks/drags.
   const [measureActive, setMeasureActive] = useState(false);
+  // Both settings only ever take visual effect in "current" mode (see fillUnderCurve/
+  // fillBetweenCurves' own use in `series`/`fillBetween` below) — left toggleable regardless of
+  // the current viewMode rather than hidden in "independent", so flipping to "current" later
+  // doesn't require re-opening this modal to turn them back on.
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fillUnderCurve, setFillUnderCurve] = useState(false);
+  const [fillBetweenCurves, setFillBetweenCurves] = useState(false);
 
-  const result = useMemo(() => computeSeasonality(data, granularity, excludedYears), [data, granularity, excludedYears]);
+  const result = useMemo(() => computeSeasonality(data, "week", excludedYears), [data, excludedYears]);
   const includedCount = availableYears.length - excludedYears.size;
-  const currentGranularityLabel = GRANULARITY_OPTIONS.find((o) => o.value === granularity)?.label ?? "";
   const currentYear = new Date().getUTCFullYear();
   const hasCurrentYear = result.years.includes(currentYear);
 
@@ -206,6 +225,12 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
                   data: occurrencesForYear(result.buckets, currentYear),
                   strokeWidth: 3,
                   endDot: true,
+                  // "Seulement en mode Année en cours" — this whole branch already only builds
+                  // while viewMode === "current", so no extra gate needed here beyond the
+                  // setting itself. Fills toward 0% (referenceLineY, passed to LineAreaChart
+                  // below), not toward the average line — see fillBetween just below for that
+                  // second, distinct comparison.
+                  ...(fillUnderCurve ? { fillSignedAtReference: { positiveColor: PASTEL_GREEN, negativeColor: PASTEL_RED } } : {}),
                 },
               ]
             : []),
@@ -303,10 +328,10 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
               ))}
             </div>
           </Popover>
-          {/* Gated on the chart branch too, not just `isZoomed` — switching to "Année" granularity
-              (the single-bucket summary below, no LineAreaChart at all) unmounts the chart without
-              a chance to report itself back to `isZoomed=false`, which would otherwise leave a
-              dead button in the header with nothing left for it to reset. */}
+          {/* Gated on the chart branch too, not just `isZoomed` — a data set too thin for even
+              one real week-bucket (the empty-state branch below, no LineAreaChart at all) unmounts
+              the chart without a chance to report itself back to `isZoomed=false`, which would
+              otherwise leave a dead button in the header with nothing left for it to reset. */}
           {isZoomed && result.buckets.length > 1 && (
             <button type="button" className="lq-chart__reset-button" onClick={() => lineChartRef.current?.resetZoom()}>
               Réinitialiser le zoom
@@ -318,35 +343,19 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
       <div style={{ position: "relative" }}>
         <div className="lq-chart__tools-rail" style={{ width: TOOLS_RAIL_WIDTH, height }}>
           <div className="lq-chart__tools-rail-items">
+            {/* Opens the two conditional-fill toggles below (aire sous la courbe / aire entre
+                les deux courbes) — occupies the rail slot the old granularity picker used to
+                (see this file's own git history), the only remaining per-chart setting once
+                granularity itself stopped being a choice. */}
             <button
-              ref={granularityAnchorRef}
               type="button"
-              className={["lq-chart__icon-button", granularityMenuOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
-              onClick={() => setGranularityMenuOpen((o) => !o)}
-              aria-label={`Granularité : ${currentGranularityLabel}`}
-              title="Granularité de la saisonnalité"
+              className={["lq-chart__icon-button", settingsOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setSettingsOpen((o) => !o)}
+              aria-label="Paramètres de la saisonnalité"
+              title="Paramètres d'affichage"
             >
-              <LetterIcon letter={GRANULARITY_LETTERS[granularity]} size={14} />
+              <SettingsIcon size={14} />
             </button>
-            <Popover open={granularityMenuOpen} onClose={() => setGranularityMenuOpen(false)} anchorRef={granularityAnchorRef} placement="bottom">
-              <div className="lq-chart__tool-menu">
-                {GRANULARITY_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.value}
-                    type="button"
-                    className={["lq-chart__tool-menu-option", opt.value === granularity && "lq-chart__tool-menu-option--selected"]
-                      .filter(Boolean)
-                      .join(" ")}
-                    onClick={() => {
-                      setGranularity(opt.value);
-                      setGranularityMenuOpen(false);
-                    }}
-                  >
-                    {opt.label}
-                  </button>
-                ))}
-              </div>
-            </Popover>
 
             <button
               ref={yearPickerAnchorRef}
@@ -429,7 +438,19 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             (top/left) the same way ChartLegend's own wrapper is, since this file has no
             `dims.margin` of its own to read a position from. */}
         {managedYears.length > 0 && (
-          <div className="lq-chart__indicator-legend" style={{ position: "absolute", top: 8, left: TOOLS_RAIL_WIDTH + 8, zIndex: 6 }}>
+          <div
+            // The legend's own rows (`.lq-chart__indicator-legend-item`) opt back into
+            // pointer-events despite the container itself being pointer-events:none (so text
+            // and hover-revealed actions stay clickable) — which, while measuring, silently
+            // swallowed the ruler's very first click whenever it landed in this top-left corner
+            // (a natural first-click spot, right where this legend already sits): the click
+            // never reached the plot's own overlay underneath, so `measureStart` stayed null and
+            // the *next* click became a degenerate zero-length "measurement" of a single point
+            // against itself. `--inert` forces every row back to pointer-events:none for exactly
+            // as long as the ruler is active, letting a click there fall through to the plot.
+            className={["lq-chart__indicator-legend", measureActive && "lq-chart__indicator-legend--inert"].filter(Boolean).join(" ")}
+            style={{ position: "absolute", top: 8, left: TOOLS_RAIL_WIDTH + 8, zIndex: 6 }}
+          >
             {managedYears.map((year) => {
               const hidden = hiddenYears.has(year);
               const label = `${year}${year === currentYear ? " (en cours)" : ""}`;
@@ -475,41 +496,35 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
           </div>
         )}
 
-        {result.buckets.length === 0 ? (
+        {result.buckets.length <= 1 ? (
           <div className="lq-chart__empty" style={{ paddingLeft: TOOLS_RAIL_WIDTH }}>
             Pas assez de données pour calculer une saisonnalité.
-          </div>
-        ) : result.buckets.length === 1 ? (
-          // "Année" granularity: a single bucket (the whole year's own return) reads better as
-          // one big number than as a one-point "chart" — LineAreaChart needs at least two points
-          // along its own x-domain to draw anything meaningful.
-          <div className="lq-chart__seasonality-summary" style={{ height, paddingLeft: TOOLS_RAIL_WIDTH }}>
-            <span
-              className="lq-chart__seasonality-summary-value"
-              style={{ color: `var(${result.buckets[0].average >= 0 ? "--lq-color-up" : "--lq-color-down"})` }}
-            >
-              {result.buckets[0].average >= 0 ? "+" : ""}
-              {result.buckets[0].average.toFixed(1)}%
-            </span>
-            <span className="lq-chart__seasonality-summary-label">
-              Performance moyenne sur l'année — {result.years.length} occurrence{result.years.length > 1 ? "s" : ""} (
-              {result.years.join(", ")})
-            </span>
           </div>
         ) : (
           <LineAreaChart
             ref={lineChartRef}
             series={series}
             xType="linear"
+            // The hover crosshair/ruler's own denser per-point label (every real week-bucket,
+            // not just the 12 month boundaries xTickFormat below labels on the axis itself).
             // Rounded, not an exact `===` match: the regular hover crosshair only ever passes an
             // exact bucket index (snapped via allXValues), but the ruler's own points are raw,
             // unsnapped pixel positions (see LineAreaChart's `measureActive`) that land between
-            // buckets more often than not — rounding to the nearest one keeps its readout showing
-            // a real bucket label instead of falling back to a raw fractional number.
-            formatX={(x) => result.buckets.find((b) => b.index === Math.round(Number(x)))?.label ?? String(x)}
+            // buckets more often than not.
+            formatX={(x) => formatWeekBucket(Math.round(Number(x)))}
             formatY={(y) => `${Number(y) >= 0 ? "+" : ""}${Number(y).toFixed(1)}%`}
             axisHoverLabels
-            xTicks={X_TICKS_BY_GRANULARITY[granularity]}
+            // 52 real tick marks (one per week-bucket, see WEEK_TICK_VALUES) but only the 12
+            // that land on a month boundary get an actual label — everything else reads "" via
+            // xTickFormat, so the axis stays a bare mark there instead of a crowded 52-label row.
+            xTickValues={WEEK_TICK_VALUES}
+            xTickFormat={(x) => {
+              const monthIdx = MONTH_TICK_INDEXES.indexOf(Math.round(Number(x)));
+              return monthIdx >= 0 ? MONTH_LABELS[monthIdx] : "";
+            }}
+            // "the space between 2 months (January-February)" on both ends — see
+            // MONTH_GAP_WIDTH's own doc.
+            xDomainPadding={{ start: MONTH_GAP_WIDTH, end: MONTH_GAP_WIDTH }}
             yTicks={8}
             // The floating years panel (see managedYears, above the chart in this file's own
             // JSX) already covers "which color is which year" (plus hide/recolor/remove, which
@@ -527,6 +542,13 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             height={height}
             measureActive={measureActive}
             zoomable={!measureActive}
+            // "si année actuelle > moyenne des années alors couleur verte pastel, si <, rouge
+            // pastel" — only meaningful (and only ever built) once both lines actually coexist,
+            // i.e. viewMode === "current" with an in-progress year to compare against the
+            // average (see `series` above for both ids).
+            {...(viewMode === "current" && fillBetweenCurves && hasCurrentYear
+              ? { fillBetween: { seriesIdA: `year-${currentYear}`, seriesIdB: "seasonality", aAboveColor: PASTEL_GREEN, aBelowColor: PASTEL_RED } }
+              : {})}
           />
         )}
       </div>
@@ -542,6 +564,18 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
               onChange={(e) => setYearColors((prev) => ({ ...prev, [colorModalYear]: e.target.value }))}
             />
           </div>
+        </Modal>
+      )}
+
+      {settingsOpen && (
+        <Modal open onClose={() => setSettingsOpen(false)} title="Paramètres de la saisonnalité" footer={null}>
+          {/* Both settings below only ever take visual effect in "current" mode (see their own
+              use in `series`/`fillBetween`) — a shared note here instead of repeating it on each
+              checkbox's own label, which is a plain string everywhere else this component is
+              used (see ChartSettingsModals' own Checkbox calls). */}
+          <p className="lq-chart__indicator-picker-empty">Les deux réglages ci-dessous ne s'appliquent qu'en mode Année en cours.</p>
+          <Checkbox checked={fillUnderCurve} onChange={() => setFillUnderCurve((v) => !v)} label="Colorer l'aire entre la courbe et l'axe 0%" />
+          <Checkbox checked={fillBetweenCurves} onChange={() => setFillBetweenCurves((v) => !v)} label="Colorer l'aire entre les deux courbes" />
         </Modal>
       )}
     </div>
