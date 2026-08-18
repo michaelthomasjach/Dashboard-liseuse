@@ -49,6 +49,17 @@ export interface LineAreaChartProps {
   /** Fixed height in px. Fills 100% of the container's width regardless. */
   height?: number;
   area?: boolean;
+  /** How each series' own line (and its plain `area`/`s.area` fill, if any) connects consecutive
+   *  points — "monotone" (default, unchanged from before this existed) smooths through them with
+   *  a Catmull-Rom-like spline, still visibly rounding/overshooting real peaks and troughs even
+   *  at a high point count; "linear" connects them with plain straight segments instead, so every
+   *  visible kink is a real data point and nothing in between is invented by the curve fit — a
+   *  traditional "close line" reading (see SeasonalityView's own use, which wants exactly that
+   *  now that its curve is dense enough for smoothing to actively hide real day-to-day detail
+   *  rather than just prettify sparse points). The conditional area-fill segments
+   *  (`fillSignedAtReference`/`fillBetween`) already always use `curveLinear` regardless of this
+   *  prop — see their own generators' doc for why. */
+  curveType?: "monotone" | "linear";
   xType?: "time" | "linear";
   zoomable?: boolean;
   formatX?: (x: Date | number) => string;
@@ -137,6 +148,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   series,
   height = 320,
   area = false,
+  curveType = "monotone",
   xType = "time",
   zoomable = true,
   formatX,
@@ -300,18 +312,20 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
     onZoomChange?.(isZoomed);
   }, [isZoomed, onZoomChange]);
 
+  const curveFactory = curveType === "linear" ? d3.curveLinear : d3.curveMonotoneX;
+
   const lineGen = d3
     .line<ChartPoint>()
     .x((d) => zoomedXScale(d.x as never))
     .y((d) => zoomedYScale(d.y))
-    .curve(d3.curveMonotoneX);
+    .curve(curveFactory);
 
   const areaGen = d3
     .area<ChartPoint>()
     .x((d) => zoomedXScale(d.x as never))
     .y0(dims.boundedHeight)
     .y1((d) => zoomedYScale(d.y))
-    .curve(d3.curveMonotoneX);
+    .curve(curveFactory);
 
   // Toward `referenceLineY` (not the plot's own bottom edge like `areaGen` above) — used by
   // `fillSignedAtReference`'s own per-segment fills. `curveLinear`, not `curveMonotoneX` like

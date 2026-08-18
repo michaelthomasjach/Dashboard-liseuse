@@ -540,6 +540,12 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             ref={lineChartRef}
             series={series}
             xType="linear"
+            // Straight segments between each day-bucket's own real value, not a smoothed spline
+            // through them — at day resolution (see the "day" granularity above), monotone
+            // smoothing was still visibly rounding off real peaks/troughs instead of just
+            // prettifying sparse points, reading as an "interpolated curve" rather than an
+            // honest close-to-close line.
+            curveType="linear"
             // The hover crosshair/ruler's own denser per-point label (every real day-bucket, not
             // just the 12 month boundaries xTickFormat below labels on the axis itself).
             // Rounded, not an exact `===` match: the regular hover crosshair only ever passes an
