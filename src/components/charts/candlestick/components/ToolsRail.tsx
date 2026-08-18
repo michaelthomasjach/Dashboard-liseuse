@@ -229,14 +229,8 @@ export function ToolsRail({
         </button>
         {/* Moved out of the topbar (see ChartHeader.tsx's own git history) so every zoom-related
             control lives in one place — this rail, right below the lock toggle — instead of
-            split between here and there. Same `zoomable && isZoomed` gate it always had: nothing
-            to reset back to its own default range while already at that range, or while zoom/pan
-            themselves are off entirely. */}
-        {zoomable && isZoomed && (
-          <button type="button" className="lq-chart__icon-button" onClick={resetZoom} aria-label="Réinitialiser le zoom" title="Réinitialiser le zoom">
-            <ZoomOutIcon size={14} />
-          </button>
-        )}
+            split between here and there. "+" sits above "-" (the order the user actually wants
+            them in), not the other way the two were first added in. */}
         {/* "Zoom in on this rectangle" — same click-click placement as the rectangle drawing tool
             (see useDrawingInteractions' own "zoomIn" branch), except the 2nd click zooms with an
             animated transition instead of leaving a drawing behind, and deselects the tool right
@@ -252,6 +246,15 @@ export function ToolsRail({
             title="Zoomer sur une zone : cliquer deux fois pour délimiter un rectangle"
           >
             <ZoomInIcon size={14} />
+          </button>
+        )}
+        {/* Same `zoomable && isZoomed` gate it always had: nothing to reset back to its own
+            default range while already at that range, or while zoom/pan themselves are off
+            entirely — this is also exactly the "only appears once a zoom has actually happened"
+            behavior asked for, already true before this reorder and unchanged by it. */}
+        {zoomable && isZoomed && (
+          <button type="button" className="lq-chart__icon-button" onClick={resetZoom} aria-label="Réinitialiser le zoom" title="Réinitialiser le zoom">
+            <ZoomOutIcon size={14} />
           </button>
         )}
         {/* Per-kind event-marker visibility (Earnings/News/Dividend/Update/…, whatever kinds are

@@ -436,28 +436,43 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       drawDrawingText(ctx, dr, ax, ay, bx, by, lineColor, fontFamily);
     }
 
-    // "arrowUp"/"arrowDown": a single-point marker, drawn as a small triangle just clear of its
-    // own point (below it pointing up, above it pointing down) rather than centered on it, so it
-    // doesn't sit on top of whatever candle it's marking.
+    // "arrowUp"/"arrowDown": a single-point marker, drawn as a real arrow (a stroked shaft plus
+    // an arrowhead at its tip — `drawArrowhead` on its own only ever draws the head, same as it's
+    // used for "arrowLine"'s own end, see the trend-line loop above) just clear of its own point
+    // (below it pointing up, above it pointing down) rather than centered on it, so it doesn't
+    // sit on top of whatever candle it's marking. `shaftLength` is deliberately longer than
+    // `headSize` so the two read as visually distinct parts (a thin line, then a wider
+    // triangle) — equal lengths left the shaft entirely hidden under the head's own base,
+    // reading as just a solid triangle with no arrow "line" to it at all.
     for (const dr of visibleDrawings) {
       if (dr.lineType !== "arrowUp" && dr.lineType !== "arrowDown") continue;
       const lineColor = dr.color ?? colorAccent;
       const ax = zoomedXScale(indexForDate(dr.x1) + 0.5);
       const ay = zoomedPriceScale(dr.y1);
-      const markerSize = (dr.strokeWidth ?? 1.5) * 6 + 6;
+      const strokeW = dr.strokeWidth ?? 1.5;
+      const headSize = strokeW * 4 + 6;
+      const shaftLength = headSize * 1.8;
       const gap = 4;
-      if (dr.lineType === "arrowUp") {
-        drawArrowhead(ctx, ax, ay + gap + markerSize, ax, ay + gap, lineColor, markerSize);
-      } else {
-        drawArrowhead(ctx, ax, ay - gap - markerSize, ax, ay - gap, lineColor, markerSize);
-      }
+      const dir = dr.lineType === "arrowUp" ? 1 : -1;
+      const tailY = ay + dir * (gap + shaftLength);
+      const headY = ay + dir * gap;
+      ctx.save();
+      ctx.strokeStyle = lineColor;
+      ctx.lineWidth = strokeW;
+      ctx.setLineDash(lineDashArray(dr));
+      ctx.beginPath();
+      ctx.moveTo(ax, tailY);
+      ctx.lineTo(ax, headY);
+      ctx.stroke();
+      ctx.restore();
+      drawArrowhead(ctx, ax, tailY, ax, headY, lineColor, headSize);
       if (dr.text) {
         ctx.save();
         ctx.font = `${dr.textBold === false ? 400 : 600} ${dr.textSize ?? 11}px ${fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = dr.lineType === "arrowUp" ? "top" : "bottom";
         ctx.fillStyle = dr.color ?? lineColor;
-        ctx.fillText(dr.text, ax, dr.lineType === "arrowUp" ? ay + gap + markerSize + 4 : ay - gap - markerSize - 4);
+        ctx.fillText(dr.text, ax, tailY + dir * 4);
         ctx.restore();
       }
     }

@@ -18,17 +18,19 @@ function midpoint(a: ScreenPoint, b: ScreenPoint): ScreenPoint {
  *  "handle" (the tool's 1st click), P1/P2 the two points defining the fork's own width (the two
  *  parallel "tine" lines pass through these, unchanged across every variant). Only the median's
  *  own start/target move: "pitchfork" (standard/Andrews') starts at P0 itself; "schiffPitchfork"
- *  starts at the midpoint of P0-P1 instead (a less aggressive median, Stan Schiff's own
- *  modification); "modifiedSchiffPitchfork" starts halfway between P0 and the midpoint of P1-P2
- *  (between the standard and Schiff starting points); "insidePitchfork" swaps the median's own
- *  start and target entirely, starting at the midpoint of P1-P2 and heading through P0 instead. */
+ *  moves the start 50% of the way from P0 toward P1 in *price only* (its own time/x stays at
+ *  P0's — Schiff's own original modification); "modifiedSchiffPitchfork" moves that same 50% in
+ *  *both* price and time (a plain 2D midpoint of P0-P1) — Dr. Andrews' own response to Schiff's
+ *  variation, going one step further by moving the origin equally on both axes instead of price
+ *  alone; "insidePitchfork" swaps the median's own start and target entirely, starting at the
+ *  midpoint of P1-P2 and heading through P0 instead. */
 export function pitchforkMedianEndpoints(p0: ScreenPoint, p1: ScreenPoint, p2: ScreenPoint, variant: PitchforkVariant): { start: ScreenPoint; target: ScreenPoint } {
   const mid12 = midpoint(p1, p2);
   switch (variant) {
     case "schiffPitchfork":
-      return { start: midpoint(p0, p1), target: mid12 };
+      return { start: { x: p0.x, y: midpoint(p0, p1).y }, target: mid12 };
     case "modifiedSchiffPitchfork":
-      return { start: midpoint(p0, mid12), target: mid12 };
+      return { start: midpoint(p0, p1), target: mid12 };
     case "insidePitchfork":
       return { start: mid12, target: p0 };
     case "pitchfork":

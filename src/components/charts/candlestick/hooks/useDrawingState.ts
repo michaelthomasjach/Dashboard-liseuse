@@ -243,13 +243,17 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     // deselection the way a finished measurement does.
     if (!activeTool && !measurePoints) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
+      if (e.key !== "Escape" && e.key !== "Enter") return;
       // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
       // point count to reach on its own (see handleOverlayClick), so this used to be the only way
-      // it ever completed (re-picking its own rail tool, or double-clicking/double-tapping the
-      // plot, now also reach finalizeElbowArrow — see its own doc).
+      // it ever completed (re-picking its own rail tool, double-clicking/double-tapping the plot,
+      // or now Enter too, all also reach finalizeElbowArrow — see its own doc). Enter is a no-op
+      // for every other tool/measurement (finalizeElbowArrow itself already guards on
+      // activeTool === "elbowArrow"), so it only needs excluding from cancelDrawingTool() below —
+      // that one action *does* apply generically (Escape's own original behavior), which an
+      // Enter press has no business triggering for anything other than elbowArrow.
       finalizeElbowArrow();
-      cancelDrawingTool();
+      if (e.key === "Escape" || activeTool === "elbowArrow") cancelDrawingTool();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
