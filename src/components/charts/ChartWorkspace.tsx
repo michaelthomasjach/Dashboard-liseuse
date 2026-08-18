@@ -1,11 +1,26 @@
-import { Children, cloneElement, useState, type ReactElement, type ReactNode } from "react";
+import { Children, cloneElement, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { CandlestickChartProps } from "./candlestick/interfaces/CandlestickChartProps.interface";
 import { useLinkGroups } from "./workspace/useLinkGroups";
 import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
-import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
+import { Popover } from "../forms/Popover";
+import { WatchlistIcon, BellIcon, ChevronDownIcon } from "../icons";
 import "./ChartWorkspace.css";
+
+/** One named list for the workspace's own docked watchlist tab (see `ChartWorkspaceProps.watchlists`). */
+export interface ChartWorkspaceWatchlist {
+  id: string;
+  /** Shown as the panel's own clickable title while this list is active. */
+  name: string;
+  /** Caller-supplied content for this specific list — same "structure only, caller owns the
+   *  content" shape `sidePanel` used to be (see `watchlists`' own doc for why that prop became
+   *  this one), just one list's worth of it at a time instead of the whole panel. */
+  content: ReactNode;
+}
+
+/** Which of the docked panel's (up to) two tabs is currently showing — see `watchlists`/`alerts`. */
+export type ChartWorkspaceSidePanelTab = "watchlist" | "alerts";
 
 const GRID_COLUMNS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 2, 4: 2, 6: 3, 8: 4 };
 const GRID_ROWS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 1, 4: 2, 6: 2, 8: 2 };
@@ -43,20 +58,39 @@ export interface ChartWorkspaceProps {
   defaultLinkGroups?: number[][];
   /** Fires whenever a group is created, changed, or dissolved from the "Graphiques liés" modal. */
   onLinkGroupsChange?: (groups: number[][]) => void;
-  /** Content for a collapsible, resizable panel docked to the *workspace's* own right edge —
-   *  deliberately a `ChartWorkspace`-level prop rather than something read off each panel's own
-   *  `CandlestickChart.sidePanel` (which still exists, for a single standalone chart used outside
-   *  a workspace entirely): a single `children` template gets cloned into every panel here (see
-   *  `panelElements` below), so a `sidePanel` set on that template would render once *per panel*
-   *  instead of once for the whole workspace — a watchlist duplicated 2/4/6/8 times over instead
-   *  of shown once beside the whole grid. `sidePanel` is stripped from every cloned panel below
-   *  for exactly that reason; set it here instead. Omit entirely for no panel (default). */
-  sidePanel?: ReactNode;
-  /** Uncontrolled initial open/collapsed state for `sidePanel` — collapsing gives the grid back
-   *  its full width; a small built-in toggle (on the panel's own edge) flips it either way.
-   *  Default true (open). */
+  /** Named lists for a collapsible, resizable panel docked to the *workspace's* own right edge,
+   *  switched via a right-edge icon rail alongside `alerts` (TradingView's own watchlist/alerts
+   *  rail is the reference point) — deliberately a `ChartWorkspace`-level prop rather than
+   *  something read off each panel's own `CandlestickChart.sidePanel` (which still exists, for a
+   *  single standalone chart used outside a workspace entirely): a single `children` template
+   *  gets cloned into every panel here (see `panelElements` below), so a docked panel set on that
+   *  template would render once *per panel* instead of once for the whole workspace — a watchlist
+   *  duplicated 2/4/6/8 times over instead of shown once beside the whole grid.
+   *  `CandlestickChart.sidePanel` is stripped from every cloned panel below for exactly that
+   *  reason; set it here instead. More than one list gets a clickable name + caret in the panel's
+   *  own header that opens a dropdown of every list to switch between (see
+   *  `defaultActiveWatchlistId`) — a single list still gets the same clickable header, simply with
+   *  nothing else to switch to. Omit entirely (or pass an empty array) to skip the watchlist tab
+   *  altogether — its own rail icon only appears once there's at least one list to show. */
+  watchlists?: ChartWorkspaceWatchlist[];
+  /** Uncontrolled initial pick among `watchlists` (by id) — defaults to the first one. */
+  defaultActiveWatchlistId?: string;
+  onActiveWatchlistChange?: (id: string) => void;
+  /** Content for the docked panel's own "Alertes" tab, alongside `watchlists` — same "structure
+   *  only, caller owns the content" shape. Omit entirely to skip the tab — its own rail icon only
+   *  appears once this is set. */
+  alerts?: ReactNode;
+  /** Uncontrolled initial open/collapsed state for the docked panel (`watchlists`/`alerts`) —
+   *  collapsing gives the grid back its full width. Day to day this is driven by the right-edge
+   *  rail's own two icons instead (clicking whichever tab is already showing collapses the panel;
+   *  clicking the other one opens it there, or switches to it if already open) — this only seeds
+   *  where it starts. Default true (open). */
   defaultSidePanelOpen?: boolean;
   onSidePanelOpenChange?: (open: boolean) => void;
+  /** Uncontrolled initial active tab among whichever of `watchlists`/`alerts` is actually set —
+   *  defaults to "watchlist" if set, else "alerts". */
+  defaultSidePanelTab?: ChartWorkspaceSidePanelTab;
+  onSidePanelTabChange?: (tab: ChartWorkspaceSidePanelTab) => void;
   className?: string;
 }
 
@@ -77,14 +111,48 @@ export function ChartWorkspace({
   panelHeight,
   defaultLinkGroups,
   onLinkGroupsChange,
-  sidePanel,
+  watchlists,
+  defaultActiveWatchlistId,
+  onActiveWatchlistChange,
+  alerts,
   defaultSidePanelOpen,
   onSidePanelOpenChange,
+  defaultSidePanelTab,
+  onSidePanelTabChange,
   className,
 }: ChartWorkspaceProps) {
   const [panels, setPanels] = useState(defaultPanels);
   const { groups, linkPanels, unlinkGroup, groupIndexOfPanel } = useLinkGroups({ defaultLinkGroups, onLinkGroupsChange });
   const sidePanelState = useSidePanel({ defaultSidePanelOpen, onSidePanelOpenChange });
+  const hasWatchlists = !!watchlists && watchlists.length > 0;
+  const hasAlerts = alerts !== undefined;
+  const [activeTab, setActiveTab] = useState<ChartWorkspaceSidePanelTab>(defaultSidePanelTab ?? (hasWatchlists ? "watchlist" : "alerts"));
+  const [activeWatchlistId, setActiveWatchlistId] = useState(defaultActiveWatchlistId ?? watchlists?.[0]?.id);
+  const [watchlistMenuOpen, setWatchlistMenuOpen] = useState(false);
+  const watchlistTriggerRef = useRef<HTMLButtonElement>(null);
+  const activeWatchlist = watchlists?.find((w) => w.id === activeWatchlistId) ?? watchlists?.[0];
+
+  // Clicking whichever tab is already open collapses the panel (same "click the active one again
+  // to close" convention CandlestickChart's own header toggle uses); clicking the *other* tab
+  // switches to it instead, opening the panel first if it was collapsed — same shape a VSCode-
+  // style activity-bar rail already gives, one docked panel with several switchable tabs rather
+  // than each tab being its own independently-open panel.
+  function toggleTab(tab: ChartWorkspaceSidePanelTab) {
+    if (sidePanelState.open && activeTab === tab) {
+      sidePanelState.commitOpen(false);
+      return;
+    }
+    setActiveTab(tab);
+    onSidePanelTabChange?.(tab);
+    if (!sidePanelState.open) sidePanelState.commitOpen(true);
+  }
+
+  function selectWatchlist(id: string) {
+    setActiveWatchlistId(id);
+    onActiveWatchlistChange?.(id);
+    setWatchlistMenuOpen(false);
+  }
+
   // Each panel's own last-reported real hover date (or null) — keyed by panel index, not a single
   // "currently hovered panel" value, since a panel that isn't in any group still needs its own
   // entry cleared correctly when its mouse leaves regardless of what else is going on.
@@ -183,8 +251,9 @@ export function ChartWorkspace({
 
   return (
     // A flex row of up to two children — `.lq-chart-workspace__grid` (the actual panel grid) and,
-    // when `sidePanel` is set, the docked panel itself — same split CandlestickChart's own
-    // `.lq-chart`/`.lq-chart__main` uses and for the same reason (see ChartSidePanel's own doc):
+    // when `watchlists`/`alerts` is set, the docked panel itself plus its own rail — same split
+    // CandlestickChart's own `.lq-chart`/`.lq-chart__main` uses and for the same reason (see
+    // ChartSidePanel's own doc):
     // ordinary flexbox hands the grid whatever width the panel doesn't take, so every panel's own
     // ResizeObserver-based measurement (CandlestickChart's `useChartDimensions`) picks up the
     // narrower box for free, no per-panel math needed here. `height: 100vh` (fillHeight) moves to
@@ -244,11 +313,12 @@ export function ChartWorkspace({
             showSplitScreen: true,
             splitScreenPanels: panels,
             onSplitScreenChange: handlePanelsChange,
-            // `ChartWorkspace`'s own `sidePanel` (above) is the single source of truth once a
-            // chart is composed into a workspace — a docked panel is a "whole view" concept, not a
-            // per-panel one, so a template child that also set its *own* `CandlestickChart.sidePanel`
-            // would otherwise render once per panel instead of once for the whole workspace (see
-            // `sidePanel`'s own doc for why). Stripped here regardless of what the template set.
+            // `ChartWorkspace`'s own `watchlists`/`alerts` (above) are the single source of truth
+            // once a chart is composed into a workspace — a docked panel is a "whole view" concept,
+            // not a per-panel one, so a template child that also set its *own*
+            // `CandlestickChart.sidePanel` would otherwise render once per panel instead of once
+            // for the whole workspace (see `watchlists`' own doc for why). Stripped here
+            // regardless of what the template set.
             sidePanel: undefined,
             defaultSidePanelOpen: undefined,
             onSidePanelOpenChange: undefined,
@@ -256,39 +326,83 @@ export function ChartWorkspace({
         )}
       </div>
 
-      {sidePanel &&
-        (sidePanelState.open ? (
-          <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
-            {/* A minimal header of its own just for the collapse toggle — unlike a single
-                CandlestickChart, the workspace has no shared header of its own to host this
-                button in (each panel has its own independent one instead), so the panel carries
-                it directly. */}
-            <div className="lq-chart-workspace__side-panel-header">
-              <button
-                type="button"
-                className="lq-chart__icon-button"
-                onClick={() => sidePanelState.commitOpen(false)}
-                aria-label="Réduire le panneau latéral"
-              >
-                <ChevronRightIcon size={14} />
-              </button>
-            </div>
-            {sidePanel}
-          </ChartSidePanel>
-        ) : (
-          // Collapsed: a slim, always-visible strip rather than unmounting the panel entirely the
-          // way CandlestickChart's own sidePanel does — that one has a persistent header button to
-          // reopen it from regardless of open state; this workspace has no such fixed chrome, so
-          // the strip itself doubles as that permanent "still here, tap to reopen" affordance.
-          <button
-            type="button"
-            className="lq-chart-workspace__side-panel-collapsed"
-            onClick={() => sidePanelState.commitOpen(true)}
-            aria-label="Ouvrir le panneau latéral"
-          >
-            <ChevronLeftIcon size={14} />
-          </button>
-        ))}
+      {(hasWatchlists || hasAlerts) && sidePanelState.open && (
+        <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
+          {/* A minimal header of its own just for the active tab's own title — unlike a single
+              CandlestickChart, the workspace has no shared header of its own to host this in
+              (each panel has its own independent one instead), so the panel carries it directly.
+              Open/close/switch itself lives in the rail below instead of a button here. */}
+          <div className="lq-chart-workspace__side-panel-header">
+            {activeTab === "watchlist" && activeWatchlist ? (
+              <>
+                <button
+                  ref={watchlistTriggerRef}
+                  type="button"
+                  className="lq-chart__timeframe-trigger"
+                  onClick={() => setWatchlistMenuOpen((o) => !o)}
+                  aria-label={`Liste : ${activeWatchlist.name}`}
+                >
+                  {activeWatchlist.name}
+                  <ChevronDownIcon size={12} />
+                </button>
+                <Popover open={watchlistMenuOpen} onClose={() => setWatchlistMenuOpen(false)} anchorRef={watchlistTriggerRef} placement="bottom">
+                  <div className="lq-chart__tool-menu">
+                    {watchlists!.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        className={["lq-chart__tool-menu-option", w.id === activeWatchlist.id && "lq-chart__tool-menu-option--selected"]
+                          .filter(Boolean)
+                          .join(" ")}
+                        onClick={() => selectWatchlist(w.id)}
+                      >
+                        {w.name}
+                      </button>
+                    ))}
+                  </div>
+                </Popover>
+              </>
+            ) : (
+              <span className="lq-chart-workspace__side-panel-title">Alertes</span>
+            )}
+          </div>
+          {activeTab === "watchlist" ? activeWatchlist?.content : alerts}
+        </ChartSidePanel>
+      )}
+
+      {(hasWatchlists || hasAlerts) && (
+        // Always visible regardless of open/collapsed state (unlike CandlestickChart's own
+        // sidePanel, which hides its whole toggle inside a header button) — this rail *is* the
+        // open/close/switch control, so there'd otherwise be no way back in once collapsed.
+        <div className="lq-chart-workspace__side-rail">
+          {hasWatchlists && (
+            <button
+              type="button"
+              className={["lq-chart__icon-button", sidePanelState.open && activeTab === "watchlist" && "lq-chart__icon-button--active"]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => toggleTab("watchlist")}
+              aria-label="Liste de surveillance"
+              title="Liste de surveillance"
+            >
+              <WatchlistIcon size={16} />
+            </button>
+          )}
+          {hasAlerts && (
+            <button
+              type="button"
+              className={["lq-chart__icon-button", sidePanelState.open && activeTab === "alerts" && "lq-chart__icon-button--active"]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => toggleTab("alerts")}
+              aria-label="Alertes"
+              title="Alertes"
+            >
+              <BellIcon size={16} />
+            </button>
+          )}
+        </div>
+      )}
 
       <LinkGroupsModal
         open={linkModalOpen}

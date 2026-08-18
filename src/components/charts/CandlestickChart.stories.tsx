@@ -203,21 +203,15 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   }));
 }
 
-// Placeholder content for `sidePanel` — the prop takes any ReactNode (see its own doc on
-// CandlestickChartProps), the component has no opinion on what goes there. A short watchlist-
-// shaped list is just the easiest thing to visually verify the panel's own resize/collapse
-// mechanics against, echoing the reference screenshot this feature was built from without the
-// story needing a real positions/watchlist data source of its own.
-function SidePanelPlaceholder() {
-  const rows = [
-    { ticker: "MSFT", price: "412.88", change: "+1.24%", up: true },
-    { ticker: "NVDA", price: "128.47", change: "+2.61%", up: true },
-    { ticker: "AAPL", price: "231.05", change: "-0.38%", up: false },
-    { ticker: "BTCUSD", price: "64 210", change: "-1.02%", up: false },
-  ];
+// Placeholder content for `ChartWorkspace`'s own `watchlists`/`alerts` — both props take
+// arbitrary ReactNode per entry (see their own doc on ChartWorkspaceProps), the component has no
+// opinion on what goes there. A short ticker-row list is just the easiest thing to visually
+// verify the panel's own resize/collapse/tab-switching mechanics against, echoing the reference
+// screenshot this feature was built from without the story needing a real positions/watchlist
+// data source of its own.
+function WatchlistRows({ rows }: { rows: { ticker: string; price: string; change: string; up: boolean }[] }) {
   return (
     <div style={{ fontSize: 12.5 }}>
-      <div style={{ fontWeight: 600, marginBottom: 8 }}>Mes positions</div>
       {rows.map((r) => (
         <div key={r.ticker} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--lq-color-border-subtle)" }}>
           <span>{r.ticker}</span>
@@ -227,6 +221,44 @@ function SidePanelPlaceholder() {
       ))}
     </div>
   );
+}
+
+// Two named lists — demonstrates the workspace's own name+caret dropdown switcher (see
+// ChartWorkspace's own `watchlists` doc); "Liste de surveillance" is the default name a brand new
+// list gets, "Forex" stands in for a second, user-created one.
+const DEMO_WATCHLISTS = [
+  {
+    id: "surveillance",
+    name: "Liste de surveillance",
+    content: (
+      <WatchlistRows
+        rows={[
+          { ticker: "MSFT", price: "412.88", change: "+1.24%", up: true },
+          { ticker: "NVDA", price: "128.47", change: "+2.61%", up: true },
+          { ticker: "AAPL", price: "231.05", change: "-0.38%", up: false },
+          { ticker: "BTCUSD", price: "64 210", change: "-1.02%", up: false },
+        ]}
+      />
+    ),
+  },
+  {
+    id: "forex",
+    name: "Forex",
+    content: (
+      <WatchlistRows
+        rows={[
+          { ticker: "EURUSD", price: "1.0842", change: "+0.12%", up: true },
+          { ticker: "XAUUSD", price: "2 415.30", change: "-0.44%", up: false },
+        ]}
+      />
+    ),
+  },
+];
+
+// No alert spec exists yet (see ChartWorkspaceProps.alerts' own doc) — just enough content to
+// show the tab isn't empty/broken, not a real empty state design.
+function AlertsPlaceholder() {
+  return <p style={{ fontSize: 12.5, opacity: 0.7, padding: "0 4px" }}>Aucune alerte configurée pour le moment.</p>;
 }
 
 export const AllFeatures: Story = {
@@ -244,10 +276,11 @@ export const AllFeatures: Story = {
     // scrollbar. A negative margin here cancels that padding back out.
     return (
       <div style={{ margin: -32 }}>
-        {/* `sidePanel` lives on the workspace itself, not the chart template below — a template
-            gets cloned into every panel (see ChartWorkspace's own doc on why), so a panel-level
-            sidePanel would render once per panel instead of once for the whole workspace. */}
-        <ChartWorkspace defaultPanels={1} sidePanel={<SidePanelPlaceholder />}>
+        {/* `watchlists`/`alerts` live on the workspace itself, not the chart template below — a
+            template gets cloned into every panel (see ChartWorkspace's own doc on why), so a
+            panel-level docked panel would render once per panel instead of once for the whole
+            workspace. */}
+        <ChartWorkspace defaultPanels={1} watchlists={DEMO_WATCHLISTS} alerts={<AlertsPlaceholder />}>
           <CandlestickChart
             data={ALL_FEATURES_TIMEFRAME_DATA[timeframe as MockTimeframeKey] ?? ALL_FEATURES_DATASET}
             symbol={currentSymbol}

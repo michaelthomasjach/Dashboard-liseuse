@@ -43,6 +43,7 @@ export {
   ArrowDownIcon,
   MenuIcon,
   BellIcon,
+  WatchlistIcon,
   SettingsIcon,
   LinkIcon,
   GridIcon,

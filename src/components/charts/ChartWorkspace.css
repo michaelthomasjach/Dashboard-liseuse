@@ -1,8 +1,8 @@
-/* A flex row of up to two children — `.lq-chart-workspace__grid` (below) and, when
-   `ChartWorkspaceProps.sidePanel` is set, the docked panel itself (or its collapsed strip) —
-   same split `.lq-chart`/`.lq-chart__main` uses in CandlestickChart's own CSS, and for the same
-   reason: ordinary flexbox hands the grid whatever width the panel doesn't take, with zero extra
-   math needed here (see ChartWorkspace.tsx's own doc). */
+/* A flex row of up to three children — `.lq-chart-workspace__grid` (below), the docked panel
+   itself while open (`watchlists`/`alerts`), and its own always-visible rail — same split
+   `.lq-chart`/`.lq-chart__main` uses in CandlestickChart's own CSS, and for the same reason:
+   ordinary flexbox hands the grid whatever width the panel doesn't take, with zero extra math
+   needed here (see ChartWorkspace.tsx's own doc). */
 .lq-chart-workspace {
   display: flex;
   width: 100%;
@@ -52,34 +52,40 @@
 
 /* The workspace's own docked side panel — reuses ChartSidePanel/.lq-chart__side-panel wholesale
    (see that component's own doc), just this small header on top of the caller's own content for
-   the collapse toggle, since the workspace (unlike a single CandlestickChart) has no shared
-   header of its own to host it in otherwise. */
+   the active tab's own title (watchlist name + caret, or a plain "Alertes" label), since the
+   workspace (unlike a single CandlestickChart) has no shared header of its own to host it in
+   otherwise. Open/close/switch itself lives in `.lq-chart-workspace__side-rail` below instead of
+   a button here. */
 .lq-chart-workspace__side-panel-header {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   padding: var(--lq-space-2);
   border-bottom: 1px solid var(--lq-color-border-subtle);
 }
 
-/* Collapsed state of the same panel — a slim, always-visible strip (unlike CandlestickChart's own
-   sidePanel, fully unmounted when collapsed in favor of a toggle living in its always-present
-   header) since this is the *only* persistent affordance left to reopen it once collapsed. */
-.lq-chart-workspace__side-panel-collapsed {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 22px;
-  flex: 0 0 auto;
-  color: var(--lq-color-text-muted);
-  background: none;
-  border: none;
-  border-left: 1px solid var(--lq-color-border-subtle);
-  cursor: pointer;
+/* The "Alertes" tab's own header — same slot `.lq-chart__timeframe-trigger` fills for the
+   watchlist tab, just plain text since there's nothing to switch between (yet — see
+   `ChartWorkspaceProps.alerts`' own doc: no alert spec exists yet, only the panel shell). */
+.lq-chart-workspace__side-panel-title {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
 }
 
-.lq-chart-workspace__side-panel-collapsed:hover {
-  color: var(--lq-color-text);
-  background-color: var(--lq-color-hover);
+/* The always-visible rail that opens/closes/switches the docked panel (`watchlists`/`alerts`) —
+   same vertical icon-stack recipe as `.lq-chart__tools-rail-items` (CandlestickChart's own
+   left-edge tool rail), mirrored to the workspace's own right edge instead. Unlike that one this
+   is a plain flex sibling, not absolutely positioned over anything — the docked panel already
+   makes room for it via ordinary flexbox, there's no plot underneath it needs to float above. */
+.lq-chart-workspace__side-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  padding: 4px;
+  border-left: 1px solid var(--lq-color-border-subtle);
 }
 
 /* Applied to a panel's own `.lq-chart` (see ChartWorkspace's cloneElement) while its checkbox is

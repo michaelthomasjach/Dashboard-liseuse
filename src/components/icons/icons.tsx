@@ -324,6 +324,16 @@ export const BellIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** A bordered panel with three short rows inside — reads as "a list of things", distinct from
+ *  MenuIcon's plain full-width hamburger lines (that one reads as "options menu", a different
+ *  concept) — ChartWorkspace's own right-rail watchlist toggle. */
+export const WatchlistIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <rect x="3.5" y="4" width="17" height="16" rx="1.5" />
+    <path d="M7 8.5h6M7 12h10M7 15.5h10" />
+  </IconBase>
+);
+
 /** A single scalloped outline tracing the whole cog silhouette (teeth fused to the ring, no
  *  gap) plus the inner hole — reads as an actual toothed gear even at small toolbar sizes,
  *  unlike detached spokes radiating from a small circle. */
