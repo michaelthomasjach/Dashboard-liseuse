@@ -244,7 +244,10 @@ export const AllFeatures: Story = {
     // scrollbar. A negative margin here cancels that padding back out.
     return (
       <div style={{ margin: -32 }}>
-        <ChartWorkspace defaultPanels={1}>
+        {/* `sidePanel` lives on the workspace itself, not the chart template below — a template
+            gets cloned into every panel (see ChartWorkspace's own doc on why), so a panel-level
+            sidePanel would render once per panel instead of once for the whole workspace. */}
+        <ChartWorkspace defaultPanels={1} sidePanel={<SidePanelPlaceholder />}>
           <CandlestickChart
             data={ALL_FEATURES_TIMEFRAME_DATA[timeframe as MockTimeframeKey] ?? ALL_FEATURES_DATASET}
             symbol={currentSymbol}
@@ -273,7 +276,6 @@ export const AllFeatures: Story = {
             }}
             seasonality
             showTemplates
-            sidePanel={<SidePanelPlaceholder />}
           />
         </ChartWorkspace>
       </div>

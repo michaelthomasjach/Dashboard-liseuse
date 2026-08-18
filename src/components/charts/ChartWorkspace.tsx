@@ -1,7 +1,10 @@
-import { Children, cloneElement, useState, type ReactElement } from "react";
+import { Children, cloneElement, useState, type ReactElement, type ReactNode } from "react";
 import type { CandlestickChartProps } from "./candlestick/interfaces/CandlestickChartProps.interface";
 import { useLinkGroups } from "./workspace/useLinkGroups";
 import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
+import { useSidePanel } from "./candlestick/hooks/useSidePanel";
+import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
+import { ChevronLeftIcon, ChevronRightIcon } from "../icons";
 import "./ChartWorkspace.css";
 
 const GRID_COLUMNS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 2, 4: 2, 6: 3, 8: 4 };
@@ -40,6 +43,20 @@ export interface ChartWorkspaceProps {
   defaultLinkGroups?: number[][];
   /** Fires whenever a group is created, changed, or dissolved from the "Graphiques liés" modal. */
   onLinkGroupsChange?: (groups: number[][]) => void;
+  /** Content for a collapsible, resizable panel docked to the *workspace's* own right edge —
+   *  deliberately a `ChartWorkspace`-level prop rather than something read off each panel's own
+   *  `CandlestickChart.sidePanel` (which still exists, for a single standalone chart used outside
+   *  a workspace entirely): a single `children` template gets cloned into every panel here (see
+   *  `panelElements` below), so a `sidePanel` set on that template would render once *per panel*
+   *  instead of once for the whole workspace — a watchlist duplicated 2/4/6/8 times over instead
+   *  of shown once beside the whole grid. `sidePanel` is stripped from every cloned panel below
+   *  for exactly that reason; set it here instead. Omit entirely for no panel (default). */
+  sidePanel?: ReactNode;
+  /** Uncontrolled initial open/collapsed state for `sidePanel` — collapsing gives the grid back
+   *  its full width; a small built-in toggle (on the panel's own edge) flips it either way.
+   *  Default true (open). */
+  defaultSidePanelOpen?: boolean;
+  onSidePanelOpenChange?: (open: boolean) => void;
   className?: string;
 }
 
@@ -60,10 +77,14 @@ export function ChartWorkspace({
   panelHeight,
   defaultLinkGroups,
   onLinkGroupsChange,
+  sidePanel,
+  defaultSidePanelOpen,
+  onSidePanelOpenChange,
   className,
 }: ChartWorkspaceProps) {
   const [panels, setPanels] = useState(defaultPanels);
   const { groups, linkPanels, unlinkGroup, groupIndexOfPanel } = useLinkGroups({ defaultLinkGroups, onLinkGroupsChange });
+  const sidePanelState = useSidePanel({ defaultSidePanelOpen, onSidePanelOpenChange });
   // Each panel's own last-reported real hover date (or null) — keyed by panel index, not a single
   // "currently hovered panel" value, since a panel that isn't in any group still needs its own
   // entry cleared correctly when its mouse leaves regardless of what else is going on.
@@ -161,61 +182,114 @@ export function ChartWorkspace({
   const fillHeight = panelHeight === undefined || rows > 1;
 
   return (
-    <div
-      className={["lq-chart-workspace", className].filter(Boolean).join(" ")}
-      style={{
-        // Custom properties, not gridTemplateColumns/gridTemplateRows directly — an inline style
-        // always wins the cascade over a stylesheet rule, which would leave .lq-chart-workspace's
-        // own narrow-viewport media query (see ChartWorkspace.css) unable to ever override it.
-        // The actual `grid-template-columns: repeat(var(--lq-workspace-columns), 1fr)` lives in
-        // that stylesheet instead, where the media query can win normally; `--lq-workspace-
-        // panels` is the *panel* count (not `rows`, which is always ≤2 by GRID_ROWS above) so
-        // that same media query can give a collapsed single column one explicit row per panel,
-        // stacked, instead of splitting only 2 rows' worth of height across up to 4 of them.
-        ["--lq-workspace-columns" as string]: columns,
-        ["--lq-workspace-panels" as string]: panels,
-        // gridTemplateRows splits the 100vh budget evenly between the rows, and each panel below
-        // gets `height: undefined` (see CandlestickChart's own useChartDimensions doc) so it
-        // measures and fills its own row's actual share via ResizeObserver rather than a
-        // hardcoded pixel figure.
-        ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, 1fr)`, height: "100vh" } : {}),
-      }}
-    >
-      {panelElements.map((child, i) =>
-        cloneElement(child, {
-          // Always the panel index, never `child.key` — panels don't reorder, so it's already a
-          // stable, unique identity on its own, and in the single-child "repeat as a template"
-          // case above every entry in `panelElements` is literally the *same* element (same key,
-          // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
-          // every panel down to one shared React instance instead of `panels` independent ones.
-          key: i,
-          // `height: undefined` alone can't express "fill your container" here — CandlestickChart
-          // reads an explicitly-undefined `height` prop identically to an omitted one (both fall
-          // through to its own 380 default via a plain JS default parameter), so passing it
-          // through cloneElement this way silently lost the "fill instead of default to 380"
-          // intent entirely, leaving every panel's own plot area pinned at ~340px inside a
-          // correctly-stretched-but-otherwise-empty grid cell. `fillHeight` is a dedicated flag
-          // for exactly this (see its own doc) that doesn't have that collision.
-          height: panelHeight,
-          fillHeight,
-          className: [child.props.className, selectedPanels.includes(i) && "lq-chart-workspace__panel--selected"].filter(Boolean).join(" ") || undefined,
-          timeframe: i in timeframeByPanel ? timeframeByPanel[i] : child.props.timeframe,
-          onTimeframeChange: (value: string) => {
-            setTimeframeByPanel((prev) => ({ ...prev, [i]: value }));
-            child.props.onTimeframeChange?.(value);
-          },
-          syncedHoverDate: syncedDateForPanel(i),
-          onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
-          syncedHoverPrice: syncedPriceForPanel(i),
-          onHoverPriceChange: (price: number | null) => handleHoverPriceChange(i, price),
-          linkable: true,
-          isLinked: groupIndexOfPanel(i) !== null,
-          onLinkClick: () => setLinkModalOpen(true),
-          showSplitScreen: true,
-          splitScreenPanels: panels,
-          onSplitScreenChange: handlePanelsChange,
-        })
-      )}
+    // A flex row of up to two children — `.lq-chart-workspace__grid` (the actual panel grid) and,
+    // when `sidePanel` is set, the docked panel itself — same split CandlestickChart's own
+    // `.lq-chart`/`.lq-chart__main` uses and for the same reason (see ChartSidePanel's own doc):
+    // ordinary flexbox hands the grid whatever width the panel doesn't take, so every panel's own
+    // ResizeObserver-based measurement (CandlestickChart's `useChartDimensions`) picks up the
+    // narrower box for free, no per-panel math needed here. `height: 100vh` (fillHeight) moves to
+    // *this* outer row rather than the grid itself so the side panel stretches to the exact same
+    // height via the row's own default `align-items: stretch`, not just the grid.
+    <div className={["lq-chart-workspace", className].filter(Boolean).join(" ")} style={fillHeight ? { height: "100vh" } : undefined}>
+      <div
+        className="lq-chart-workspace__grid"
+        style={{
+          // Custom properties, not gridTemplateColumns/gridTemplateRows directly — an inline style
+          // always wins the cascade over a stylesheet rule, which would leave .lq-chart-workspace's
+          // own narrow-viewport media query (see ChartWorkspace.css) unable to ever override it.
+          // The actual `grid-template-columns: repeat(var(--lq-workspace-columns), 1fr)` lives in
+          // that stylesheet instead, where the media query can win normally; `--lq-workspace-
+          // panels` is the *panel* count (not `rows`, which is always ≤2 by GRID_ROWS above) so
+          // that same media query can give a collapsed single column one explicit row per panel,
+          // stacked, instead of splitting only 2 rows' worth of height across up to 4 of them.
+          ["--lq-workspace-columns" as string]: columns,
+          ["--lq-workspace-panels" as string]: panels,
+          // gridTemplateRows splits the row's own height evenly between the rows, and each panel
+          // below gets `height: undefined` (see CandlestickChart's own useChartDimensions doc) so
+          // it measures and fills its own row's actual share via ResizeObserver rather than a
+          // hardcoded pixel figure.
+          ...(fillHeight ? { gridTemplateRows: `repeat(${rows}, 1fr)` } : {}),
+        }}
+      >
+        {panelElements.map((child, i) =>
+          cloneElement(child, {
+            // Always the panel index, never `child.key` — panels don't reorder, so it's already a
+            // stable, unique identity on its own, and in the single-child "repeat as a template"
+            // case above every entry in `panelElements` is literally the *same* element (same key,
+            // whatever `Children.toArray` assigned it), which would otherwise collide and collapse
+            // every panel down to one shared React instance instead of `panels` independent ones.
+            key: i,
+            // `height: undefined` alone can't express "fill your container" here — CandlestickChart
+            // reads an explicitly-undefined `height` prop identically to an omitted one (both fall
+            // through to its own 380 default via a plain JS default parameter), so passing it
+            // through cloneElement this way silently lost the "fill instead of default to 380"
+            // intent entirely, leaving every panel's own plot area pinned at ~340px inside a
+            // correctly-stretched-but-otherwise-empty grid cell. `fillHeight` is a dedicated flag
+            // for exactly this (see its own doc) that doesn't have that collision.
+            height: panelHeight,
+            fillHeight,
+            className: [child.props.className, selectedPanels.includes(i) && "lq-chart-workspace__panel--selected"].filter(Boolean).join(" ") || undefined,
+            timeframe: i in timeframeByPanel ? timeframeByPanel[i] : child.props.timeframe,
+            onTimeframeChange: (value: string) => {
+              setTimeframeByPanel((prev) => ({ ...prev, [i]: value }));
+              child.props.onTimeframeChange?.(value);
+            },
+            syncedHoverDate: syncedDateForPanel(i),
+            onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
+            syncedHoverPrice: syncedPriceForPanel(i),
+            onHoverPriceChange: (price: number | null) => handleHoverPriceChange(i, price),
+            linkable: true,
+            isLinked: groupIndexOfPanel(i) !== null,
+            onLinkClick: () => setLinkModalOpen(true),
+            showSplitScreen: true,
+            splitScreenPanels: panels,
+            onSplitScreenChange: handlePanelsChange,
+            // `ChartWorkspace`'s own `sidePanel` (above) is the single source of truth once a
+            // chart is composed into a workspace — a docked panel is a "whole view" concept, not a
+            // per-panel one, so a template child that also set its *own* `CandlestickChart.sidePanel`
+            // would otherwise render once per panel instead of once for the whole workspace (see
+            // `sidePanel`'s own doc for why). Stripped here regardless of what the template set.
+            sidePanel: undefined,
+            defaultSidePanelOpen: undefined,
+            onSidePanelOpenChange: undefined,
+          })
+        )}
+      </div>
+
+      {sidePanel &&
+        (sidePanelState.open ? (
+          <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
+            {/* A minimal header of its own just for the collapse toggle — unlike a single
+                CandlestickChart, the workspace has no shared header of its own to host this
+                button in (each panel has its own independent one instead), so the panel carries
+                it directly. */}
+            <div className="lq-chart-workspace__side-panel-header">
+              <button
+                type="button"
+                className="lq-chart__icon-button"
+                onClick={() => sidePanelState.commitOpen(false)}
+                aria-label="Réduire le panneau latéral"
+              >
+                <ChevronRightIcon size={14} />
+              </button>
+            </div>
+            {sidePanel}
+          </ChartSidePanel>
+        ) : (
+          // Collapsed: a slim, always-visible strip rather than unmounting the panel entirely the
+          // way CandlestickChart's own sidePanel does — that one has a persistent header button to
+          // reopen it from regardless of open state; this workspace has no such fixed chrome, so
+          // the strip itself doubles as that permanent "still here, tap to reopen" affordance.
+          <button
+            type="button"
+            className="lq-chart-workspace__side-panel-collapsed"
+            onClick={() => sidePanelState.commitOpen(true)}
+            aria-label="Ouvrir le panneau latéral"
+          >
+            <ChevronLeftIcon size={14} />
+          </button>
+        ))}
+
       <LinkGroupsModal
         open={linkModalOpen}
         onClose={closeLinkModal}

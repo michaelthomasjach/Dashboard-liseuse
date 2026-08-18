@@ -9,15 +9,15 @@ export interface ChartSidePanelProps {
   startResize: (e: React.PointerEvent) => void;
 }
 
-/** The chart's own right-docked panel (`CandlestickChartProps.sidePanel`) — a flex sibling of
- *  `.lq-chart__main` inside the outer `.lq-chart` row (see CandlestickChart.tsx's own doc on why
- *  that split exists: it lets the plot's own width genuinely shrink to make room via ordinary
- *  flexbox, with zero changes needed to any of the axis/margin math everything else already
- *  reads from). Purely a layout shell around whatever the caller passed as `sidePanel` — same
- *  "structure only, caller owns the content" shape as `ChartWorkspace.children`. Unmounted
- *  entirely (not just visually hidden) whenever collapsed — see CandlestickChart.tsx's own
- *  `sidePanelState.open` gate — so a collapsed panel gives the chart back its *full* width, not a
- *  thin strip. */
+/** A right-docked panel — a flex sibling of whatever it's docked beside (`.lq-chart__main` inside
+ *  a single `CandlestickChart`'s own `.lq-chart` row, or `.lq-chart-workspace__grid` inside a
+ *  whole `ChartWorkspace`; see each of those components' own doc for why that split exists: it
+ *  lets the *other* side genuinely shrink to make room via ordinary flexbox, with zero changes
+ *  needed to any of the axis/margin/grid-track math everything else already reads from). Purely a
+ *  layout shell around whatever the caller passed as content — same "structure only, caller owns
+ *  the content" shape as `ChartWorkspace.children` itself. Meant to be unmounted entirely (not
+ *  just visually hidden) by its own caller whenever collapsed — see `useSidePanel`'s own `open` —
+ *  so a collapsed panel gives its sibling back its *full* width, not a thin strip. */
 export function ChartSidePanel({ children, panelRef, widthPx, startResize }: ChartSidePanelProps) {
   return (
     <div

@@ -6,18 +6,21 @@ export interface UseSidePanelArgs {
   onSidePanelOpenChange: ((open: boolean) => void) | undefined;
 }
 
-/** Open/collapsed state plus drag-to-resize for `CandlestickChartProps.sidePanel` — same
+/** Open/collapsed state plus drag-to-resize for a docked `ChartSidePanel` — shared by
+ *  `CandlestickChartProps.sidePanel` (a single chart's own panel) and `ChartWorkspaceProps.sidePanel`
+ *  (one panel docked to a whole multi-chart workspace instead — see ChartWorkspace's own doc for
+ *  why that one lives at the *workspace* level rather than being repeated per panel). Same
  *  "uncontrolled `defaultX` seeds state, every setter funnels through one `commitX` that also
  *  fires `onXChange`" shape `usePaneLayout`'s own `commitIndicators` already uses.
  *
  *  `widthPx` starts `null`, meaning "use the CSS default" (a plain 20% flex-basis on
  *  `.lq-chart__side-panel` — see SIDE_PANEL_DEFAULT_WIDTH_FRACTION) rather than a number computed
- *  here: the panel's *default* width only ever needs to be "1/5 of the chart," which the browser's
- *  own flex layout already gives for free with no measurement/chicken-and-egg problem, so there's
- *  nothing to compute a fallback pixel value from until the user actually drags the handle — at
- *  that point `startResize` reads the panel's own current rendered width directly off the DOM via
- *  `panelRef` (which is however wide it happened to be, whether that came from the CSS default or
- *  an earlier drag) and switches to tracking that as a fixed pixel value from then on. */
+ *  here: the panel's *default* width only ever needs to be "1/5 of its container," which the
+ *  browser's own flex layout already gives for free with no measurement/chicken-and-egg problem,
+ *  so there's nothing to compute a fallback pixel value from until the user actually drags the
+ *  handle — at that point `startResize` reads the panel's own current rendered width directly off
+ *  the DOM via `panelRef` (however wide it happened to be, whether that came from the CSS default
+ *  or an earlier drag) and switches to tracking that as a fixed pixel value from then on. */
 export function useSidePanel({ defaultSidePanelOpen, onSidePanelOpenChange }: UseSidePanelArgs) {
   const [open, setOpen] = useState(defaultSidePanelOpen ?? true);
   const [widthPx, setWidthPx] = useState<number | null>(null);

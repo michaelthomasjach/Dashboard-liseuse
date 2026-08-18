@@ -1,8 +1,19 @@
+/* A flex row of up to two children — `.lq-chart-workspace__grid` (below) and, when
+   `ChartWorkspaceProps.sidePanel` is set, the docked panel itself (or its collapsed strip) —
+   same split `.lq-chart`/`.lq-chart__main` uses in CandlestickChart's own CSS, and for the same
+   reason: ordinary flexbox hands the grid whatever width the panel doesn't take, with zero extra
+   math needed here (see ChartWorkspace.tsx's own doc). */
 .lq-chart-workspace {
+  display: flex;
+  width: 100%;
+}
+
+.lq-chart-workspace__grid {
   display: grid;
   grid-template-columns: repeat(var(--lq-workspace-columns), 1fr);
   gap: 0;
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 /* A split-screen workspace (2/4/6/8 panels) squeezed into a narrow phone viewport leaves each
@@ -12,7 +23,7 @@
    untouched, so a 2-row layout (4/6/8 panels) still gets its own 100vh split, now stacked
    1-per-row-share top to bottom instead of 2-per-row-share side by side. */
 @media (max-width: 700px) {
-  .lq-chart-workspace {
+  .lq-chart-workspace__grid {
     grid-template-columns: 1fr;
     /* One explicit row per *panel* (not the original `rows`, always ≤2 — see
        --lq-workspace-panels' own doc in ChartWorkspace.tsx) so a 4/6/8-panel workspace's 100vh
@@ -34,9 +45,41 @@
    get and can even stop the panel's own ResizeObserver from ever detecting a change at all — its
    container's real size never actually changes since the too-large content is what's holding the
    whole row open in the first place. */
-.lq-chart-workspace > * {
+.lq-chart-workspace__grid > * {
   min-width: 0;
   min-height: 0;
+}
+
+/* The workspace's own docked side panel — reuses ChartSidePanel/.lq-chart__side-panel wholesale
+   (see that component's own doc), just this small header on top of the caller's own content for
+   the collapse toggle, since the workspace (unlike a single CandlestickChart) has no shared
+   header of its own to host it in otherwise. */
+.lq-chart-workspace__side-panel-header {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--lq-space-2);
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+}
+
+/* Collapsed state of the same panel — a slim, always-visible strip (unlike CandlestickChart's own
+   sidePanel, fully unmounted when collapsed in favor of a toggle living in its always-present
+   header) since this is the *only* persistent affordance left to reopen it once collapsed. */
+.lq-chart-workspace__side-panel-collapsed {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  flex: 0 0 auto;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-left: 1px solid var(--lq-color-border-subtle);
+  cursor: pointer;
+}
+
+.lq-chart-workspace__side-panel-collapsed:hover {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
 }
 
 /* Applied to a panel's own `.lq-chart` (see ChartWorkspace's cloneElement) while its checkbox is
