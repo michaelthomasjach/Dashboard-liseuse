@@ -516,7 +516,10 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
         ctx.moveTo(zoomedXScale(indexForDate(p3.x) + 0.5), zoomedPriceScale(p3.y));
         ctx.lineTo(zoomedXScale(indexForDate(p4.x) + 0.5), zoomedPriceScale(p4.y));
         ctx.stroke();
-      } else if (activeTool === "rectangle" || activeTool === "zones") {
+      } else if (activeTool === "rectangle" || activeTool === "zones" || activeTool === "zoomIn") {
+        // "zoomIn" never commits a `drawings` entry (its 2nd click zooms instead — see
+        // useDrawingInteractions' own handling) but previews identically to rectangle/zones while
+        // placing its own two corners, so it's just folded into this same branch.
         const x1 = zoomedXScale(indexForDate(pendingPoint.x) + 0.5);
         const y1 = zoomedPriceScale(pendingPoint.y);
         const x2 = zoomedXScale(indexForDate(previewPoint.x) + 0.5);

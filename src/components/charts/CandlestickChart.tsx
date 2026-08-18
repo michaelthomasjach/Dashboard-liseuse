@@ -320,6 +320,7 @@ export function CandlestickChart({
     yTransform,
     setYTransform,
     setYManuallyAdjusted,
+    xScale,
     zoomedXScale,
     indexForDate,
     dateForIndex,
@@ -331,8 +332,10 @@ export function CandlestickChart({
     zoomedPriceScale,
     clampToPriceAxis,
     zoomedVolumeScale,
+    maxXZoom,
     zoomRef,
     resetX,
+    setXTransformAnimated,
     xAxisDrag,
     yAxisDrag,
     xAxisWheelRef,
@@ -505,6 +508,9 @@ export function CandlestickChart({
     pixelYForDrawing,
     resolveValueAxisAtY,
     overlayProjections,
+    xScale,
+    maxXZoom,
+    setXTransformAnimated,
   });
 
   useEffect(() => {

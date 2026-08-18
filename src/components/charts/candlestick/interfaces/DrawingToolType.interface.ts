@@ -11,6 +11,7 @@ export type DrawingToolType =
   | "elliottImpulse"
   | "elliottCorrection"
   | "measure"
+  | "zoomIn"
   | "rectangle"
   | "elbowArrow"
   | "brush"

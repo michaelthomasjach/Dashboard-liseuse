@@ -83,6 +83,8 @@ export {
   LineBreakModeIcon,
   TpoModeIcon,
   MeasureIcon,
+  ZoomInIcon,
+  ZoomOutIcon,
   AverageLineIcon,
   MagnetIcon,
   RectangleShapeIcon,

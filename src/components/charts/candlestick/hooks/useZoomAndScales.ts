@@ -324,7 +324,12 @@ export function useZoomAndScales({
     return new d3.ZoomTransform(t.k, tx, t.y);
   }
 
-  const { ref: zoomRef, reset: resetX, setTransform: setXTransformViaZoom } = useD3Zoom<SVGRectElement>({
+  const {
+    ref: zoomRef,
+    reset: resetX,
+    setTransform: setXTransformViaZoom,
+    setTransformAnimated: setXTransformAnimated,
+  } = useD3Zoom<SVGRectElement>({
     width: dims.boundedWidth,
     height: plotBoundedHeight,
     enabled: zoomable && activeTool === null,
@@ -462,6 +467,7 @@ export function useZoomAndScales({
     zoomRef,
     resetX,
     setXTransformViaZoom,
+    setXTransformAnimated,
     xAxisDrag,
     handleManualYChange,
     yAxisDrag,

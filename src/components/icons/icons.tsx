@@ -659,6 +659,26 @@ export const MeasureIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Same magnifying-glass silhouette as SearchIcon, a "+" inside the lens instead — the "zoom in
+ *  on this rectangle" drawing tool. */
+export const ZoomInIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M19 19l-4.3-4.3" />
+    <path d="M7.5 10.5h6M10.5 7.5v6" />
+  </IconBase>
+);
+
+/** Same magnifying-glass silhouette as SearchIcon, a "-" inside the lens instead — resets the
+ *  zoom back to its own default range. */
+export const ZoomOutIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <circle cx="10.5" cy="10.5" r="6.5" />
+    <path d="M19 19l-4.3-4.3" />
+    <path d="M7.5 10.5h6" />
+  </IconBase>
+);
+
 /** Two faint zigzags (several noisy individual series) collapsing into one bold flat line (their
  *  average) — SeasonalityView's own "années indépendantes" hover-average toggle. */
 export const AverageLineIcon = (props: IconProps) => (

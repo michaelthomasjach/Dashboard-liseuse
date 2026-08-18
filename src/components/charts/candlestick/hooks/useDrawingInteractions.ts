@@ -81,6 +81,14 @@ export interface UseDrawingInteractionsArgs {
   pixelYForDrawing: (dr: TrendLineDrawing) => number;
   resolveValueAxisAtY: (mouseY: number) => string;
   overlayProjections: { drawing: TrendLineDrawing; mainReference: number; points: { i: number; price: number }[] }[];
+  /** The "zoomIn" tool's own math — see its own click-handling branch below. `xScale` is the base
+   *  (unzoomed) index-domain scale (distinct from `zoomedXScale` above, already rescaled by
+   *  whatever transform is currently applied) since the whole point is computing a *fresh*
+   *  transform independent of the current one, same as `useZoomAndScales`' own
+   *  `initialVisibleCandles` effect already does. */
+  xScale: ScaleLinear<number, number>;
+  maxXZoom: number;
+  setXTransformAnimated: (t: d3.ZoomTransform, duration?: number) => void;
 }
 
 /** Every pointer-driven interaction with drawings: placing a new one (click-to-place tools,
@@ -153,6 +161,9 @@ export function useDrawingInteractions({
   pixelYForDrawing,
   resolveValueAxisAtY,
   overlayProjections,
+  xScale,
+  maxXZoom,
+  setXTransformAnimated,
 }: UseDrawingInteractionsArgs) {
   function toDataPoint(e: { clientX: number; clientY: number }): DataPoint {
     const rect = zoomRef.current!.getBoundingClientRect();
@@ -239,6 +250,33 @@ export function useDrawingInteractions({
         return;
       }
       setMeasurePoints({ p1: pendingPoint, p2: point });
+      setPendingPoint(null);
+      setPreviewPoint(null);
+      setActiveTool(null);
+      return;
+    }
+    // Same two-click shape as "measure" right above (place point 1, then point 2 deselects the
+    // tool automatically) but the 2nd click drives an actual zoom instead of leaving anything on
+    // the chart — animated to whatever X range the two clicked points span, same
+    // `k = width / (x1 - x0)`, `tx = -k * x0` transform math `useZoomAndScales`' own
+    // `initialVisibleCandles` effect already uses to fit a specific index range to the viewport.
+    // Y is left alone here: re-engaging auto-fit (see setYManuallyAdjusted below) already lands it
+    // correctly on whatever's now visible on X, without this needing its own price-range math.
+    if (activeTool === "zoomIn") {
+      if (!pendingPoint) {
+        setPendingPoint(point);
+        setPreviewPoint(point);
+        return;
+      }
+      const i0 = indexForDate(pendingPoint.x);
+      const i1 = indexForDate(point.x);
+      const x0 = xScale(Math.min(i0, i1));
+      const x1 = xScale(Math.max(i0, i1));
+      if (x1 - x0 > 0) {
+        const k = Math.min(maxXZoom, Math.max(1, dims.boundedWidth / (x1 - x0)));
+        setXTransformAnimated(new d3.ZoomTransform(k, -k * x0, 0));
+        setYManuallyAdjusted(false);
+      }
       setPendingPoint(null);
       setPreviewPoint(null);
       setActiveTool(null);

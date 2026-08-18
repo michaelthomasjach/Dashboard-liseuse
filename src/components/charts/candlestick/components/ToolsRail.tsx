@@ -2,7 +2,7 @@ import { Fragment, useRef, useState } from "react";
 import type { RefObject, Dispatch, SetStateAction } from "react";
 import { Popover } from "../../../forms/Popover";
 import { Checkbox } from "../../../forms/Checkbox";
-import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon, RefreshIcon } from "../../../icons";
+import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon, ZoomInIcon, ZoomOutIcon } from "../../../icons";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { DRAWING_TOOL_CATEGORIES } from "../drawingCatalog";
 import { capitalize } from "../formatting";
@@ -234,7 +234,24 @@ export function ToolsRail({
             themselves are off entirely. */}
         {zoomable && isZoomed && (
           <button type="button" className="lq-chart__icon-button" onClick={resetZoom} aria-label="Réinitialiser le zoom" title="Réinitialiser le zoom">
-            <RefreshIcon size={14} />
+            <ZoomOutIcon size={14} />
+          </button>
+        )}
+        {/* "Zoom in on this rectangle" — same click-click placement as the rectangle drawing tool
+            (see useDrawingInteractions' own "zoomIn" branch), except the 2nd click zooms with an
+            animated transition instead of leaving a drawing behind, and deselects the tool right
+            after (same auto-deselect "measure" already does, for the same reason: its own result
+            isn't a persistent drawing to keep editing). */}
+        {zoomable && (
+          <button
+            type="button"
+            className={["lq-chart__icon-button", activeTool === "zoomIn" && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+            onClick={() => handleToolClick("zoomIn")}
+            aria-label="Zoomer sur une zone"
+            aria-pressed={activeTool === "zoomIn"}
+            title="Zoomer sur une zone : cliquer deux fois pour délimiter un rectangle"
+          >
+            <ZoomInIcon size={14} />
           </button>
         )}
         {/* Per-kind event-marker visibility (Earnings/News/Dividend/Update/…, whatever kinds are

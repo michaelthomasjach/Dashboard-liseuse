@@ -26,6 +26,10 @@ export interface UseD3ZoomResult<T extends Element> {
   /** Imperatively apply a transform (e.g. from a drag on the axis strip) — goes through the
    *  d3-zoom behavior itself so its internally-tracked state stays in sync with wheel/drag input. */
   setTransform: (transform: d3.ZoomTransform) => void;
+  /** Same as `setTransform`, animated (e.g. the "zoom in on this rectangle" drawing tool) — same
+   *  transition `reset` itself already applies toward identity specifically, generalized to any
+   *  target transform. */
+  setTransformAnimated: (transform: d3.ZoomTransform, duration?: number) => void;
 }
 
 /**
@@ -45,6 +49,15 @@ export function useD3Zoom<T extends Element>({
   const behaviorRef = useRef<d3.ZoomBehavior<T, unknown> | null>(null);
   const onZoomRef = useRef(onZoom);
   onZoomRef.current = onZoom;
+  // Mirrors whatever `onZoom` was last called with — real gesture, `setTransform`, or
+  // `setTransformAnimated`'s own per-frame calls alike — purely so the latter has a known
+  // starting point to interpolate *from* without needing its own separate "last transform" prop
+  // threaded in from outside.
+  const lastTransformRef = useRef(d3.zoomIdentity);
+  function emitZoom(t: d3.ZoomTransform) {
+    lastTransformRef.current = t;
+    onZoomRef.current(t);
+  }
   const filterRef = useRef(filter);
   filterRef.current = filter;
   const constrainRef = useRef(constrain);
@@ -96,7 +109,7 @@ export function useD3Zoom<T extends Element>({
         const defaultOk = (!event.ctrlKey || event.type === "wheel") && !event.button;
         return defaultOk && (filterRef.current ? filterRef.current(event) : true);
       })
-      .on("zoom", (event: d3.D3ZoomEvent<T, unknown>) => onZoomRef.current(event.transform));
+      .on("zoom", (event: d3.D3ZoomEvent<T, unknown>) => emitZoom(event.transform));
 
     // Captures d3-zoom's own default translateExtent-based constrain function before
     // (optionally) overriding it below, so a caller-supplied `constrain` can still be swapped in
@@ -116,19 +129,48 @@ export function useD3Zoom<T extends Element>({
     };
   }, [enabled, width, height, scaleMin, scaleMax, mountTick, ref]);
 
+  function setTransformAnimated(t: d3.ZoomTransform, duration = 250) {
+    const el = ref.current;
+    const behavior = behaviorRef.current;
+    if (el && behavior) {
+      d3.select(el).transition().duration(duration).call(behavior.transform, t);
+      return;
+    }
+    // No attached zoom behavior right now — e.g. the "zoom in on this rectangle" drawing tool
+    // calling this from *inside* its own active-tool click handling, exactly when `enabled`
+    // (`zoomable && activeTool === null`) is false and the attach effect above has torn the real
+    // behavior down (see its own cleanup) so plain click-drag panning doesn't fight the tool's own
+    // click-to-place gesture. Falling back to a real d3-zoom call here would silently no-op, so
+    // this instead drives the same k/x/y interpolation directly — the same plain lerp a
+    // ZoomTransform (no registered custom d3.interpolate for it) already reduces to once handed
+    // to `selection.transition().call(behavior.transform, …)` in the attached branch above.
+    const start = lastTransformRef.current;
+    const kAt = d3.interpolateNumber(start.k, t.k);
+    const xAt = d3.interpolateNumber(start.x, t.x);
+    const yAt = d3.interpolateNumber(start.y, t.y);
+    // A detached, never-rendered `<div>` — not `{}`/`null` — purely because d3-transition needs a
+    // real object it can privately stash its own bookkeeping on (`__transition`) for the
+    // duration; nothing about it is ever read, rendered, or attached to the document.
+    d3.select(document.createElement("div"))
+      .transition()
+      .duration(duration)
+      .tween("zoom", () => (time: number) => {
+        emitZoom(new d3.ZoomTransform(kAt(time), xAt(time), yAt(time)));
+      });
+  }
+
   return {
     ref,
-    reset: () => {
-      const el = ref.current;
-      const behavior = behaviorRef.current;
-      if (!el || !behavior) return;
-      d3.select(el).transition().duration(250).call(behavior.transform, d3.zoomIdentity);
-    },
+    reset: () => setTransformAnimated(d3.zoomIdentity),
     setTransform: (t: d3.ZoomTransform) => {
       const el = ref.current;
       const behavior = behaviorRef.current;
-      if (!el || !behavior) return;
-      d3.select(el).call(behavior.transform, t);
+      if (el && behavior) {
+        d3.select(el).call(behavior.transform, t);
+      } else {
+        emitZoom(t);
+      }
     },
+    setTransformAnimated,
   };
 }
