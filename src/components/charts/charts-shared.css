@@ -732,6 +732,17 @@
   transform: translateY(-50%);
 }
 
+/* LineAreaChart's own `hoverAverage` badge — deliberately not colored to match any one series
+   (there isn't one "right" color for an aggregate of several of them), so it swaps the plain
+   solid accent fill every other axis-value badge uses for a bordered, neutral one instead —
+   reads as "a computed summary standing apart from the real per-series values" at a glance
+   instead of looking like just another, oddly uncolored series. */
+.lq-chart__axis-value--average {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+}
+
 .lq-chart__axis-value--x {
   transform: translateX(-50%);
 }

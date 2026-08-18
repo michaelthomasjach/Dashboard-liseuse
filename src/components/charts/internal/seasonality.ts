@@ -1,9 +1,9 @@
 import type { Candle } from "../CandlestickChart";
 
 /** How the reference year is sliced into buckets — "day" is the finest and what SeasonalityView
- *  actually renders with today (a real per-trading-day curve, not smoothed away — most calendar
- *  days a given year has a candle on land in their own bucket, so the result reads about as
- *  granular as the underlying data's own trading-day frequency lets it). */
+ *  actually renders with today (a real per-trading-day curve, not smoothed away — every trading
+ *  session gets its own bucket, indexed by its ordinal position within its own year rather than
+ *  its calendar date, see `computeSeasonality`'s own doc for why). */
 export type SeasonalityGranularity = "day" | "week" | "month" | "quarter" | "year";
 
 /** One year's own contribution to a bucket — kept around (not collapsed into just the average)
@@ -21,9 +21,11 @@ export interface SeasonalityOccurrence {
 }
 
 export interface SeasonalityBucket {
-  /** 0-based position within the reference year — 0-364 for "day", 0-51 for "week", 0-11 for
-   *  "month", 0-3 for "quarter", always 0 for "year" (a single bucket covering the whole thing)
-   *  — except -1, the synthetic "start of year" reference bucket every included year gets an
+  /** 0-based position within the reference year — 0-364 for "day" (a trading-day *ordinal*, e.g.
+   *  index 20 is every included year's own 21st trading session, not its own Jan 21), 0-51 for
+   *  "week", 0-11 for "month", 0-3 for "quarter", always 0 for "year" (a single bucket covering
+   *  the whole thing) — except -1, the synthetic "start of year" reference bucket every included
+   *  year gets an
    *  `average`/every own `occurrences[].value` of exactly 0 at (see `computeSeasonality`'s own
    *  doc), so every line visibly starts from the same shared anchor instead of wherever its own
    *  first real bucket happens to already be. */
@@ -52,9 +54,12 @@ const DAY_BUCKET_COUNT = 365;
 const WEEK_BUCKET_COUNT = 52;
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
-// Shared by both "day" and "week" bucketing below — a date's own 0-based offset from Jan 1 of
-// its *own* year (so Dec 31 of a leap year is 365, folded down to the last bucket by each
+// Shared by "week" bucketing below (see bucketIndexFor) — a date's own 0-based offset from Jan 1
+// of its *own* year (so Dec 31 of a leap year is 365, folded down to the last bucket by each
 // caller rather than getting a sparse 366th bucket only leap years could ever contribute to).
+// NOT used for "day" bucketing (see the main loop below) — that one buckets by each year's own
+// trading-day ordinal instead of a calendar offset, precisely to avoid the same cross-year
+// misalignment this calendar-based helper would otherwise reintroduce there.
 function dayOfYear(date: Date): number {
   const yearStart = Date.UTC(date.getUTCFullYear(), 0, 1);
   const today = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate());
@@ -76,10 +81,9 @@ function bucketCountFor(granularity: SeasonalityGranularity): number {
   }
 }
 
-function bucketIndexFor(date: Date, granularity: SeasonalityGranularity): number {
+// Not called for "day" (see the main loop's own trading-day-ordinal handling below).
+function bucketIndexFor(date: Date, granularity: Exclude<SeasonalityGranularity, "day">): number {
   switch (granularity) {
-    case "day":
-      return Math.min(dayOfYear(date), DAY_BUCKET_COUNT - 1);
     case "week":
       // A leap-ish 53rd week's worth of overflow days folds into the last bucket instead of
       // getting a sparse bucket of its own that only a handful of years could ever contribute to.
@@ -114,7 +118,15 @@ function bucketLabel(index: number, granularity: SeasonalityGranularity): string
  * is one "occurrence": rebased to a % change from its own first available close (so years at very
  * different price levels still compare on equal footing, same rebasing idea `CandlestickChart`'s
  * own symbol-overlay comparison uses), then read off at each bucket's own last available close
- * within it. `average` is the plain mean of every year's own value at that bucket — see
+ * within it — except "day", read off at each bucket's own trading-day *ordinal* within that year
+ * instead (see the main loop below for why: a calendar day-of-year offset lands on a different
+ * weekday every year, so on any given calendar-day bucket only *some* years have an actual
+ * trading session there, and which ones rotates from one calendar day to the next. Averaging
+ * whichever years happen to have data at each individual calendar offset — instead of comparing
+ * the same years' Nth trading day to each other — silently swapped in and out very differently-
+ * positioned years bucket to bucket, producing sharp, meaningless day-to-day swings with no real
+ * seasonal signal behind them). `average` is the plain mean of every year's own value at that
+ * bucket — see
  * `SeasonalityOccurrence`'s doc comment for how future features (dispersion bands, individual
  * occurrences, weighted averages, automatic filters) are meant to build on the same `occurrences`
  * array instead of changing this traversal.
@@ -156,6 +168,21 @@ export function computeSeasonality(
     if (candles.length === 0) continue;
     const reference = candles[0].close;
     if (reference === 0) continue;
+
+    if (granularity === "day") {
+      // Each year's own trading-day ordinal (0 = its own reference candle, 1 = the next session,
+      // …) rather than a calendar day-of-year offset — see this function's own doc comment for
+      // why. Every candle already lands in its own bucket this way (one session per index), so
+      // unlike the coarser granularities below there's no "several candles, same bucket" case to
+      // collapse via a last-one-wins map.
+      candles.forEach((candle, i) => {
+        const idx = Math.min(i, DAY_BUCKET_COUNT - 1);
+        occurrencesByBucket[idx].push({ year, value: ((candle.close / reference) - 1) * 100 });
+      });
+      contributingYears.add(year);
+      continue;
+    }
+
     // Last candle seen (candles are date-ordered, same assumption every date-indexed feature in
     // this library already makes) within each bucket is that bucket's own representative close.
     const lastCloseByBucket = new Map<number, number>();

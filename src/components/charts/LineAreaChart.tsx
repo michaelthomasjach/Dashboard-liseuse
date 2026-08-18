@@ -95,6 +95,13 @@ export interface LineAreaChartProps {
    *  X/Y readout that way (see SeasonalityView) — a second, differently-shaped floating tooltip
    *  box would read as a visual inconsistency next to it. Default false (floating tooltip). */
   axisHoverLabels?: boolean;
+  /** Only meaningful alongside `axisHoverLabels` — swaps its one-Y-badge-per-series stack for a
+   *  single badge showing the plain average of every visible series' own value at the hovered X
+   *  (see SeasonalityView's own "années indépendantes" hover-average toggle: a badge per year
+   *  reads fine for a couple of lines but becomes an unreadable stack once several years are all
+   *  shown at once, and unlike "current" mode there's no explicit average *series* already on the
+   *  chart to read off instead). Default false (the existing per-series stack). */
+  hoverAverage?: boolean;
   /** Roughly how many ticks to request on each axis — a hint, not an exact count (d3's own
    *  `.ticks(n)` rounds to whichever "nice" step lands closest to it, same as ChartAxis's own
    *  default already works). Default 5 (ChartAxis's own default) for both when omitted. Ignored
@@ -162,6 +169,7 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
   showZoomReset = true,
   onZoomChange,
   axisHoverLabels = false,
+  hoverAverage = false,
   xTicks,
   yTicks,
   xTickValues,
@@ -745,23 +753,46 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                 >
                   <span className="lq-chart__axis-value-text">{formattedX}</span>
                 </div>
-                {hoverPoint.map(({ series: s, color, point }) =>
-                  point ? (
-                    <div
-                      key={s.id}
-                      className="lq-chart__axis-value lq-chart__axis-value--y"
-                      style={{
-                        top: dims.margin.top + zoomedYScale(point.y),
-                        backgroundColor: color,
-                        ...(yAxisOrientation === "right"
-                          ? { left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }
-                          : { left: 0, width: dims.margin.left, justifyContent: "flex-end" }),
-                      }}
-                    >
-                      <span className="lq-chart__axis-value-text">{formatY ? formatY(point.y) : point.y}</span>
-                    </div>
-                  ) : null
-                )}
+                {hoverAverage
+                  ? (() => {
+                      // Plain mean of whatever's actually defined here (a series that doesn't
+                      // reach this far back/forward — an in-progress year, say — simply doesn't
+                      // count toward it, same "gaps are omitted, not zeroed" reading every other
+                      // per-series lookup in this file already gives a missing point).
+                      const values = hoverPoint.flatMap(({ point }) => (point ? [point.y] : []));
+                      if (values.length === 0) return null;
+                      const avgY = values.reduce((sum, y) => sum + y, 0) / values.length;
+                      return (
+                        <div
+                          className="lq-chart__axis-value lq-chart__axis-value--y lq-chart__axis-value--average"
+                          style={{
+                            top: dims.margin.top + zoomedYScale(avgY),
+                            ...(yAxisOrientation === "right"
+                              ? { left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }
+                              : { left: 0, width: dims.margin.left, justifyContent: "flex-end" }),
+                          }}
+                        >
+                          <span className="lq-chart__axis-value-text">Moy. {formatY ? formatY(avgY) : avgY}</span>
+                        </div>
+                      );
+                    })()
+                  : hoverPoint.map(({ series: s, color, point }) =>
+                      point ? (
+                        <div
+                          key={s.id}
+                          className="lq-chart__axis-value lq-chart__axis-value--y"
+                          style={{
+                            top: dims.margin.top + zoomedYScale(point.y),
+                            backgroundColor: color,
+                            ...(yAxisOrientation === "right"
+                              ? { left: dims.margin.left + dims.boundedWidth, minWidth: dims.margin.right }
+                              : { left: 0, width: dims.margin.left, justifyContent: "flex-end" }),
+                          }}
+                        >
+                          <span className="lq-chart__axis-value-text">{formatY ? formatY(point.y) : point.y}</span>
+                        </div>
+                      ) : null
+                    )}
               </>
             );
           })()

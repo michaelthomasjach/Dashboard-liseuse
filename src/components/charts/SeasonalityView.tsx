@@ -7,37 +7,52 @@ import { Popover } from "../forms/Popover";
 import { Checkbox } from "../forms/Checkbox";
 import { DropdownPanel } from "../primitives/DropdownPanel";
 import { Modal } from "../primitives/Modal";
-import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon, MeasureIcon } from "../icons";
+import { ChevronLeftIcon, ChevronDownIcon, CalendarIcon, EyeIcon, EyeOffIcon, SettingsIcon, TrashIcon, MeasureIcon, AverageLineIcon } from "../icons";
 import { DEFAULT_MARGIN, TOOLS_RAIL_WIDTH } from "./candlestick/constants";
 import "./charts-shared.css";
 
 // The only granularity offered now (see this file's own git history for the Semaine/Trimestre/
-// Année options this replaced) — always computed at "day" resolution (365 buckets) internally
-// for a curve as detailed as the underlying trading-day data actually supports, see
-// MONTH_TICK_INDEXES below for how the X axis still only *labels* the 12 month boundaries among
-// those 365 points.
+// Année options this replaced) — always computed at "day" resolution internally, each bucket a
+// trading-day *ordinal* within its own year rather than a calendar day-of-year offset (see
+// computeSeasonality's own doc for why), for a curve as detailed as the underlying trading-day
+// data actually supports. See MONTH_TICK_INDEXES below for how the X axis still only *labels*
+// the 12 month boundaries among those points.
 const MONTH_LABELS = ["Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"];
 
 // Any non-leap year works as the template — this never names a real year, just the shape one
 // has (Jan 1 is day 0, and no Feb 29 to throw month-start days off from every *other* year's own
-// day-bucket math, which computeSeasonality's own bucketIndexFor already ignores leap years for
-// the same reason).
+// day-bucket math).
 const REFERENCE_YEAR = 2001;
-const DAY_BUCKET_COUNT = 365;
 
-// Which day-bucket (0-364) each month starts in — mirrors computeSeasonality's own
-// bucketIndexFor("day") math exactly (a date's own 0-based offset from Jan 1) so the two can
-// never silently drift apart. Used both to label the X axis sparsely (see xTickFormat below) and
-// to size the "space before January/after December" padding (see xDomainPadding).
+// A trading-day ordinal no longer corresponds to one exact calendar date the way a calendar
+// day-of-year offset used to — different years place their own weekends/holidays on different
+// calendar days, so (say) "trading day 40" lands on a slightly different real date each year
+// (see computeSeasonality's own doc for why bucketing this way, instead of by calendar date, is
+// what actually keeps the average meaningful). Every calendar-facing label below (month-tick
+// placement, the hover crosshair's own date) is therefore only an approximation from here on,
+// spreading a standard-convention 252-trading-day year evenly across the 365-day calendar rather
+// than pretending to name an exact date.
+const TRADING_DAYS_PER_YEAR = 252;
+function approxCalendarDayOfYear(tradingDayIndex: number): number {
+  return Math.round((tradingDayIndex * 365) / TRADING_DAYS_PER_YEAR);
+}
+
+// Which trading-day bucket each month *approximately* starts in — the inverse of
+// approxCalendarDayOfYear above (a calendar day-of-year converted back to the nominal trading-day
+// ordinal it maps to), so the two never drift apart. Used both to label the X axis sparsely (see
+// xTickFormat below) and to size the "space before January/after December" padding (see
+// xDomainPadding).
 function monthStartDayIndex(monthIdx: number): number {
-  const dayOfYear = Math.round((Date.UTC(REFERENCE_YEAR, monthIdx, 1) - Date.UTC(REFERENCE_YEAR, 0, 1)) / 86_400_000);
-  return Math.min(dayOfYear, DAY_BUCKET_COUNT - 1);
+  const calendarDay = Math.round((Date.UTC(REFERENCE_YEAR, monthIdx, 1) - Date.UTC(REFERENCE_YEAR, 0, 1)) / 86_400_000);
+  return Math.min(Math.round((calendarDay * TRADING_DAYS_PER_YEAR) / 365), TRADING_DAYS_PER_YEAR - 1);
 }
 const MONTH_TICK_INDEXES = MONTH_LABELS.map((_, i) => monthStartDayIndex(i));
 
-// Every real day-bucket index gets a tick mark; xTickFormat below is what actually keeps all but
-// the 12 month-boundary ones unlabeled.
-const DAY_TICK_VALUES = Array.from({ length: DAY_BUCKET_COUNT }, (_, i) => i);
+// One tick mark per nominal trading day of the year (not the engine's own, more generous 365-slot
+// bucket array — a market that never has more than ~253 real sessions in a year has nothing to
+// mark past that point anyway); xTickFormat below is what actually keeps all but the 12
+// month-boundary ones unlabeled.
+const DAY_TICK_VALUES = Array.from({ length: TRADING_DAYS_PER_YEAR }, (_, i) => i);
 
 // "the space between 2 months (January-February)" — the user's own chosen unit for how wide a
 // margin to leave before January and after December (see xDomainPadding below), applied
@@ -45,12 +60,13 @@ const DAY_TICK_VALUES = Array.from({ length: DAY_BUCKET_COUNT }, (_, i) => i);
 // width.
 const MONTH_GAP_WIDTH = MONTH_TICK_INDEXES[1] - MONTH_TICK_INDEXES[0];
 
-// A day-bucket index's own calendar date within the reference year — the hover crosshair/ruler's
+// A day-bucket index's own *approximate* calendar date within the reference year (see
+// approxCalendarDayOfYear's own doc for why it's only approximate) — the hover crosshair/ruler's
 // own denser per-point label, as opposed to xTickFormat's sparse month-only axis labels. -1 is
 // the synthetic "Réf." anchor bucket (see computeSeasonality's own doc) rather than a real day.
 function formatDayBucket(index: number): string {
   if (index === -1) return "Réf.";
-  const date = new Date(Date.UTC(REFERENCE_YEAR, 0, 1 + index));
+  const date = new Date(Date.UTC(REFERENCE_YEAR, 0, 1 + approxCalendarDayOfYear(index)));
   return d3.timeFormat("%d %b")(date);
 }
 
@@ -163,6 +179,13 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
   // same reasoning CandlestickChart's own drawing tools already suspend zoom while an `activeTool`
   // is set: the two gesture sets would otherwise fight over the same clicks/drags.
   const [measureActive, setMeasureActive] = useState(false);
+  // The rail's own hover-average toggle — only actually wired into the chart (see LineAreaChart's
+  // own `hoverAverage`) while viewMode === "independent" below, same "stays toggleable regardless
+  // of the current view mode" reasoning fillUnderCurve/fillBetweenCurves already use just below:
+  // flipping back to "independent" later shouldn't require re-enabling it. Meaningless in
+  // "current" mode anyway (only ever two series there — the average line and the current year —
+  // so there's already a dedicated average series on the chart to read directly).
+  const [hoverAverageActive, setHoverAverageActive] = useState(false);
   // Both settings only ever take visual effect in "current" mode (see fillUnderCurve/
   // fillBetweenCurves' own use in `series`/`fillBetween` below) — left toggleable regardless of
   // the current viewMode rather than hidden in "independent", so flipping to "current" later
@@ -459,6 +482,16 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             >
               <MeasureIcon size={14} />
             </button>
+
+            <button
+              type="button"
+              className={["lq-chart__icon-button", hoverAverageActive && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+              onClick={() => setHoverAverageActive((a) => !a)}
+              aria-label={hoverAverageActive ? "Désactiver la moyenne au survol" : "Moyenne au survol"}
+              title="Afficher la moyenne de toutes les années à l'endroit survolé (mode Années indépendantes)"
+            >
+              <AverageLineIcon size={14} />
+            </button>
           </div>
         </div>
 
@@ -573,6 +606,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             // hide the same line (LineAreaChart's own click-to-fade legend item vs. this file's
             // own `hiddenYears`), so the built-in legend stays off.
             showLegend={false}
+            hoverAverage={hoverAverageActive && viewMode === "independent"}
             fullscreenToggle={false}
             yAxisOrientation="right"
             embedded

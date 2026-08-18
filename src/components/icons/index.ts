@@ -81,6 +81,7 @@ export {
   LineBreakModeIcon,
   TpoModeIcon,
   MeasureIcon,
+  AverageLineIcon,
   MagnetIcon,
   RectangleShapeIcon,
   ElbowArrowIcon,

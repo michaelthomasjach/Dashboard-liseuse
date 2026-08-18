@@ -640,6 +640,16 @@ export const MeasureIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Two faint zigzags (several noisy individual series) collapsing into one bold flat line (their
+ *  average) — SeasonalityView's own "années indépendantes" hover-average toggle. */
+export const AverageLineIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M3 7 7 11 11 6 15 12 21 5" strokeWidth={1} opacity={0.45} />
+    <path d="M3 17 7 13 11 18 15 12 21 16" strokeWidth={1} opacity={0.45} />
+    <path d="M3 12h18" strokeWidth={2.5} />
+  </IconBase>
+);
+
 /** A horseshoe magnet, outer + inner U with a pole band near each open end. */
 export const MagnetIcon = (props: IconProps) => (
   <IconBase {...props}>
