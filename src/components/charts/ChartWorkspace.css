@@ -160,8 +160,11 @@
 
 /* The column-labels row above the data rows — same column layout as a real row (so labels line
    up with their own values below, see the spacer classes' own doc) but muted and non-interactive.
-   Extra top margin (beyond the row's own 6px padding) so "Symbole"/column labels read as clearly
-   apart from the divider above them (under the list-name dropdown), not crowded against it. */
+   Top margin tuned (empirically, via actual rendered text position — the two sides of this row
+   don't share a font-size/line-height, so their padding alone doesn't translate to equal visual
+   gaps the way equal padding on matching rows would) so the gap above "Symbole"/the column labels
+   (from the dropdown's own divider) reads the same as the gap below them, before the first real
+   row. */
 .lq-chart-workspace__watchlist-row--header {
   margin-top: var(--lq-space-2);
   font-size: 0.65rem;
@@ -224,13 +227,14 @@
   }
 }
 
-/* The header row's own inert stand-ins for the grip/logo/delete a real row has — same width,
+/* The header row's own inert stand-ins for the grip/delete a real row has — same width,
    `visibility: hidden` (not `display: none`, which would collapse their own reserved space and
    break the alignment they exist for) rather than real buttons, since there's nothing for them
-   to do on a row of column labels. */
+   to do on a row of column labels. No equivalent spacer for the logo — "Symbole" deliberately
+   starts flush with where a real row's own logo does, not indented past it (see the header row's
+   own JSX doc in WatchlistPanel.tsx). */
 .lq-chart-workspace__watchlist-grip--spacer,
-.lq-chart-workspace__watchlist-delete--spacer,
-.lq-chart-workspace__watchlist-logo--spacer {
+.lq-chart-workspace__watchlist-delete--spacer {
   visibility: hidden;
 }
 
@@ -264,10 +268,16 @@
 }
 
 /* `position: relative` only actually needed on the header's own cells (the resize handle below
-   anchors to it), harmless on a data cell that never has one. */
+   anchors to it), harmless on a data cell that never has one. `flex: 1 1 68px` (not `0 0`) —
+   *growable* — so unhiding/hiding a column via the "…" checklist (see visibleColumns) actually
+   redistributes the freed/reclaimed space across whatever else is still showing (this cell and
+   the ticker both), not just widen/narrow the row's own total content width while every other
+   already-shown column stays pinned at its own same size. A column the user has explicitly
+   dragged (see WatchlistPanel.tsx's own columnFlexStyle) gets an inline `flex: 0 0 <px>` instead,
+   overriding this default to hold that exact width regardless of what else changes around it. */
 .lq-chart-workspace__watchlist-cell {
   position: relative;
-  flex: 0 0 68px;
+  flex: 1 1 68px;
   text-align: right;
   font-variant-numeric: tabular-nums;
 }

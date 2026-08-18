@@ -2,7 +2,7 @@ import { Fragment, useRef, useState } from "react";
 import type { RefObject, Dispatch, SetStateAction } from "react";
 import { Popover } from "../../../forms/Popover";
 import { Checkbox } from "../../../forms/Checkbox";
-import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon } from "../../../icons";
+import { ChevronDownIcon, MagnetIcon, EyeIcon, EyeOffIcon, LockIcon, BellIcon, LayersIcon, RefreshIcon } from "../../../icons";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
 import { DRAWING_TOOL_CATEGORIES } from "../drawingCatalog";
 import { capitalize } from "../formatting";
@@ -24,6 +24,9 @@ export interface ToolsRailProps {
   setDrawingsHidden: Dispatch<SetStateAction<boolean>>;
   drawingsLocked: boolean;
   setDrawingsLocked: Dispatch<SetStateAction<boolean>>;
+  zoomable: boolean;
+  isZoomed: boolean;
+  resetZoom: () => void;
   eventKinds: string[];
   hiddenEventKinds: Set<string>;
   setHiddenEventKinds: Dispatch<SetStateAction<Set<string>>>;
@@ -56,6 +59,9 @@ export function ToolsRail({
   setDrawingsHidden,
   drawingsLocked,
   setDrawingsLocked,
+  zoomable,
+  isZoomed,
+  resetZoom,
   eventKinds,
   hiddenEventKinds,
   setHiddenEventKinds,
@@ -221,6 +227,16 @@ export function ToolsRail({
         >
           <LockIcon size={14} />
         </button>
+        {/* Moved out of the topbar (see ChartHeader.tsx's own git history) so every zoom-related
+            control lives in one place — this rail, right below the lock toggle — instead of
+            split between here and there. Same `zoomable && isZoomed` gate it always had: nothing
+            to reset back to its own default range while already at that range, or while zoom/pan
+            themselves are off entirely. */}
+        {zoomable && isZoomed && (
+          <button type="button" className="lq-chart__icon-button" onClick={resetZoom} aria-label="Réinitialiser le zoom" title="Réinitialiser le zoom">
+            <RefreshIcon size={14} />
+          </button>
+        )}
         {/* Per-kind event-marker visibility (Earnings/News/Dividend/Update/…, whatever kinds are
             actually present in `events` — see eventKinds) — a quick toolbar dropdown for the same
             toggles the "Paramètres du graphique" modal also exposes, all shown by default. A

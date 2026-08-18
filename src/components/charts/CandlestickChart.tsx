@@ -132,9 +132,7 @@ export function CandlestickChart({
   linkable = false,
   isLinked = false,
   onLinkClick,
-  showSplitScreen = false,
-  splitScreenPanels,
-  onSplitScreenChange, fillHeight = false,
+  fillHeight = false,
   sidePanel, defaultSidePanelOpen, onSidePanelOpenChange,
   margin,
   className,
@@ -651,9 +649,6 @@ export function CandlestickChart({
           showIndicators={showIndicators}
           setIndicatorSearchQuery={setIndicatorSearchQuery}
           setIndicatorPickerOpen={setIndicatorPickerOpen}
-          zoomable={zoomable}
-          isZoomed={isZoomed}
-          resetZoom={resetZoom}
           seasonality={seasonality}
           setSeasonalityOpen={setSeasonalityOpen}
           fullscreenToggle={fullscreenToggle}
@@ -673,9 +668,6 @@ export function CandlestickChart({
           linkable={linkable}
           isLinked={isLinked}
           onLinkClick={onLinkClick}
-          showSplitScreen={showSplitScreen}
-          splitScreenPanels={splitScreenPanels}
-          onSplitScreenChange={onSplitScreenChange}
         />
       )}
 
@@ -721,6 +713,9 @@ export function CandlestickChart({
           setDrawingsHidden={setDrawingsHidden}
           drawingsLocked={drawingsLocked}
           setDrawingsLocked={setDrawingsLocked}
+          zoomable={zoomable}
+          isZoomed={isZoomed}
+          resetZoom={resetZoom}
           eventKinds={eventKinds}
           hiddenEventKinds={hiddenEventKinds}
           setHiddenEventKinds={setHiddenEventKinds}

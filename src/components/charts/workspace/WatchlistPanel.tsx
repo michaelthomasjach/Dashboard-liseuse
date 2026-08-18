@@ -105,6 +105,17 @@ export function WatchlistPanel({
     return columnWidths[id] ?? DEFAULT_COLUMN_WIDTH;
   }
 
+  // A column the user hasn't dragged yet stays flexible (see .lq-chart-workspace__watchlist-cell's
+  // own default `flex: 1 1 <width>`) so removing another column via the "…" checklist actually
+  // frees up space for it (and the ticker) to grow into, not just a narrower row overall — no
+  // inline style at all lets that CSS default win. Once dragged, it's pinned to an exact pixel
+  // width (`flex: 0 0 <width>`) instead, same as a deliberately-resized column in any real
+  // spreadsheet/table stays exactly that size regardless of what else changes around it.
+  function columnFlexStyle(id: string): React.CSSProperties {
+    const width = columnWidths[id];
+    return width === undefined ? {} : { flex: `0 0 ${width}px` };
+  }
+
   // Same window-pointermove-listener pattern useSidePanel's own startResize uses (see its own
   // comment) — a plain drag delta from the column's own width at drag-start.
   function startColumnResize(columnId: string, e: React.PointerEvent) {
@@ -169,7 +180,7 @@ export function WatchlistPanel({
           </span>
           <span className="lq-chart-workspace__watchlist-ticker">{row.ticker}</span>
           {visibleColumns.map((c) => (
-            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={{ flexBasis: columnWidth(c.id) }}>
+            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={columnFlexStyle(c.id)}>
               {row.values[c.id]}
             </span>
           ))}
@@ -268,17 +279,19 @@ export function WatchlistPanel({
         </div>
       </div>
 
-      {/* Same grip-spacer/main/delete-spacer shape as a real row (see renderRow) — not just the
-          ticker/cells alone — so "Symbole" and every column label line up exactly with the real
-          values below despite the header having no actual grip/delete buttons of its own to
-          reserve that space otherwise. */}
+      {/* Same grip-spacer/delete-spacer shape as a real row (see renderRow) — not just the
+          ticker/cells alone — so every column label lines up exactly with the real values below
+          despite the header having no actual grip/delete buttons of its own to reserve that space
+          otherwise. No logo spacer, unlike a real row's own leading logo: "Symbole" labels the
+          *whole* identity column (logo + ticker together), so it starts flush with the logo's own
+          left edge — the leftmost thing that column actually shows — rather than indented past it
+          to align with the ticker text specifically. */}
       <div className="lq-chart-workspace__watchlist-row lq-chart-workspace__watchlist-row--header">
         <span className="lq-chart-workspace__watchlist-grip lq-chart-workspace__watchlist-grip--spacer" />
         <span className="lq-chart-workspace__watchlist-row-main">
-          <span className="lq-chart-workspace__watchlist-logo lq-chart-workspace__watchlist-logo--spacer" />
           <span className="lq-chart-workspace__watchlist-ticker">Symbole</span>
           {visibleColumns.map((c) => (
-            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={{ flexBasis: columnWidth(c.id) }}>
+            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={columnFlexStyle(c.id)}>
               {c.label}
               <span
                 className="lq-chart-workspace__watchlist-col-resize"

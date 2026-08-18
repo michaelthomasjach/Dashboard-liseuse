@@ -218,16 +218,6 @@ export interface CandlestickChartProps {
    *  cosmetic — `ChartWorkspace` is what actually knows the group membership. Default false. */
   isLinked?: boolean;
   onLinkClick?: () => void;
-  /** Shows a grid/split-screen button in the header (top right) opening a menu of 1/2/4/6/8-panel
-   *  layouts — same report-upward-only shape as `linkable`: picking one fires
-   *  `onSplitScreenChange` rather than doing anything on its own, since laying out multiple
-   *  panels at once is inherently a multi-chart concept this component has no way to act on by
-   *  itself (see `ChartWorkspace`, which sets all three of these — a standalone chart has no
-   *  reason to). Default false. */
-  showSplitScreen?: boolean;
-  /** Current panel count, to highlight the active choice in the menu. */
-  splitScreenPanels?: 1 | 2 | 4 | 6 | 8;
-  onSplitScreenChange?: (panels: 1 | 2 | 4 | 6 | 8) => void;
   /** Content for a collapsible, resizable panel docked to the chart's own right edge, sharing the
    *  same outer bordered widget rather than floating separately — a watchlist, an order ticket,
    *  notes, anything the caller wants alongside the chart (same "structure only, bring your own

@@ -1,4 +1,4 @@
-import { Children, cloneElement, useState, type ReactElement, type ReactNode } from "react";
+import { Children, cloneElement, useRef, useState, type ReactElement, type ReactNode } from "react";
 import type { CandlestickChartProps } from "./candlestick/interfaces/CandlestickChartProps.interface";
 import type { SymbolSearchCategory } from "./candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "./candlestick/interfaces/SymbolSearchResult.interface";
@@ -7,8 +7,20 @@ import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
 import { WatchlistPanel } from "./workspace/WatchlistPanel";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
-import { WatchlistIcon, BellIcon } from "../icons";
+import { Popover } from "../forms/Popover";
+import { WatchlistIcon, BellIcon, GridIcon } from "../icons";
 import "./ChartWorkspace.css";
+
+// Moved here from CandlestickChart's own ChartHeader (see this file's own git history) — laying
+// out multiple panels is a workspace-wide concern, not a per-chart one, so the control for it
+// belongs on the workspace's own rail rather than duplicated/hidden inside each panel's header.
+const SPLIT_SCREEN_OPTIONS: { value: 1 | 2 | 4 | 6 | 8; label: string }[] = [
+  { value: 1, label: "1 fenêtre" },
+  { value: 2, label: "2 panneaux" },
+  { value: 4, label: "4 panneaux" },
+  { value: 6, label: "6 panneaux" },
+  { value: 8, label: "8 panneaux" },
+];
 
 export type {
   ChartWorkspaceWatchlist,
@@ -26,12 +38,12 @@ const GRID_ROWS: Record<1 | 2 | 4 | 6 | 8, number> = { 1: 1, 2: 1, 4: 2, 6: 2, 8
 export interface ChartWorkspaceProps {
   /** Uncontrolled initial panel count — also picks the grid: 1 is a plain single chart (no grid
    *  chrome), 2 is a single row, 4/6/8 wrap into two rows (2/3/4 columns respectively). Owned
-   *  internally from here on (same uncontrolled pattern as everywhere else in this library): each
-   *  panel's own header grid/split-screen button (`CandlestickChart.showSplitScreen`, wired here)
-   *  lets the user change it live — including going from 1 up to a split view and back — same as
-   *  the chain-link button does for groups. Default 1. */
+   *  internally from here on (same uncontrolled pattern as everywhere else in this library): the
+   *  right-edge rail's own "Écran divisé" button lets the user change it live — including going
+   *  from 1 up to a split view and back — same as the chain-link button does for groups. Default
+   *  1. */
   defaultPanels?: 1 | 2 | 4 | 6 | 8;
-  /** Fires whenever the panel count changes via any panel's own split-screen menu. */
+  /** Fires whenever the panel count changes via the rail's own "Écran divisé" menu. */
   onPanelsChange?: (panels: 1 | 2 | 4 | 6 | 8) => void;
   /** A single pre-configured `<CandlestickChart {...allTheOptions} />` — the same "compose, don't
    *  configure" shape as everywhere else a caller hands this library a data source of their own,
@@ -181,6 +193,8 @@ export function ChartWorkspace({
   const [panels, setPanels] = useState(defaultPanels);
   const { groups, linkPanels, unlinkGroup, groupIndexOfPanel } = useLinkGroups({ defaultLinkGroups, onLinkGroupsChange });
   const sidePanelState = useSidePanel({ defaultSidePanelOpen, onSidePanelOpenChange });
+  const [splitScreenMenuOpen, setSplitScreenMenuOpen] = useState(false);
+  const splitScreenTriggerRef = useRef<HTMLButtonElement>(null);
   const hasWatchlists = !!watchlists && watchlists.length > 0;
   const hasAlerts = alerts !== undefined;
   const [activeTab, setActiveTab] = useState<ChartWorkspaceSidePanelTab>(defaultSidePanelTab ?? (hasWatchlists ? "watchlist" : "alerts"));
@@ -372,12 +386,11 @@ export function ChartWorkspace({
             onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
             syncedHoverPrice: syncedPriceForPanel(i),
             onHoverPriceChange: (price: number | null) => handleHoverPriceChange(i, price),
-            linkable: true,
+            // Linking only means anything once there's at least one *other* panel to link with —
+            // shown regardless in a single-chart workspace, the button had nothing to actually do.
+            linkable: panels >= 2,
             isLinked: groupIndexOfPanel(i) !== null,
             onLinkClick: () => setLinkModalOpen(true),
-            showSplitScreen: true,
-            splitScreenPanels: panels,
-            onSplitScreenChange: handlePanelsChange,
             // `ChartWorkspace`'s own `watchlists`/`alerts` (above) are the single source of truth
             // once a chart is composed into a workspace — a docked panel is a "whole view" concept,
             // not a per-panel one, so a template child that also set its *own*
@@ -427,39 +440,69 @@ export function ChartWorkspace({
         </ChartSidePanel>
       )}
 
-      {(hasWatchlists || hasAlerts) && (
-        // Always visible regardless of open/collapsed state (unlike CandlestickChart's own
-        // sidePanel, which hides its whole toggle inside a header button) — this rail *is* the
-        // open/close/switch control, so there'd otherwise be no way back in once collapsed.
-        <div className="lq-chart-workspace__side-rail">
-          {hasWatchlists && (
-            <button
-              type="button"
-              className={["lq-chart__icon-button", sidePanelState.open && activeTab === "watchlist" && "lq-chart__icon-button--active"]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => toggleTab("watchlist")}
-              aria-label="Liste de surveillance"
-              title="Liste de surveillance"
-            >
-              <WatchlistIcon size={16} />
-            </button>
-          )}
-          {hasAlerts && (
-            <button
-              type="button"
-              className={["lq-chart__icon-button", sidePanelState.open && activeTab === "alerts" && "lq-chart__icon-button--active"]
-                .filter(Boolean)
-                .join(" ")}
-              onClick={() => toggleTab("alerts")}
-              aria-label="Alertes"
-              title="Alertes"
-            >
-              <BellIcon size={16} />
-            </button>
-          )}
-        </div>
-      )}
+      {/* Always visible — unlike the watchlist/alerts icons right above it (each gated on there
+          actually being something to show), split-screen has no such prerequisite: laying out
+          the grid works with any panel count, one included, so it's unconditional. Also why this
+          whole rail no longer only renders when watchlists/alerts is set the way it used to
+          (before split-screen moved here) — it needs to exist regardless, for this alone. */}
+      <div className="lq-chart-workspace__side-rail">
+        {hasWatchlists && (
+          <button
+            type="button"
+            className={["lq-chart__icon-button", sidePanelState.open && activeTab === "watchlist" && "lq-chart__icon-button--active"]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => toggleTab("watchlist")}
+            aria-label="Liste de surveillance"
+            title="Liste de surveillance"
+          >
+            <WatchlistIcon size={16} />
+          </button>
+        )}
+        {hasAlerts && (
+          <button
+            type="button"
+            className={["lq-chart__icon-button", sidePanelState.open && activeTab === "alerts" && "lq-chart__icon-button--active"]
+              .filter(Boolean)
+              .join(" ")}
+            onClick={() => toggleTab("alerts")}
+            aria-label="Alertes"
+            title="Alertes"
+          >
+            <BellIcon size={16} />
+          </button>
+        )}
+        <button
+          ref={splitScreenTriggerRef}
+          type="button"
+          className={["lq-chart__icon-button", splitScreenMenuOpen && "lq-chart__icon-button--active"].filter(Boolean).join(" ")}
+          onClick={() => setSplitScreenMenuOpen((o) => !o)}
+          aria-label="Écran divisé"
+          title="Écran divisé"
+        >
+          <GridIcon size={16} />
+        </button>
+        <Popover open={splitScreenMenuOpen} onClose={() => setSplitScreenMenuOpen(false)} anchorRef={splitScreenTriggerRef} placement="bottom">
+          <div className="lq-chart__display-mode-menu">
+            {SPLIT_SCREEN_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                className={["lq-chart__display-mode-option", opt.value === panels && "lq-chart__display-mode-option--selected"]
+                  .filter(Boolean)
+                  .join(" ")}
+                onClick={() => {
+                  handlePanelsChange(opt.value);
+                  setSplitScreenMenuOpen(false);
+                }}
+              >
+                <GridIcon size={15} />
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </Popover>
+      </div>
 
       <LinkGroupsModal
         open={linkModalOpen}
