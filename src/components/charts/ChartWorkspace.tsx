@@ -4,6 +4,7 @@ import type { SymbolSearchCategory } from "./candlestick/interfaces/SymbolSearch
 import type { SymbolSearchResult } from "./candlestick/interfaces/SymbolSearchResult.interface";
 import { useLinkGroups } from "./workspace/useLinkGroups";
 import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
+import { SymbolTargetModal } from "./workspace/SymbolTargetModal";
 import { WatchlistPanel } from "./workspace/WatchlistPanel";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
@@ -255,14 +256,64 @@ export function ChartWorkspace({
   // caller that wants to resample its own `data` per timeframe has nowhere else to learn the
   // selection from, since there's no per-panel timeframe getting reported back out otherwise).
   const [timeframeByPanel, setTimeframeByPanel] = useState<Record<number, string | undefined>>({});
+  // Symbol counterpart to timeframeByPanel above — same "shared template value until a panel is
+  // individually touched, then that panel's own entry takes over for good" fork, just triggered by
+  // either a watchlist row click resolved to this panel (see handleWatchlistRowClick/
+  // confirmSymbolTarget below) or that panel's own native symbol search (see the onSymbolSelect
+  // override in panelElements.map below) instead of a timeframe picker.
+  const [symbolByPanel, setSymbolByPanel] = useState<Record<number, string | undefined>>({});
   // Which panel(s) the "Graphiques liés" modal's own checkboxes currently have checked — mirrored
   // out from LinkGroupsModal (which has no reach into the grid behind it) purely to drive each
   // matching panel's highlight className below. Cleared whenever the modal closes, same as the
-  // modal's own staged selection is (see LinkGroupsModal's own reset-on-open effect).
+  // modal's own staged selection is (see LinkGroupsModal's own reset-on-open effect). Also reused
+  // by SymbolTargetModal below for the exact same purpose — the two are never open at once, so
+  // sharing one piece of highlight state is simpler than keeping a second copy in sync.
   const [selectedPanels, setSelectedPanels] = useState<number[]>([]);
+  // The watchlist row awaiting a "which window(s)" answer from SymbolTargetModal — non-null is
+  // what actually keeps that modal open (see its own `open` prop below), not a separate boolean,
+  // so there's never a stale row hanging around once the modal's done with it.
+  const [pendingSymbolRow, setPendingSymbolRow] = useState<{ row: ChartWorkspaceWatchlistRow; watchlistId: string } | null>(null);
 
   function closeLinkModal() {
     setLinkModalOpen(false);
+    setSelectedPanels([]);
+  }
+
+  // The current value each panel's own `symbol` should resolve to — its own fork once one exists
+  // (a prior watchlist target pick or native symbol search), else whatever the template child
+  // itself was given. Shared by the grid's own cloneElement below and both modals' own
+  // `panelSymbols` labels, so neither can drift out of sync with what's actually on screen.
+  function resolvedSymbol(panelIndex: number, child: ReactElement<CandlestickChartProps>): string | undefined {
+    return panelIndex in symbolByPanel ? symbolByPanel[panelIndex] : child.props.symbol;
+  }
+
+  // Routes a watchlist row click: with only one panel there's no ambiguity, so it's applied right
+  // away (same immediate feel clicking a result in a panel's own symbol search already has); with
+  // several, "which window" isn't decidable here, so SymbolTargetModal asks instead and
+  // confirmSymbolTarget below does the actual applying once the user answers.
+  function handleWatchlistRowClick(row: ChartWorkspaceWatchlistRow, watchlistId: string) {
+    if (panels >= 2) {
+      setPendingSymbolRow({ row, watchlistId });
+    } else {
+      setSymbolByPanel((prev) => ({ ...prev, 0: row.ticker }));
+      onWatchlistRowClick?.(row, watchlistId);
+    }
+  }
+
+  function confirmSymbolTarget(panelIndices: number[]) {
+    if (!pendingSymbolRow) return;
+    const { row, watchlistId } = pendingSymbolRow;
+    setSymbolByPanel((prev) => {
+      const next = { ...prev };
+      for (const i of panelIndices) next[i] = row.ticker;
+      return next;
+    });
+    onWatchlistRowClick?.(row, watchlistId);
+    closeSymbolTargetModal();
+  }
+
+  function closeSymbolTargetModal() {
+    setPendingSymbolRow(null);
     setSelectedPanels([]);
   }
 
@@ -382,6 +433,15 @@ export function ChartWorkspace({
               setTimeframeByPanel((prev) => ({ ...prev, [i]: value }));
               child.props.onTimeframeChange?.(value);
             },
+            // Same fork as timeframe just above, for the symbol shown — driven either by a
+            // watchlist row resolved to this panel (handleWatchlistRowClick/confirmSymbolTarget)
+            // or this panel's own header symbol search, both landing in the same symbolByPanel
+            // slot so the two stay consistent with each other.
+            symbol: resolvedSymbol(i, child),
+            onSymbolSelect: (result: SymbolSearchResult) => {
+              setSymbolByPanel((prev) => ({ ...prev, [i]: result.ticker }));
+              child.props.onSymbolSelect?.(result);
+            },
             syncedHoverDate: syncedDateForPanel(i),
             onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
             syncedHoverPrice: syncedPriceForPanel(i),
@@ -413,7 +473,7 @@ export function ChartWorkspace({
               onSelectWatchlist={selectWatchlist}
               visibleColumnIds={visibleColumnIds}
               onVisibleColumnIdsChange={changeVisibleColumns}
-              onRowClick={onWatchlistRowClick}
+              onRowClick={handleWatchlistRowClick}
               symbolSearchResults={watchlistSymbolSearchResults}
               onSymbolSearchChange={onWatchlistSymbolSearchChange}
               onAddSymbol={onAddWatchlistSymbol}
@@ -511,7 +571,16 @@ export function ChartWorkspace({
         groups={groups}
         onLink={linkPanels}
         onUnlink={unlinkGroup}
-        panelSymbols={panelElements.map((child) => child.props.symbol)}
+        panelSymbols={panelElements.map((child, i) => resolvedSymbol(i, child))}
+        onSelectedPanelsChange={setSelectedPanels}
+      />
+
+      <SymbolTargetModal
+        open={pendingSymbolRow !== null}
+        onClose={closeSymbolTargetModal}
+        panelCount={panelElements.length}
+        panelSymbols={panelElements.map((child, i) => resolvedSymbol(i, child))}
+        onConfirm={confirmSymbolTarget}
         onSelectedPanelsChange={setSelectedPanels}
       />
     </div>

@@ -357,7 +357,13 @@ export const AllFeatures: Story = {
               prev.map((w) => (w.id === watchlistId ? { ...w, rows: [...w.rows, { id: `row-${Date.now()}`, ticker: result.ticker, values: {} }] } : w))
             )
           }
-          onWatchlistRowClick={(row) => setCurrentSymbol(row.ticker)}
+          // `ChartWorkspace` already applies the click to whichever panel(s) the user picked (or
+          // the sole panel, with just one open) internally — see its own `symbolByPanel` fork.
+          // This fires purely as an FYI afterward; setting `currentSymbol` (the *shared* template
+          // default every not-yet-individually-targeted panel still falls back to) here would
+          // re-apply the click to every one of *those* panels too, on top of whichever one(s) were
+          // actually picked.
+          onWatchlistRowClick={() => {}}
           onCreateWatchlist={handleCreateWatchlist}
           onCreateWatchlistSection={handleCreateWatchlistSection}
           onRemoveWatchlistSymbol={handleRemoveWatchlistSymbol}

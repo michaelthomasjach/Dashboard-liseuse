@@ -14,6 +14,12 @@
   gap: 0;
   flex: 1 1 auto;
   min-width: 0;
+  /* Restores the left/top edge stripped from every panel below — each interior divider is now
+     drawn by exactly one border (a panel's own right/bottom edge) instead of two stacking into a
+     visibly thicker line, same reasoning as the side panel's own border-left override further
+     down, just generalized to every grid boundary instead of one specific edge. */
+  border-top: 1px solid var(--lq-color-border-subtle);
+  border-left: 1px solid var(--lq-color-border-subtle);
 }
 
 /* A split-screen workspace (2/4/6/8 panels) squeezed into a narrow phone viewport leaves each
@@ -48,6 +54,18 @@
 .lq-chart-workspace__grid > * {
   min-width: 0;
   min-height: 0;
+}
+
+/* Each grid panel is its own separately-bordered `.lq-chart` (CandlestickChart's own base style,
+   all 4 sides) — with `gap: 0` above, two panels sharing an interior boundary each contributed
+   their own edge there, doubling up into a visibly thicker line (2px) than every other divider in
+   the workspace (1px). Left/top only: the grid container's own border-top/border-left just above
+   covers the *outer* edge those would otherwise have drawn; each panel's own right/bottom edge is
+   untouched; and stays the sole line at every interior boundary regardless of column/row count,
+   with nothing here needing to know how many panels there are. */
+.lq-chart-workspace__grid > .lq-chart {
+  border-left: none;
+  border-top: none;
 }
 
 /* Overrides the docked side panel's own base `border-left` (see charts-shared.css) specifically
