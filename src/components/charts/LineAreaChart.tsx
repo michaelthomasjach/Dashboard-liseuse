@@ -625,9 +625,13 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                 );
               })()}
 
-            {/* The ruler's own line + endpoints — `end` is whichever of measureEnd (committed) or
-                measureLivePoint (still tracking the cursor) currently applies; nothing draws until
-                there's at least a start and *some* end to draw toward. */}
+            {/* The ruler's own translucent box + line + endpoints — same visual recipe as
+                CandlestickChart's own Measure tool (see drawPriceDrawings.ts): a translucent
+                up/down-colored rect spanning the two points, a dashed line the same color
+                connecting them, and open-ring handles (not solid dots) at each end. `end` is
+                whichever of measureEnd (committed) or measureLivePoint (still tracking the
+                cursor) currently applies; nothing draws until there's at least a start and
+                *some* end to draw toward. */}
             {measureActive &&
               measureStart &&
               (() => {
@@ -637,11 +641,22 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
                 const y1 = zoomedYScale(measureStart.y);
                 const x2 = zoomedXScale(end.x as never);
                 const y2 = zoomedYScale(end.y);
+                const up = end.y >= measureStart.y;
+                const colorVar = `var(${up ? "--lq-color-up" : "--lq-color-down"})`;
                 return (
                   <>
-                    <line className="lq-chart__measure-line" x1={x1} y1={y1} x2={x2} y2={y2} />
-                    <circle className="lq-chart__dot" cx={x1} cy={y1} r={4} />
-                    <circle className="lq-chart__dot" cx={x2} cy={y2} r={4} />
+                    <rect
+                      className="lq-chart__measure-box"
+                      x={Math.min(x1, x2)}
+                      y={Math.min(y1, y2)}
+                      width={Math.abs(x2 - x1)}
+                      height={Math.abs(y2 - y1)}
+                      fill={colorVar}
+                      fillOpacity={0.15}
+                    />
+                    <line className="lq-chart__measure-line" x1={x1} y1={y1} x2={x2} y2={y2} style={{ stroke: colorVar }} />
+                    <circle className="lq-chart__measure-dot" cx={x1} cy={y1} r={5} style={{ stroke: colorVar }} />
+                    <circle className="lq-chart__measure-dot" cx={x2} cy={y2} r={5} style={{ stroke: colorVar }} />
                   </>
                 );
               })()}
@@ -764,27 +779,48 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
           })()
         ))}
 
-      {/* The ruler's own readout — each point's own formatted X, plus the Y delta between them —
-          anchored to whichever point is currently the "end" (committed, or still tracking the
-          cursor), same edge-flipping `ChartTooltip` already does for the regular hover tooltip. */}
+      {/* The ruler's own readout — a plain bordered stats box, not the floating/edge-flipping
+          `ChartTooltip` the regular hover uses — same recipe as CandlestickChart's own canvas-
+          drawn measure box (solid background, border colored to match the line/box above,
+          anchored past the bounding box's own top-right corner, no edge-flip). Each point's own
+          formatted X, plus the raw Y delta — CandlestickChart's own box also shows a % change, a
+          bar count, and a calendar-day count; % change is skipped here on purpose rather than
+          copied over: it divides the delta by the start point's own Y value, which only reads as
+          a meaningful "percent change" when Y is itself a price (always positive) — LineAreaChart
+          can't assume that (SeasonalityView's own Y is already a %, so a "percent of a percent"
+          relative to a start value that can itself be negative or near zero produces nonsense
+          like "+-140%", not a real second measurement). Bar/day counts have no clean equivalent
+          either — the ruler's own points are raw, unsnapped positions, not indices into anything
+          countable (see measureLivePoint's own doc). */}
       {measureActive &&
         measureStart &&
         (() => {
           const end = measureEnd ?? measureLivePoint;
           if (!end) return null;
-          const endX = zoomedXScale(end.x as never);
-          const endY = zoomedYScale(end.y);
-          const nearRightEdge = endX > dims.boundedWidth * 0.65;
+          const x1 = zoomedXScale(measureStart.x as never);
+          const y1 = zoomedYScale(measureStart.y);
+          const x2 = zoomedXScale(end.x as never);
+          const y2 = zoomedYScale(end.y);
+          const up = end.y >= measureStart.y;
+          const colorVar = `var(${up ? "--lq-color-up" : "--lq-color-down"})`;
           const delta = end.y - measureStart.y;
           const formatPoint = (x: Date | number) =>
             formatX ? formatX(x) : xType === "time" ? d3.timeFormat("%d %b %Y")(x as Date) : String(x);
           return (
-            <ChartTooltip x={dims.margin.left + endX} y={dims.margin.top + endY} visible align={nearRightEdge ? "left" : "right"}>
-              <div className="lq-chart-tooltip__title">
+            <div
+              className="lq-chart__measure-stats"
+              style={{
+                left: dims.margin.left + Math.max(x1, x2) + 8,
+                top: dims.margin.top + Math.min(y1, y2),
+                borderColor: colorVar,
+                color: colorVar,
+              }}
+            >
+              <div>
                 {formatPoint(measureStart.x)} → {formatPoint(end.x)}
               </div>
-              <div className="lq-chart-tooltip__row">{formatY ? formatY(delta) : `${delta >= 0 ? "+" : ""}${delta}`}</div>
-            </ChartTooltip>
+              <div>{formatY ? formatY(delta) : `${delta >= 0 ? "+" : ""}${delta}`}</div>
+            </div>
           );
         })()}
 

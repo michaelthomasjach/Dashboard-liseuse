@@ -61,10 +61,43 @@
   pointer-events: none;
 }
 
+/* Same visual recipe as CandlestickChart's own Measure tool (see drawPriceDrawings.ts) — a
+   translucent up/down-colored box (.lq-chart__measure-box) behind a same-colored dashed line,
+   with open-ring handles (.lq-chart__measure-dot, same "background fill, colored ring" look as
+   .lq-chart__drawing-handle there) at each end instead of solid dots. Color itself is always set
+   inline per-instance (up vs down isn't knowable from the class alone), matching the same
+   `style={{ stroke: color }}` pattern this file's own per-series hover crosshair line already
+   uses to win over a class's own stylesheet rule. */
+.lq-chart__measure-box {
+  pointer-events: none;
+}
+
 .lq-chart__measure-line {
   stroke: var(--lq-color-text);
   stroke-width: 1.5;
-  stroke-dasharray: 4 3;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.lq-chart__measure-dot {
+  fill: var(--lq-color-bg);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* The ruler's own stats readout — a plain bordered box (not the floating, edge-flipping
+   .lq-chart-tooltip), same "solid background + colored border + compact monospace-weight lines"
+   recipe as CandlestickChart's own canvas-drawn measure stats panel. */
+.lq-chart__measure-stats {
+  position: absolute;
+  padding: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  line-height: 14px;
+  background-color: var(--lq-color-bg);
+  border-width: 1px;
+  border-style: solid;
+  white-space: nowrap;
   pointer-events: none;
 }
 
