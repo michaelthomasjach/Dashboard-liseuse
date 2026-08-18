@@ -10,7 +10,7 @@ import { useWatchlistRowDrag, watchlistDropZoneProps } from "./useWatchlistRowDr
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon } from "../../icons";
 import type { SymbolSearchCategory } from "../candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../candlestick/interfaces/SymbolSearchResult.interface";
-import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow } from "./ChartWorkspaceWatchlist.interface";
+import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow, ChartWorkspaceWatchlistSection } from "./ChartWorkspaceWatchlist.interface";
 
 // Matches the CSS default `.lq-chart-workspace__watchlist-cell` itself falls back to — the JS
 // value is what actually drives width from here on (see startColumnResize below), the CSS one is
@@ -36,6 +36,7 @@ export interface WatchlistPanelProps {
   onCreateSection: ((watchlistId: string, name: string) => void) | undefined;
   onRemoveRow: ((watchlistId: string, rowId: string, sectionId: string | null) => void) | undefined;
   onMoveRow: ((watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void) | undefined;
+  onRemoveSection: ((watchlistId: string, sectionId: string) => void) | undefined;
 }
 
 /**
@@ -64,6 +65,7 @@ export function WatchlistPanel({
   onCreateSection,
   onRemoveRow,
   onMoveRow,
+  onRemoveSection,
 }: WatchlistPanelProps) {
   const activeWatchlist = watchlists.find((w) => w.id === activeWatchlistId) ?? watchlists[0];
   const [watchlistMenuOpen, setWatchlistMenuOpen] = useState(false);
@@ -75,6 +77,10 @@ export function WatchlistPanel({
   // Which of the two "enter a name" modals is open, if either — a single piece of state (not two
   // separate booleans) since they're mutually exclusive and share one <NameModal/> render below.
   const [nameModal, setNameModal] = useState<"list" | "section" | null>(null);
+  // The section a delete was just requested for, while it still needs confirming — only set when
+  // that section actually has rows in it (see confirmRemoveSection below); an empty section is
+  // removed immediately with no modal, since there's nothing a confirmation would be protecting.
+  const [confirmDeleteSection, setConfirmDeleteSection] = useState<ChartWorkspaceWatchlistSection | null>(null);
   const { draggingRowId, dropTargetSectionId, startDrag } = useWatchlistRowDrag({
     onMove: activeWatchlist
       ? ({ rowId, fromSectionId, toSectionId }) => onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId)
@@ -129,6 +135,13 @@ export function WatchlistPanel({
 
   if (!activeWatchlist) return null;
   const visibleColumns = activeWatchlist.columns.filter((c) => visibleColumnIds.has(c.id));
+
+  // Only asks for confirmation when deleting the section would also delete something — an empty
+  // one is removed on the spot.
+  function requestRemoveSection(section: ChartWorkspaceWatchlistSection) {
+    if (section.rows.length > 0) setConfirmDeleteSection(section);
+    else onRemoveSection?.(activeWatchlist.id, section.id);
+  }
 
   function renderRow(row: ChartWorkspaceWatchlistRow, sectionId: string | null, index: number) {
     return (
@@ -293,20 +306,31 @@ export function WatchlistPanel({
         const collapsed = collapsedSectionIds.has(section.id);
         return (
           <div key={section.id}>
-            <button
-              type="button"
+            <div
               className={[
                 "lq-chart-workspace__watchlist-section-header",
                 dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
               ]
                 .filter(Boolean)
                 .join(" ")}
-              onClick={() => toggleSectionCollapsed(section.id)}
               {...watchlistDropZoneProps(section.id)}
             >
-              {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
-              {section.name}
-            </button>
+              <button type="button" className="lq-chart-workspace__watchlist-section-toggle" onClick={() => toggleSectionCollapsed(section.id)}>
+                {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
+                {section.name}
+              </button>
+              {onRemoveSection && (
+                <button
+                  type="button"
+                  className="lq-chart-workspace__watchlist-delete"
+                  onClick={() => requestRemoveSection(section)}
+                  aria-label={`Supprimer la section ${section.name}`}
+                  title="Supprimer la section"
+                >
+                  <TrashIcon size={12} />
+                </button>
+              )}
+            </div>
             {!collapsed && (
               <div
                 className={[
@@ -355,6 +379,36 @@ export function WatchlistPanel({
           onClose={() => setNameModal(null)}
           onSubmit={(name) => (nameModal === "list" ? onCreateWatchlist?.(name) : onCreateSection?.(activeWatchlist.id, name))}
         />
+      )}
+
+      {confirmDeleteSection && (
+        <Modal
+          open
+          onClose={() => setConfirmDeleteSection(null)}
+          title="Supprimer la section ?"
+          footer={
+            <div className="lq-chart__edit-drawing-footer">
+              <button type="button" className="lq-chart__reset-button" onClick={() => setConfirmDeleteSection(null)}>
+                Annuler
+              </button>
+              <button
+                type="button"
+                className="lq-chart__confirm-button"
+                onClick={() => {
+                  onRemoveSection?.(activeWatchlist.id, confirmDeleteSection.id);
+                  setConfirmDeleteSection(null);
+                }}
+              >
+                Supprimer
+              </button>
+            </div>
+          }
+        >
+          <p className="lq-chart__indicator-picker-empty">
+            La section « {confirmDeleteSection.name} » contient {confirmDeleteSection.rows.length} symbole
+            {confirmDeleteSection.rows.length > 1 ? "s" : ""}. Les supprimer aussi ?
+          </p>
+        </Modal>
       )}
     </>
   );

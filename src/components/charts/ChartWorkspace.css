@@ -60,20 +60,42 @@
   border-left: none;
 }
 
+/* Overrides `.lq-chart__side-panel-content`'s own top padding (see charts-shared.css) specifically
+   in this context — that padding is what left `.lq-chart-workspace__side-panel-header` sitting a
+   few px lower than a panel's own topbar alongside it, despite both having the same fixed 40px
+   height: the header's own box started *after* that top inset instead of flush with the panel's
+   own top edge the way the topbar starts flush with `.lq-chart__main`'s own. Rows/sections that
+   follow the header don't need it restored either — the header's own border-bottom already
+   separates them, and `.lq-chart-workspace__watchlist-row--header` adds its own top margin on top
+   of that. Left/right/bottom padding untouched (only the top side is overridden) — the standalone
+   CandlestickChart `sidePanel` case (outside `.lq-chart-workspace`) is unaffected either way. */
+.lq-chart-workspace .lq-chart__side-panel-content {
+  /* 1px, not 0 — a grid panel's own `.lq-chart` has a 1px border on every side (including top),
+     so its own topbar starts 1px below this row's shared top edge; matching that exactly here
+     (instead of flush at 0) is what makes the two topbars land on the exact same line despite the
+     panel having no border of its own to produce that same 1px offset on its own. */
+  padding-top: 1px;
+}
+
 /* The workspace's own docked side panel — reuses ChartSidePanel/.lq-chart__side-panel wholesale
    (see that component's own doc), just this small header on top of the caller's own content for
    the active tab's own title (watchlist name + caret, or a plain "Alertes" label), since the
    workspace (unlike a single CandlestickChart) has no shared header of its own to host it in
    otherwise. Open/close/switch itself lives in `.lq-chart-workspace__side-rail` below instead of
-   a button here. Vertical padding only, deliberately — `.lq-chart__side-panel-content` (this
+   a button here. No horizontal padding, deliberately — `.lq-chart__side-panel-content` (this
    header's own parent) already insets everything horizontally by `var(--lq-space-3)`; adding
    *this* row's own horizontal padding on top of that left its own trigger button sitting further
    right than the watchlist rows below it, which have no horizontal padding of their own and so
-   start flush at that same shared inset. */
+   start flush at that same shared inset. Height fixed at 40px (matching `.lq-chart__header`'s own
+   hardcoded height — see that rule's own doc for why it's a plain magic number rather than a
+   shared token) rather than sized from its own vertical padding, so this row lines up exactly
+   with a panel's own topbar alongside it instead of reading a few px lower. */
 .lq-chart-workspace__side-panel-header {
   display: flex;
   align-items: center;
-  padding: var(--lq-space-2) 0;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0;
   border-bottom: 1px solid var(--lq-color-border-subtle);
 }
 
@@ -287,32 +309,56 @@
   background-color: var(--lq-color-hover);
 }
 
-/* A section's own name row — collapsible (click toggles), and itself a valid drop target for a
-   dragged row even while collapsed (see useWatchlistRowDrag's own doc: the section's own rows
-   list isn't even rendered then, so the header is the *only* droppable surface for it at that
-   point) — same `--drop-target` modifier as `.lq-chart-workspace__watchlist-group` above, reused
-   rather than a second copy of the same highlight style. */
+/* A section's own name row — a plain wrapper `<div>` around two pieces (see WatchlistPanel.tsx),
+   same "separate interactive elements can't nest" reasoning `.lq-chart-workspace__watchlist-row`
+   itself already needs for its own grip/main/delete trio: the collapse toggle (click expands/
+   collapses) and a hover-revealed delete button. Itself a valid drop target for a dragged row
+   even while collapsed (see useWatchlistRowDrag's own doc: the section's own rows list isn't even
+   rendered then, so this header is the *only* droppable surface for it at that point) — same
+   `--drop-target` modifier `.lq-chart-workspace__watchlist-group` above uses, reused rather than
+   a second copy of the same highlight style. */
 .lq-chart-workspace__watchlist-section-header {
   display: flex;
   align-items: center;
-  gap: 4px;
-  width: 100%;
-  padding: 6px 4px;
   margin-top: var(--lq-space-1);
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-chart-workspace__watchlist-section-header:hover {
+  background-color: var(--lq-color-hover);
+}
+
+.lq-chart-workspace__watchlist-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 4px;
   font-family: inherit;
   font-size: 0.68rem;
   font-weight: 700;
   color: var(--lq-color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  text-align: left;
   background: none;
   border: none;
   cursor: pointer;
 }
 
-.lq-chart-workspace__watchlist-section-header:hover {
+.lq-chart-workspace__watchlist-section-header:hover .lq-chart-workspace__watchlist-section-toggle {
   color: var(--lq-color-text);
-  background-color: var(--lq-color-hover);
+}
+
+/* The section header's own delete button reuses `.lq-chart-workspace__watchlist-delete` wholesale
+   (same look, same hover-to-red) — this just extends that class's own hover-reveal (scoped to
+   `.lq-chart-workspace__watchlist-row:hover`) to also trigger from *this* header, which isn't one. */
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart-workspace__watchlist-section-header:hover .lq-chart-workspace__watchlist-delete,
+  .lq-chart-workspace__watchlist-section-header .lq-chart-workspace__watchlist-delete:focus-visible {
+    opacity: 1;
+  }
 }
 
 /* "+ Nouvelle section" — a dashed border (rather than the solid one every real row/section uses)
@@ -344,7 +390,12 @@
    same vertical icon-stack recipe as `.lq-chart__tools-rail-items` (CandlestickChart's own
    left-edge tool rail), mirrored to the workspace's own right edge instead. Unlike that one this
    is a plain flex sibling, not absolutely positioned over anything — the docked panel already
-   makes room for it via ordinary flexbox, there's no plot underneath it needs to float above. */
+   makes room for it via ordinary flexbox, there's no plot underneath it needs to float above.
+   No border by default — collapsed, this rail sits directly against the grid's own last panel,
+   which already contributes its own right border there (each panel is its own separately-
+   bordered `.lq-chart`); a border here too would double up into a visibly thicker line, same
+   issue `.lq-chart-workspace .lq-chart__side-panel`'s own border-left override above already
+   fixed for the *open* case. */
 .lq-chart-workspace__side-rail {
   display: flex;
   flex-direction: column;
@@ -352,6 +403,12 @@
   gap: 4px;
   flex: 0 0 auto;
   padding: 4px;
+}
+
+/* Open instead: the panel itself has no border of its own anymore (see above), so this is the
+   *only* divider between it and the rail — restored here, scoped to exactly that adjacency, via
+   the sibling combinator rather than a stateful class from ChartWorkspace.tsx. */
+.lq-chart__side-panel + .lq-chart-workspace__side-rail {
   border-left: 1px solid var(--lq-color-border-subtle);
 }
 

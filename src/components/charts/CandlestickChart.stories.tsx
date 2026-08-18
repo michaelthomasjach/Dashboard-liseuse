@@ -303,6 +303,13 @@ export const AllFeatures: Story = {
       );
     }
 
+    // Already past WatchlistPanel's own confirmation modal by the time this fires (see
+    // ChartWorkspaceProps.onRemoveWatchlistSection's own doc) — nothing left to do here but
+    // actually drop the section and whatever rows it still had.
+    function handleRemoveWatchlistSection(watchlistId: string, sectionId: string) {
+      setWatchlists((prev) => prev.map((w) => (w.id === watchlistId ? { ...w, sections: w.sections?.filter((s) => s.id !== sectionId) } : w)));
+    }
+
     // The caller owns the actual reshuffling (see ChartWorkspaceProps.onMoveWatchlistRow's own
     // doc) — the library only ever reports "this row moved from A to B". Both ends handled in one
     // `sections.map` pass: the from-section (if any) loses the row, the to-section (if any) gains
@@ -350,6 +357,7 @@ export const AllFeatures: Story = {
           onCreateWatchlist={handleCreateWatchlist}
           onCreateWatchlistSection={handleCreateWatchlistSection}
           onRemoveWatchlistSymbol={handleRemoveWatchlistSymbol}
+          onRemoveWatchlistSection={handleRemoveWatchlistSection}
           onMoveWatchlistRow={handleMoveWatchlistRow}
           alerts={<AlertsPlaceholder />}
         >

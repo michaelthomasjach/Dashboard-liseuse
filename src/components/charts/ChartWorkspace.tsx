@@ -113,6 +113,10 @@ export interface ChartWorkspaceProps {
    *  being removed isn't inside any of that list's own `sections`. Omitting this hides the trash
    *  button entirely (no half-working delete affordance). */
   onRemoveWatchlistSymbol?: (watchlistId: string, rowId: string, sectionId: string | null) => void;
+  /** Fires from a section's own hover-revealed trash button, already past a confirmation modal
+   *  whenever that section actually contains rows (an empty one is removed immediately — nothing
+   *  a confirmation would protect). Omitting this hides the trash button entirely. */
+  onRemoveWatchlistSection?: (watchlistId: string, sectionId: string) => void;
   /** Fires when a row is dragged (via its own grip handle) from one section to another, or to/
    *  from the no-section zone (`null` on either end) — see `ChartWorkspaceWatchlistSection`'s own
    *  doc. The caller owns `watchlists` itself, so this only reports the move; actually moving the
@@ -165,6 +169,7 @@ export function ChartWorkspace({
   onCreateWatchlist,
   onCreateWatchlistSection,
   onRemoveWatchlistSymbol,
+  onRemoveWatchlistSection,
   onMoveWatchlistRow,
   alerts,
   defaultSidePanelOpen,
@@ -403,6 +408,7 @@ export function ChartWorkspace({
               onCreateSection={onCreateWatchlistSection}
               onRemoveRow={onRemoveWatchlistSymbol}
               onMoveRow={onMoveWatchlistRow}
+              onRemoveSection={onRemoveWatchlistSection}
             />
           ) : (
             <>
