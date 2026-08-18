@@ -12,7 +12,7 @@ import {
   type CustomIndicatorDef,
 } from "./CandlestickChart";
 import { ChartWorkspace } from "./ChartWorkspace";
-import { generateCandles } from "../../test-data/financeSampleData";
+import { generateCandles, generateCandlesByTimeframe, type MockTimeframeKey } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
   title: "Charts/CandlestickChart",
@@ -26,6 +26,15 @@ type Story = StoryObj<typeof CandlestickChart>;
 // a real app would memoize its own data the same way rather than regenerate it per render.
 const MEDIUM_DATASET = generateCandles(2_500, 180, 44);
 const ALL_FEATURES_DATASET = generateCandles(600, 180, 66);
+// One candle series per timeframe (see TIMEFRAMES below) — the daily entry alone covers a full
+// ~10 years, the finer intraday ones their own shorter, realistic lookback windows (see
+// generateCandlesByTimeframe's own doc). Kept separate from ALL_FEATURES_DATASET above rather
+// than replacing it: the events/fundamentals/custom-indicator demos below all anchor to specific
+// dates *within* that smaller 600-candle series (still valid dates in every longer series here,
+// since every generator here walks the exact same weekdays backward from "today"), and swapping
+// what they anchor to isn't needed just to make the chart itself show different data per
+// timeframe.
+const ALL_FEATURES_TIMEFRAME_DATA = generateCandlesByTimeframe(180, 66);
 const ALL_FEATURES_EVENTS: ChartEvent[] = [
   { date: ALL_FEATURES_DATASET[80].date, kind: "earnings", label: "Résultats T1 : BPA 1.42$ (attendu 1.35$)" },
   { date: ALL_FEATURES_DATASET[180].date, kind: "earnings", label: "Résultats T2 : BPA 1.51$ (attendu 1.48$)" },
@@ -211,7 +220,7 @@ export const AllFeatures: Story = {
       <div style={{ margin: -32 }}>
         <ChartWorkspace defaultPanels={1}>
           <CandlestickChart
-            data={ALL_FEATURES_DATASET}
+            data={ALL_FEATURES_TIMEFRAME_DATA[timeframe as MockTimeframeKey] ?? ALL_FEATURES_DATASET}
             symbol={currentSymbol}
             events={ALL_FEATURES_EVENTS}
             drawingTools

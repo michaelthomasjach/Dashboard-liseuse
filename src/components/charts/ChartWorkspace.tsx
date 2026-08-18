@@ -80,7 +80,12 @@ export function ChartWorkspace({
   // actually touched. Forked here the same way hover/price already are: once a panel's picker is
   // used, that panel's own entry takes over for good, independent of whatever the template's own
   // `timeframe` prop does afterward; a panel never individually touched still tracks the template's
-  // value, same as plain controlled behavior outside a workspace.
+  // value, same as plain controlled behavior outside a workspace. The clone below still also calls
+  // the template's own `onTimeframeChange` (if it passed one) after updating this — forking which
+  // panel owns which timeframe is an internal *layout* concern, not a reason to also cut a caller
+  // off from ever finding out a timeframe changed (the `defaultPanels={1}` case especially: a
+  // caller that wants to resample its own `data` per timeframe has nowhere else to learn the
+  // selection from, since there's no per-panel timeframe getting reported back out otherwise).
   const [timeframeByPanel, setTimeframeByPanel] = useState<Record<number, string | undefined>>({});
   // Which panel(s) the "Graphiques liés" modal's own checkboxes currently have checked — mirrored
   // out from LinkGroupsModal (which has no reach into the grid behind it) purely to drive each
@@ -195,7 +200,10 @@ export function ChartWorkspace({
           fillHeight,
           className: [child.props.className, selectedPanels.includes(i) && "lq-chart-workspace__panel--selected"].filter(Boolean).join(" ") || undefined,
           timeframe: i in timeframeByPanel ? timeframeByPanel[i] : child.props.timeframe,
-          onTimeframeChange: (value: string) => setTimeframeByPanel((prev) => ({ ...prev, [i]: value })),
+          onTimeframeChange: (value: string) => {
+            setTimeframeByPanel((prev) => ({ ...prev, [i]: value }));
+            child.props.onTimeframeChange?.(value);
+          },
           syncedHoverDate: syncedDateForPanel(i),
           onHoverDateChange: (date: Date | null) => handleHoverChange(i, date),
           syncedHoverPrice: syncedPriceForPanel(i),
