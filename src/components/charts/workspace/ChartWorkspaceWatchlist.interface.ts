@@ -16,6 +16,21 @@ export interface ChartWorkspaceWatchlistRow {
    *  column id — whatever the caller wants shown there for this row (a formatted price, a
    *  colored % change, …). A column with no entry here for a given row simply renders blank. */
   values: Record<string, ReactNode>;
+  /** Small logo shown next to the ticker — an image, or (with no `logoUrl`) a solid-color circle
+   *  the ticker's own first two letters render against, same fallback `SymbolSearchModal`'s own
+   *  results already use. Omit both for no logo at all. */
+  logoUrl?: string;
+  logoColor?: string;
+}
+
+/** A named sub-group of rows within one list (see `ChartWorkspaceWatchlist.sections`) — e.g.
+ *  "Indices"/"Forex"/"US" inside a broader "Mes favoris" list. Collapsible in the UI (view-only
+ *  state, not tracked here); rows can be dragged into, out of, and between sections (see
+ *  `ChartWorkspaceProps.onMoveWatchlistRow`). */
+export interface ChartWorkspaceWatchlistSection {
+  id: string;
+  name: string;
+  rows: ChartWorkspaceWatchlistRow[];
 }
 
 /** One named list for the workspace's own docked watchlist tab (see `ChartWorkspaceProps.watchlists`). */
@@ -27,5 +42,8 @@ export interface ChartWorkspaceWatchlist {
    *  toggled via the panel's own "..." button, shared across every list (so the same selection
    *  carries over when switching lists) rather than tracked per list. */
   columns: ChartWorkspaceWatchlistColumn[];
+  /** Rows not organized into any section — rendered first, above `sections`. */
   rows: ChartWorkspaceWatchlistRow[];
+  /** Optional named sub-groups within this list — see `ChartWorkspaceWatchlistSection`'s own doc. */
+  sections?: ChartWorkspaceWatchlistSection[];
 }

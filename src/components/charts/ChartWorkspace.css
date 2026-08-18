@@ -50,6 +50,16 @@
   min-height: 0;
 }
 
+/* Overrides the docked side panel's own base `border-left` (see charts-shared.css) specifically
+   in this context — each grid panel is its own separately-bordered `.lq-chart` (CandlestickChart's
+   own base style), so the grid's own right-most panel already contributes a right border right
+   there; the panel's own left border on top of that doubled up into a visibly thicker line than
+   every other divider in the workspace (2px instead of 1px). Left as-is for CandlestickChart's
+   own standalone `sidePanel` usage, where it's the *only* border in that spot. */
+.lq-chart-workspace .lq-chart__side-panel {
+  border-left: none;
+}
+
 /* The workspace's own docked side panel — reuses ChartSidePanel/.lq-chart__side-panel wholesale
    (see that component's own doc), just this small header on top of the caller's own content for
    the active tab's own title (watchlist name + caret, or a plain "Alertes" label), since the
@@ -89,15 +99,33 @@
   margin-left: auto;
 }
 
-/* One row of the watchlist table — a real `<button>` (see WatchlistPanel.tsx) for the actual data
-   rows so the whole row is one click target, but this same class also styles the column-header
-   row above them (a plain, non-interactive `<div>` — see `--header` below), hence resetting
-   button chrome here rather than assuming a real button's own defaults. */
+/* One row of the watchlist table — a plain wrapper `<div>` around three pieces (see
+   WatchlistPanel.tsx's own renderRow): the grip (drag handle), the clickable "main" button
+   (logo/ticker/values), and the delete button — three separate interactive elements can't nest
+   inside one another, unlike the single whole-row `<button>` an earlier version of this used.
+   Hover background lives on this shared wrapper so it reads as one row highlighting, not three
+   separately-hovering pieces. This same class also styles the column-header row above the data
+   (see `--header` below) — its own grip/delete are inert spacers, not real buttons, purely to
+   reserve the same width so "Symbole"/column labels line up with the real values underneath. */
 .lq-chart-workspace__watchlist-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+}
+
+.lq-chart-workspace__watchlist-row:hover {
+  background-color: var(--lq-color-hover);
+}
+
+/* The clickable middle zone — everything between the grip and the delete button. A `<button>` in
+   a real row, a plain (non-interactive) `<span>` in the header row — `cursor` below is overridden
+   back to default there since a span has no clickable affordance to hint at. */
+.lq-chart-workspace__watchlist-row-main {
   display: flex;
   align-items: center;
   gap: var(--lq-space-2);
-  width: 100%;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 6px 0;
   font-family: inherit;
   font-size: 0.75rem;
@@ -105,29 +133,103 @@
   text-align: left;
   background: none;
   border: none;
-  border-bottom: 1px solid var(--lq-color-border-subtle);
   cursor: pointer;
 }
 
-.lq-chart-workspace__watchlist-row:hover {
-  background-color: var(--lq-color-hover);
-}
-
 /* The column-labels row above the data rows — same column layout as a real row (so labels line
-   up with their own values below) but muted and non-interactive, since it isn't one. */
+   up with their own values below, see the spacer classes' own doc) but muted and non-interactive.
+   Extra top margin (beyond the row's own 6px padding) so "Symbole"/column labels read as clearly
+   apart from the divider above them (under the list-name dropdown), not crowded against it. */
 .lq-chart-workspace__watchlist-row--header {
-  padding-top: 0;
-  padding-bottom: 4px;
+  margin-top: var(--lq-space-2);
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--lq-color-text-muted);
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  cursor: default;
 }
 
 .lq-chart-workspace__watchlist-row--header:hover {
   background-color: transparent;
+}
+
+.lq-chart-workspace__watchlist-row--header .lq-chart-workspace__watchlist-row-main {
+  cursor: default;
+}
+
+/* Drag handle (real rows) — hover-revealed like `.lq-chart__symbol-search-favorite`'s own star,
+   same reasoning (a permanently-visible grip/trash pair on every row would be visual noise for
+   something only occasionally used). `touch-action: none` keeps a touch drag from also trying to
+   scroll the panel underneath, same as every other drag surface in this library. */
+.lq-chart-workspace__watchlist-grip,
+.lq-chart-workspace__watchlist-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  padding: 0;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-chart-workspace__watchlist-grip {
+  cursor: grab;
+  touch-action: none;
+}
+
+.lq-chart-workspace__watchlist-grip:active {
+  cursor: grabbing;
+}
+
+.lq-chart-workspace__watchlist-delete:hover {
+  color: var(--lq-color-down);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart-workspace__watchlist-grip,
+  .lq-chart-workspace__watchlist-delete {
+    opacity: 0;
+  }
+
+  .lq-chart-workspace__watchlist-row:hover .lq-chart-workspace__watchlist-grip,
+  .lq-chart-workspace__watchlist-row:hover .lq-chart-workspace__watchlist-delete,
+  .lq-chart-workspace__watchlist-grip:focus-visible,
+  .lq-chart-workspace__watchlist-delete:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* The header row's own inert stand-ins for the grip/logo/delete a real row has — same width,
+   `visibility: hidden` (not `display: none`, which would collapse their own reserved space and
+   break the alignment they exist for) rather than real buttons, since there's nothing for them
+   to do on a row of column labels. */
+.lq-chart-workspace__watchlist-grip--spacer,
+.lq-chart-workspace__watchlist-delete--spacer,
+.lq-chart-workspace__watchlist-logo--spacer {
+  visibility: hidden;
+}
+
+.lq-chart-workspace__watchlist-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--lq-radius-sm);
+  overflow: hidden;
+  font-size: 0.5rem;
+  font-weight: 700;
+  color: #fff;
+}
+
+.lq-chart-workspace__watchlist-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .lq-chart-workspace__watchlist-ticker {
@@ -139,10 +241,103 @@
   white-space: nowrap;
 }
 
+/* `position: relative` only actually needed on the header's own cells (the resize handle below
+   anchors to it), harmless on a data cell that never has one. */
 .lq-chart-workspace__watchlist-cell {
+  position: relative;
   flex: 0 0 68px;
   text-align: right;
   font-variant-numeric: tabular-nums;
+}
+
+/* A row being dragged (see useWatchlistRowDrag) — its own list position doesn't move (this isn't
+   a reordering drag, see that hook's own doc), so fading it is the only feedback that anything is
+   actually happening to *this* row specifically, as opposed to just wherever the cursor is. */
+.lq-chart-workspace__watchlist-row--dragging {
+  opacity: 0.4;
+}
+
+/* A column's own resize handle — same thin-strip-straddling-the-edge recipe as
+   `.lq-chart__side-panel-resize-handle`, mirrored to a vertical column boundary instead of the
+   panel's own edge. Sits on the *header* cell only (data cells don't need their own copy — the
+   column width itself is what's actually being changed, not any one row's). */
+.lq-chart-workspace__watchlist-col-resize {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -4px;
+  width: 8px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+/* A section's own drop zone (see useWatchlistRowDrag) — the outline sits inset (negative offset)
+   so it never nudges any row's own layout by even a pixel while a drag happens to be over it,
+   same reasoning `.lq-chart-workspace__panel--selected`'s own inset ring already uses. Also
+   wraps the root (no-section) row list, so dragging a row out of every section back to the
+   ungrouped area is just as valid a drop as dragging it into one. */
+.lq-chart-workspace__watchlist-group {
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+  border-radius: var(--lq-radius-sm);
+}
+
+.lq-chart-workspace__watchlist-group--drop-target {
+  outline-color: var(--lq-color-accent);
+  background-color: var(--lq-color-hover);
+}
+
+/* A section's own name row — collapsible (click toggles), and itself a valid drop target for a
+   dragged row even while collapsed (see useWatchlistRowDrag's own doc: the section's own rows
+   list isn't even rendered then, so the header is the *only* droppable surface for it at that
+   point) — same `--drop-target` modifier as `.lq-chart-workspace__watchlist-group` above, reused
+   rather than a second copy of the same highlight style. */
+.lq-chart-workspace__watchlist-section-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 4px;
+  margin-top: var(--lq-space-1);
+  font-family: inherit;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--lq-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.lq-chart-workspace__watchlist-section-header:hover {
+  color: var(--lq-color-text);
+  background-color: var(--lq-color-hover);
+}
+
+/* "+ Nouvelle section" — a dashed border (rather than the solid one every real row/section uses)
+   reads as "this adds something new", not one more existing item in the list. */
+.lq-chart-workspace__watchlist-add-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 4px;
+  margin-top: var(--lq-space-2);
+  font-family: inherit;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: 1px dashed var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-chart-workspace__watchlist-add-section:hover {
+  color: var(--lq-color-text);
+  border-color: var(--lq-color-border);
 }
 
 /* The always-visible rail that opens/closes/switches the docked panel (`watchlists`/`alerts`) —

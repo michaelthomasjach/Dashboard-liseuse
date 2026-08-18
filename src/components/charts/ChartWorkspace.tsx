@@ -99,6 +99,25 @@ export interface ChartWorkspaceProps {
    *  What "opens in the candle chart" means in a multi-panel workspace (which panel gets it) is
    *  entirely up to whatever this does with it. */
   onWatchlistRowClick?: (row: ChartWorkspaceWatchlistRow, watchlistId: string) => void;
+  /** Fires from the watchlist dropdown's own "Nouvelle liste" button once a name is entered —
+   *  the caller owns `watchlists` itself (see its own doc), so this only reports the chosen name;
+   *  appending a new entry (and picking its own `id`) is entirely up to whatever this does.
+   *  Omitting this hides the "Nouvelle liste" button entirely rather than showing one that
+   *  silently does nothing. */
+  onCreateWatchlist?: (name: string) => void;
+  /** Fires from a list's own "Nouvelle section" button once a name is entered — same "caller owns
+   *  the data, this only reports the chosen name" shape as `onCreateWatchlist`. Omitting this
+   *  hides the button. */
+  onCreateWatchlistSection?: (watchlistId: string, name: string) => void;
+  /** Fires from a row's own hover-revealed trash button — `sectionId` is `null` when the row
+   *  being removed isn't inside any of that list's own `sections`. Omitting this hides the trash
+   *  button entirely (no half-working delete affordance). */
+  onRemoveWatchlistSymbol?: (watchlistId: string, rowId: string, sectionId: string | null) => void;
+  /** Fires when a row is dragged (via its own grip handle) from one section to another, or to/
+   *  from the no-section zone (`null` on either end) — see `ChartWorkspaceWatchlistSection`'s own
+   *  doc. The caller owns `watchlists` itself, so this only reports the move; actually moving the
+   *  row between `rows`/`sections[].rows` arrays is up to whatever this does. */
+  onMoveWatchlistRow?: (watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void;
   /** Content for the docked panel's own "Alertes" tab, alongside `watchlists` — same "structure
    *  only, caller owns the content" shape. Omit entirely to skip the tab — its own rail icon only
    *  appears once this is set. */
@@ -143,6 +162,10 @@ export function ChartWorkspace({
   onWatchlistSymbolSearchChange,
   onAddWatchlistSymbol,
   onWatchlistRowClick,
+  onCreateWatchlist,
+  onCreateWatchlistSection,
+  onRemoveWatchlistSymbol,
+  onMoveWatchlistRow,
   alerts,
   defaultSidePanelOpen,
   onSidePanelOpenChange,
@@ -376,6 +399,10 @@ export function ChartWorkspace({
               symbolSearchResults={watchlistSymbolSearchResults}
               onSymbolSearchChange={onWatchlistSymbolSearchChange}
               onAddSymbol={onAddWatchlistSymbol}
+              onCreateWatchlist={onCreateWatchlist}
+              onCreateSection={onCreateWatchlistSection}
+              onRemoveRow={onRemoveWatchlistSymbol}
+              onMoveRow={onMoveWatchlistRow}
             />
           ) : (
             <>

@@ -242,6 +242,23 @@ const DEMO_WATCHLISTS: ChartWorkspaceWatchlist[] = [
     columns: WATCHLIST_COLUMNS,
     rows: [watchlistRow("eurusd", "EURUSD", "1.0842", "+0.12%", true), watchlistRow("xauusd", "XAUUSD", "2 415.30", "-0.44%", false)],
   },
+  // Demonstrates `sections` — same "Mes favoris" split into "US"/"Indices" sub-groups the user's
+  // own request described, all draggable between each other (and back out to the ungrouped list,
+  // empty here) via each row's own grip handle.
+  {
+    id: "favoris",
+    name: "Mes favoris",
+    columns: WATCHLIST_COLUMNS,
+    rows: [],
+    sections: [
+      {
+        id: "favoris-us",
+        name: "US",
+        rows: [watchlistRow("fav-aapl", "AAPL", "231.05", "-0.38%", false), watchlistRow("fav-msft", "MSFT", "412.88", "+1.24%", true)],
+      },
+      { id: "favoris-indices", name: "Indices", rows: [watchlistRow("fav-spx", "SPX", "5 815.20", "+0.42%", true)] },
+    ],
+  },
 ];
 
 // No alert spec exists yet (see ChartWorkspaceProps.alerts' own doc) — just enough content to
@@ -265,6 +282,49 @@ export const AllFeatures: Story = {
     // Its own results list, independent of the main chart's own `results` above — a real app
     // could well feed both symbol-search modals from the same source, but they don't have to.
     const [watchlistSearchResults, setWatchlistSearchResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
+
+    function handleCreateWatchlist(name: string) {
+      setWatchlists((prev) => [...prev, { id: `wl-${Date.now()}`, name, columns: WATCHLIST_COLUMNS, rows: [] }]);
+    }
+
+    function handleCreateWatchlistSection(watchlistId: string, name: string) {
+      setWatchlists((prev) =>
+        prev.map((w) => (w.id === watchlistId ? { ...w, sections: [...(w.sections ?? []), { id: `sec-${Date.now()}`, name, rows: [] }] } : w))
+      );
+    }
+
+    function handleRemoveWatchlistSymbol(watchlistId: string, rowId: string, sectionId: string | null) {
+      setWatchlists((prev) =>
+        prev.map((w) => {
+          if (w.id !== watchlistId) return w;
+          if (sectionId === null) return { ...w, rows: w.rows.filter((r) => r.id !== rowId) };
+          return { ...w, sections: w.sections?.map((s) => (s.id === sectionId ? { ...s, rows: s.rows.filter((r) => r.id !== rowId) } : s)) };
+        })
+      );
+    }
+
+    // The caller owns the actual reshuffling (see ChartWorkspaceProps.onMoveWatchlistRow's own
+    // doc) — the library only ever reports "this row moved from A to B". Both ends handled in one
+    // `sections.map` pass: the from-section (if any) loses the row, the to-section (if any) gains
+    // it; the root `rows` array is adjusted the same way for whichever end (if either) is `null`.
+    function handleMoveWatchlistRow(watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) {
+      setWatchlists((prev) =>
+        prev.map((w) => {
+          if (w.id !== watchlistId) return w;
+          const fromRows = fromSectionId === null ? w.rows : (w.sections?.find((s) => s.id === fromSectionId)?.rows ?? []);
+          const row = fromRows.find((r) => r.id === rowId);
+          if (!row) return w;
+          const rows = fromSectionId === null ? w.rows.filter((r) => r.id !== rowId) : w.rows;
+          const sections = w.sections?.map((s) => {
+            if (s.id === fromSectionId) return { ...s, rows: s.rows.filter((r) => r.id !== rowId) };
+            if (s.id === toSectionId) return { ...s, rows: [...s.rows, row] };
+            return s;
+          });
+          return { ...w, rows: toSectionId === null ? [...rows, row] : rows, sections };
+        })
+      );
+    }
+
     // Storybook's own global decorator (see .storybook/preview.tsx) wraps every story in 32px of
     // padding, unrelated to ChartWorkspace itself — harmless normally, but it's exactly what
     // would keep the workspace (sized to fill 100% of the viewport on its own, see
@@ -287,6 +347,10 @@ export const AllFeatures: Story = {
             )
           }
           onWatchlistRowClick={(row) => setCurrentSymbol(row.ticker)}
+          onCreateWatchlist={handleCreateWatchlist}
+          onCreateWatchlistSection={handleCreateWatchlistSection}
+          onRemoveWatchlistSymbol={handleRemoveWatchlistSymbol}
+          onMoveWatchlistRow={handleMoveWatchlistRow}
           alerts={<AlertsPlaceholder />}
         >
           <CandlestickChart

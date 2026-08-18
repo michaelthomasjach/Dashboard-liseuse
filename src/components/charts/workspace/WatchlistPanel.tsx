@@ -1,12 +1,22 @@
 import { useRef, useState } from "react";
 import { Popover } from "../../forms/Popover";
 import { Checkbox } from "../../forms/Checkbox";
+import { TextField } from "../../forms/TextField";
+import { Modal } from "../../primitives/Modal";
 import { SymbolSearchModal } from "../candlestick/components/SymbolSearchModal";
 import { useSymbolSearchState } from "../candlestick/hooks/useSymbolSearchState";
-import { ChevronDownIcon, PlusIcon, MoreHorizontalIcon } from "../../icons";
+import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
+import { useWatchlistRowDrag, watchlistDropZoneProps } from "./useWatchlistRowDrag";
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon } from "../../icons";
 import type { SymbolSearchCategory } from "../candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../candlestick/interfaces/SymbolSearchResult.interface";
 import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow } from "./ChartWorkspaceWatchlist.interface";
+
+// Matches the CSS default `.lq-chart-workspace__watchlist-cell` itself falls back to — the JS
+// value is what actually drives width from here on (see startColumnResize below), the CSS one is
+// only ever read before a caller's own render has passed anything through inline styles yet.
+const DEFAULT_COLUMN_WIDTH = 68;
+const MIN_COLUMN_WIDTH = 40;
 
 export interface WatchlistPanelProps {
   watchlists: ChartWorkspaceWatchlist[];
@@ -22,16 +32,23 @@ export interface WatchlistPanelProps {
   symbolSearchResults: SymbolSearchResult[] | undefined;
   onSymbolSearchChange: ((query: string, category: SymbolSearchCategory) => void) | undefined;
   onAddSymbol: ((watchlistId: string, result: SymbolSearchResult) => void) | undefined;
+  onCreateWatchlist: ((name: string) => void) | undefined;
+  onCreateSection: ((watchlistId: string, name: string) => void) | undefined;
+  onRemoveRow: ((watchlistId: string, rowId: string, sectionId: string | null) => void) | undefined;
+  onMoveRow: ((watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void) | undefined;
 }
 
 /**
  * The docked panel's own "watchlist" tab body (see `ChartWorkspace.tsx`'s own `activeTab`) — the
- * name+caret header (opens a dropdown to switch among `watchlists`), the "+"/"…" action pair
- * (add a symbol via the same `SymbolSearchModal` shell `CandlestickChart` uses, toggle which
- * optional columns show), and the table itself. Kept as its own file/component rather than inlined
- * in `ChartWorkspace.tsx` — enough of its own state (two popovers, the add-symbol modal's search
- * state) to read as a distinct unit, same "extract when there's real internal complexity" call
- * this library already makes for `ChartHeader`/`ChartSidePanel`/etc.
+ * name+caret header (opens a dropdown to switch among `watchlists`, or create a new one), the
+ * "+"/"…" action pair (add a symbol via the same `SymbolSearchModal` shell `CandlestickChart`
+ * uses, toggle which optional columns show), and the table itself: an ungrouped row list plus any
+ * named `sections` (collapsible, drag-and-drop between them via each row's own grip handle — see
+ * `useWatchlistRowDrag`). Kept as its own file/component rather than inlined in
+ * `ChartWorkspace.tsx` — enough of its own state (three popovers/modals, the add-symbol modal's
+ * search state, column widths, section collapse) to read as a distinct unit, same "extract when
+ * there's real internal complexity" call this library already makes for `ChartHeader`/
+ * `ChartSidePanel`/etc.
  */
 export function WatchlistPanel({
   watchlists,
@@ -43,12 +60,26 @@ export function WatchlistPanel({
   symbolSearchResults,
   onSymbolSearchChange,
   onAddSymbol,
+  onCreateWatchlist,
+  onCreateSection,
+  onRemoveRow,
+  onMoveRow,
 }: WatchlistPanelProps) {
   const activeWatchlist = watchlists.find((w) => w.id === activeWatchlistId) ?? watchlists[0];
   const [watchlistMenuOpen, setWatchlistMenuOpen] = useState(false);
   const watchlistTriggerRef = useRef<HTMLButtonElement>(null);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
   const columnsTriggerRef = useRef<HTMLButtonElement>(null);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+  const [collapsedSectionIds, setCollapsedSectionIds] = useState<Set<string>>(new Set());
+  // Which of the two "enter a name" modals is open, if either — a single piece of state (not two
+  // separate booleans) since they're mutually exclusive and share one <NameModal/> render below.
+  const [nameModal, setNameModal] = useState<"list" | "section" | null>(null);
+  const { draggingRowId, dropTargetSectionId, startDrag } = useWatchlistRowDrag({
+    onMove: activeWatchlist
+      ? ({ rowId, fromSectionId, toSectionId }) => onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId)
+      : undefined,
+  });
   // No favorites concept here (see SymbolSearchModal's own doc on reusing it without them) —
   // `useSymbolSearchState` still owns the open/query/category state either way.
   const addSymbolState = useSymbolSearchState({
@@ -64,8 +95,86 @@ export function WatchlistPanel({
     onVisibleColumnIdsChange(next);
   }
 
+  function columnWidth(id: string) {
+    return columnWidths[id] ?? DEFAULT_COLUMN_WIDTH;
+  }
+
+  // Same window-pointermove-listener pattern useSidePanel's own startResize uses (see its own
+  // comment) — a plain drag delta from the column's own width at drag-start.
+  function startColumnResize(columnId: string, e: React.PointerEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    const startClientX = e.clientX;
+    const startWidth = columnWidth(columnId);
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.max(MIN_COLUMN_WIDTH, startWidth + (ev.clientX - startClientX));
+      setColumnWidths((prev) => ({ ...prev, [columnId]: next }));
+    };
+    const onUp = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  }
+
+  function toggleSectionCollapsed(id: string) {
+    setCollapsedSectionIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
   if (!activeWatchlist) return null;
   const visibleColumns = activeWatchlist.columns.filter((c) => visibleColumnIds.has(c.id));
+
+  function renderRow(row: ChartWorkspaceWatchlistRow, sectionId: string | null, index: number) {
+    return (
+      <div
+        key={row.id}
+        className={["lq-chart-workspace__watchlist-row", draggingRowId === row.id && "lq-chart-workspace__watchlist-row--dragging"]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <button
+          type="button"
+          className="lq-chart-workspace__watchlist-grip"
+          onPointerDown={() => startDrag(row.id, sectionId)}
+          aria-label={`Déplacer ${row.ticker}`}
+          title="Glisser pour déplacer"
+        >
+          <GripIcon size={12} />
+        </button>
+        <button type="button" className="lq-chart-workspace__watchlist-row-main" onClick={() => onRowClick?.(row, activeWatchlist.id)}>
+          <span
+            className="lq-chart-workspace__watchlist-logo"
+            style={row.logoUrl ? undefined : { backgroundColor: row.logoColor ?? defaultSymbolLogoColor(index) }}
+          >
+            {row.logoUrl ? <img src={row.logoUrl} alt="" /> : row.ticker.slice(0, 2).toUpperCase()}
+          </span>
+          <span className="lq-chart-workspace__watchlist-ticker">{row.ticker}</span>
+          {visibleColumns.map((c) => (
+            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={{ flexBasis: columnWidth(c.id) }}>
+              {row.values[c.id]}
+            </span>
+          ))}
+        </button>
+        {onRemoveRow && (
+          <button
+            type="button"
+            className="lq-chart-workspace__watchlist-delete"
+            onClick={() => onRemoveRow(activeWatchlist.id, row.id, sectionId)}
+            aria-label={`Supprimer ${row.ticker}`}
+            title="Supprimer"
+          >
+            <TrashIcon size={12} />
+          </button>
+        )}
+      </div>
+    );
+  }
 
   return (
     <>
@@ -97,6 +206,22 @@ export function WatchlistPanel({
                 {w.name}
               </button>
             ))}
+            {onCreateWatchlist && (
+              <>
+                <div className="lq-chart__tool-menu-divider" />
+                <button
+                  type="button"
+                  className="lq-chart__tool-menu-option"
+                  onClick={() => {
+                    setWatchlistMenuOpen(false);
+                    setNameModal("list");
+                  }}
+                >
+                  <PlusIcon size={12} />
+                  Nouvelle liste
+                </button>
+              </>
+            )}
           </div>
         </Popover>
 
@@ -130,27 +255,81 @@ export function WatchlistPanel({
         </div>
       </div>
 
-      {visibleColumns.length > 0 && (
-        <div className="lq-chart-workspace__watchlist-row lq-chart-workspace__watchlist-row--header">
-          <span className="lq-chart-workspace__watchlist-ticker" />
+      {/* Same grip-spacer/main/delete-spacer shape as a real row (see renderRow) — not just the
+          ticker/cells alone — so "Symbole" and every column label line up exactly with the real
+          values below despite the header having no actual grip/delete buttons of its own to
+          reserve that space otherwise. */}
+      <div className="lq-chart-workspace__watchlist-row lq-chart-workspace__watchlist-row--header">
+        <span className="lq-chart-workspace__watchlist-grip lq-chart-workspace__watchlist-grip--spacer" />
+        <span className="lq-chart-workspace__watchlist-row-main">
+          <span className="lq-chart-workspace__watchlist-logo lq-chart-workspace__watchlist-logo--spacer" />
+          <span className="lq-chart-workspace__watchlist-ticker">Symbole</span>
           {visibleColumns.map((c) => (
-            <span key={c.id} className="lq-chart-workspace__watchlist-cell">
+            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={{ flexBasis: columnWidth(c.id) }}>
               {c.label}
+              <span
+                className="lq-chart-workspace__watchlist-col-resize"
+                onPointerDown={(e) => startColumnResize(c.id, e)}
+                role="separator"
+                aria-orientation="vertical"
+                aria-label={`Redimensionner la colonne ${c.label}`}
+              />
             </span>
           ))}
-        </div>
-      )}
+        </span>
+        <span className="lq-chart-workspace__watchlist-delete lq-chart-workspace__watchlist-delete--spacer" />
+      </div>
 
-      {activeWatchlist.rows.map((row) => (
-        <button key={row.id} type="button" className="lq-chart-workspace__watchlist-row" onClick={() => onRowClick?.(row, activeWatchlist.id)}>
-          <span className="lq-chart-workspace__watchlist-ticker">{row.ticker}</span>
-          {visibleColumns.map((c) => (
-            <span key={c.id} className="lq-chart-workspace__watchlist-cell">
-              {row.values[c.id]}
-            </span>
-          ))}
+      <div
+        className={["lq-chart-workspace__watchlist-group", dropTargetSectionId === null && "lq-chart-workspace__watchlist-group--drop-target"]
+          .filter(Boolean)
+          .join(" ")}
+        {...watchlistDropZoneProps(null)}
+      >
+        {activeWatchlist.rows.map((row, i) => renderRow(row, null, i))}
+      </div>
+
+      {activeWatchlist.sections?.map((section) => {
+        const collapsed = collapsedSectionIds.has(section.id);
+        return (
+          <div key={section.id}>
+            <button
+              type="button"
+              className={[
+                "lq-chart-workspace__watchlist-section-header",
+                dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              onClick={() => toggleSectionCollapsed(section.id)}
+              {...watchlistDropZoneProps(section.id)}
+            >
+              {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
+              {section.name}
+            </button>
+            {!collapsed && (
+              <div
+                className={[
+                  "lq-chart-workspace__watchlist-group",
+                  dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                {...watchlistDropZoneProps(section.id)}
+              >
+                {section.rows.map((row, i) => renderRow(row, section.id, i))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {onCreateSection && (
+        <button type="button" className="lq-chart-workspace__watchlist-add-section" onClick={() => setNameModal("section")}>
+          <PlusIcon size={12} />
+          Nouvelle section
         </button>
-      ))}
+      )}
 
       <SymbolSearchModal
         title={`Ajouter un symbole — ${activeWatchlist.name}`}
@@ -168,6 +347,59 @@ export function WatchlistPanel({
         handleAddSymbolOverlay={() => {}}
         removeSymbolOverlay={() => {}}
       />
+
+      {nameModal && (
+        <NameModal
+          title={nameModal === "list" ? "Nouvelle liste" : "Nouvelle section"}
+          placeholder={nameModal === "list" ? "Ma nouvelle liste" : "Ma nouvelle section"}
+          onClose={() => setNameModal(null)}
+          onSubmit={(name) => (nameModal === "list" ? onCreateWatchlist?.(name) : onCreateSection?.(activeWatchlist.id, name))}
+        />
+      )}
     </>
+  );
+}
+
+/** Shared "enter a name, Créer/Annuler" shell for both `onCreateWatchlist` and `onCreateSection`
+ *  above — same `.lq-chart__edit-drawing-footer`/`.lq-chart__reset-button`/`.lq-chart__confirm-
+ *  button` recipe `TemplateControls`' own "save as" modal already uses for the identical shape
+ *  (enter a name, confirm or cancel). */
+function NameModal({ title, placeholder, onSubmit, onClose }: { title: string; placeholder: string; onSubmit: (name: string) => void; onClose: () => void }) {
+  const [value, setValue] = useState("");
+
+  function submit() {
+    const trimmed = value.trim();
+    if (!trimmed) return;
+    onSubmit(trimmed);
+    onClose();
+  }
+
+  return (
+    <Modal
+      open
+      onClose={onClose}
+      title={title}
+      footer={
+        <div className="lq-chart__edit-drawing-footer">
+          <button type="button" className="lq-chart__reset-button" onClick={onClose}>
+            Annuler
+          </button>
+          <button type="button" className="lq-chart__confirm-button" onClick={submit} disabled={!value.trim()}>
+            Créer
+          </button>
+        </div>
+      }
+    >
+      <TextField
+        label="Nom"
+        placeholder={placeholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter") submit();
+        }}
+      />
+    </Modal>
   );
 }
