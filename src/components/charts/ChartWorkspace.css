@@ -1,7 +1,24 @@
 .lq-chart-workspace {
   display: grid;
+  grid-template-columns: repeat(var(--lq-workspace-columns), 1fr);
   gap: 0;
   width: 100%;
+}
+
+/* A split-screen workspace (2/4/6/8 panels) squeezed into a narrow phone viewport leaves each
+   panel too small to read at all — stack them into a single column instead, same as a mobile
+   trading app would rather than shrinking every panel down to a sliver. Only the *columns*
+   collapse; gridTemplateRows (see ChartWorkspace.tsx, set inline whenever fillHeight) is
+   untouched, so a 2-row layout (4/6/8 panels) still gets its own 100vh split, now stacked
+   1-per-row-share top to bottom instead of 2-per-row-share side by side. */
+@media (max-width: 700px) {
+  .lq-chart-workspace {
+    grid-template-columns: 1fr;
+    /* One explicit row per *panel* (not the original `rows`, always ≤2 — see
+       --lq-workspace-panels' own doc in ChartWorkspace.tsx) so a 4/6/8-panel workspace's 100vh
+       budget splits evenly across every stacked panel instead of just the first 2. */
+    grid-template-rows: repeat(var(--lq-workspace-panels), 1fr);
+  }
 }
 
 /* Each panel is a plain grid cell — CandlestickChart itself already fills 100% of whatever

@@ -521,7 +521,14 @@ export const LineAreaChart = forwardRef<LineAreaChartHandle, LineAreaChartProps>
             width={dims.boundedWidth}
             height={dims.boundedHeight}
             onPointerMove={handlePointerMove}
-            onPointerLeave={() => {
+            onPointerLeave={(e) => {
+              // Same touch-pin reasoning as CandlestickChart's own plot overlay: "leave" fires
+              // the instant a finger lifts, so clearing here would make the hover
+              // crosshair/tooltip exist only while actively touching — pin it at its last
+              // position instead (mouse still clears normally) so it stays readable after lift.
+              // A tap anywhere else already recomputes it at the new position via
+              // handlePointerMove, so nothing else is needed to let the user move it.
+              if (e.pointerType === "touch") return;
               setHover(null);
               setPointerPos(null);
             }}

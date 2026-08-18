@@ -27,6 +27,7 @@ export interface DrawingEditModalProps {
   closeEditModal: () => void;
   saveEditModal: () => void;
   deleteEditingDrawing: () => void;
+  duplicateEditingDrawing: () => void;
   valueAxisLabel: (valueAxis: string | undefined) => string;
   /** The same theme-accent color a drawing with no explicit `color` actually renders in on
    *  canvas (see useDefaultDrawingColor) — seeds the color pickers below so they show what's
@@ -46,6 +47,7 @@ export function DrawingEditModal({
   closeEditModal,
   saveEditModal,
   deleteEditingDrawing,
+  duplicateEditingDrawing,
   valueAxisLabel,
   defaultColor,
 }: DrawingEditModalProps) {
@@ -64,6 +66,12 @@ export function DrawingEditModal({
         <div className="lq-chart__edit-drawing-footer">
           <button type="button" className="lq-chart__reset-button" onClick={deleteEditingDrawing}>
             Supprimer
+          </button>
+          {/* Touch's own reachable equivalent of Ctrl/Cmd+C→Ctrl/Cmd+V (see
+              duplicateEditingDrawing's own doc) — there's no keyboard shortcut to reach from a
+              touch device, and this modal already is one (opened via double-tap). */}
+          <button type="button" className="lq-chart__reset-button" onClick={duplicateEditingDrawing}>
+            Dupliquer
           </button>
           <button type="button" className="lq-chart__confirm-button" onClick={saveEditModal}>
             Enregistrer

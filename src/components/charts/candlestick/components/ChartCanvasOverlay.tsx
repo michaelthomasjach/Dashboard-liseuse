@@ -77,6 +77,35 @@ export interface ChartCanvasOverlayProps {
   setActiveEventStack: Dispatch<SetStateAction<{ i: number; events: ChartEvent[] } | null>>;
 }
 
+/** A drawing's own draggable point — the small always-visible accent-ring dot every handle site
+ *  below used to render directly as a single `r=5` circle, now split into that same visible dot
+ *  (`pointer-events: none`, purely decorative) plus a same-position invisible sibling that alone
+ *  receives every pointer event. SVG hit-tests a shape's own painted geometry, so growing the
+ *  visible dot itself to make it easier to land a fingertip on would also clutter dense
+ *  multi-point drawings (Fibonacci extension, pitchforks, Elliott) with bigger rings; a
+ *  same-position invisible circle grows only the *hit* area, and only on a coarse (touch) pointer
+ *  (see `.lq-chart__drawing-handle-hitarea` in charts-shared.css) — zero change for mouse. */
+function DrawingHandle({
+  cx,
+  cy,
+  onPointerDown,
+  onPointerMove,
+  onPointerUp,
+}: {
+  cx: number;
+  cy: number;
+  onPointerDown: (e: React.PointerEvent<SVGCircleElement>) => void;
+  onPointerMove: (e: React.PointerEvent<SVGCircleElement>) => void;
+  onPointerUp: (e: React.PointerEvent<SVGCircleElement>) => void;
+}) {
+  return (
+    <>
+      <circle className="lq-chart__drawing-handle-hitarea" cx={cx} cy={cy} r={5} onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} />
+      <circle className="lq-chart__drawing-handle" cx={cx} cy={cy} r={5} />
+    </>
+  );
+}
+
 /** The chart's canvas (candles/volume/indicators/drawings, all pixel-drawn — see the render
  *  effect) plus the SVG layer stacked on top of it: axes, the pan/zoom overlay rect, per-pane
  *  Y-axis drag/wheel strips, drawing/measure handles, and event markers. Purely presentational —
@@ -331,14 +360,11 @@ export function ChartCanvasOverlay({
               // they don't move on (never at their data endpoints, which aren't meaningful
               // drag targets here — the whole line only has one degree of freedom).
               if (dr.lineType === "horizontal") {
-                const cy = pixelYForDrawing(dr);
                 return (
-                  <circle
+                  <DrawingHandle
                     key={dr.id}
-                    className="lq-chart__drawing-handle"
                     cx={dims.boundedWidth * AXIS_HANDLE_FRACTION_X}
-                    cy={cy}
-                    r={5}
+                    cy={pixelYForDrawing(dr)}
                     onPointerDown={handleAxisHandlePointerDown(dr.id)}
                     onPointerMove={handleAxisHandlePointerMove}
                     onPointerUp={handleAxisHandlePointerUp}
@@ -347,12 +373,10 @@ export function ChartCanvasOverlay({
               }
               if (dr.lineType === "vertical") {
                 return (
-                  <circle
+                  <DrawingHandle
                     key={dr.id}
-                    className="lq-chart__drawing-handle"
                     cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
                     cy={plotBoundedHeight * AXIS_HANDLE_FRACTION_Y}
-                    r={5}
                     onPointerDown={handleAxisHandlePointerDown(dr.id)}
                     onPointerMove={handleAxisHandlePointerMove}
                     onPointerUp={handleAxisHandlePointerUp}
@@ -363,14 +387,11 @@ export function ChartCanvasOverlay({
               // horizontal/vertical's fixed-fraction handle) since that anchor is itself
               // meaningful and draggable in both axes.
               if (dr.lineType === "ray") {
-                const cy = pixelYForDrawing(dr);
                 return (
-                  <circle
+                  <DrawingHandle
                     key={dr.id}
-                    className="lq-chart__drawing-handle"
                     cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
-                    cy={cy}
-                    r={5}
+                    cy={pixelYForDrawing(dr)}
                     onPointerDown={handleAxisHandlePointerDown(dr.id)}
                     onPointerMove={handleAxisHandlePointerMove}
                     onPointerUp={handleAxisHandlePointerUp}
@@ -381,12 +402,10 @@ export function ChartCanvasOverlay({
               // above — x2/y2 mirrors x1/y1 automatically (see handleAxisHandlePointerMove).
               if (dr.lineType === "arrowUp" || dr.lineType === "arrowDown") {
                 return (
-                  <circle
+                  <DrawingHandle
                     key={dr.id}
-                    className="lq-chart__drawing-handle"
                     cx={zoomedXScale(indexForDate(dr.x1) + 0.5)}
                     cy={zoomedPriceScale(dr.y1)}
-                    r={5}
                     onPointerDown={handleAxisHandlePointerDown(dr.id)}
                     onPointerMove={handleAxisHandlePointerMove}
                     onPointerUp={handleAxisHandlePointerUp}
@@ -405,23 +424,19 @@ export function ChartCanvasOverlay({
               return (
                 <g key={dr.id}>
                   {points.map((p, i) => (
-                    <circle
+                    <DrawingHandle
                       key={i}
-                      className="lq-chart__drawing-handle"
                       cx={zoomedXScale(indexForDate(p.x) + 0.5)}
                       cy={zoomedPriceScale(p.y)}
-                      r={5}
                       onPointerDown={handleEndpointPointerDown(dr.id, i)}
                       onPointerMove={handleEndpointPointerMove}
                       onPointerUp={handleEndpointPointerUp}
                     />
                   ))}
                   {dr.lineType === "channel" && (
-                    <circle
-                      className="lq-chart__drawing-handle"
+                    <DrawingHandle
                       cx={(x1 + x2) / 2}
                       cy={zoomedPriceScale((dr.y1 + dr.y2) / 2 + (dr.channelOffset ?? 0))}
-                      r={5}
                       onPointerDown={handleAxisHandlePointerDown(dr.id)}
                       onPointerMove={handleAxisHandlePointerMove}
                       onPointerUp={handleAxisHandlePointerUp}
@@ -437,20 +452,16 @@ export function ChartCanvasOverlay({
                 measurement on screen at a time. */}
             {measurePoints && (
               <>
-                <circle
-                  className="lq-chart__drawing-handle"
+                <DrawingHandle
                   cx={zoomedXScale(indexForDate(measurePoints.p1.x) + 0.5)}
                   cy={zoomedPriceScale(measurePoints.p1.y)}
-                  r={5}
                   onPointerDown={handleMeasureHandlePointerDown("p1")}
                   onPointerMove={handleMeasureHandlePointerMove}
                   onPointerUp={handleMeasureHandlePointerUp}
                 />
-                <circle
-                  className="lq-chart__drawing-handle"
+                <DrawingHandle
                   cx={zoomedXScale(indexForDate(measurePoints.p2.x) + 0.5)}
                   cy={zoomedPriceScale(measurePoints.p2.y)}
-                  r={5}
                   onPointerDown={handleMeasureHandlePointerDown("p2")}
                   onPointerMove={handleMeasureHandlePointerMove}
                   onPointerUp={handleMeasureHandlePointerUp}
@@ -491,6 +502,13 @@ export function ChartCanvasOverlay({
                   >
                     <title>{title}</title>
                     <line x1={0} x2={0} y1={EVENT_MARKER_RADIUS} y2={priceHeight - cy} stroke={color} strokeDasharray="2,2" />
+                    {/* Invisible, same-position sibling that alone widens the tap target on a
+                        coarse (touch) pointer — same "grow only the hit area, not the visible
+                        dot" reasoning as DrawingHandle's own hitarea circle. The marker's onClick
+                        lives on the parent <g>; a click landing on this still-painted-but-
+                        transparent circle bubbles up to it exactly like one landing on the
+                        visible circle below already does. */}
+                    <circle className="lq-chart__event-marker-hitarea" r={EVENT_MARKER_RADIUS} />
                     <circle r={EVENT_MARKER_RADIUS} fill={color} />
                     <text textAnchor="middle" dominantBaseline="central">
                       {glyph}

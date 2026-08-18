@@ -177,8 +177,39 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     setMeasurePoints(null);
   }
 
+  // Commits the in-progress "elbowArrow" polyline as a real drawing if it has enough points (≥2)
+  // to be a line at all — a no-op otherwise (including for every other tool, which never has
+  // pendingExtraPoints to speak of). Doesn't clear the in-progress state itself; every call site
+  // below follows it with cancelDrawingTool() to fully exit the tool, same as Escape always has —
+  // this only ever adds a *second* way to reach that same finalize-then-exit sequence (re-picking
+  // the tool from the rail, or double-clicking/double-tapping the plot while it's active) beside
+  // Escape, for the one tool with no fixed point count of its own to reach on its own.
+  function finalizeElbowArrow() {
+    if (!(activeTool === "elbowArrow" && pendingPoint && pendingExtraPoints.length >= 1)) return;
+    const points = [pendingPoint, ...pendingExtraPoints];
+    const next: TrendLineDrawing[] = [
+      ...drawings,
+      {
+        id: `drawing-${drawingIdRef.current++}`,
+        x1: points[0].x,
+        y1: points[0].y,
+        x2: points[1].x,
+        y2: points[1].y,
+        lineType: "elbowArrow",
+        extraPoints: points.slice(2),
+      },
+    ];
+    setDrawings(next);
+    onDrawingsChange?.(next);
+  }
+
   function handleToolClick(tool: DrawingToolType) {
     if (activeTool === tool) {
+      // A no-op for every tool except an in-progress elbowArrow with ≥2 points — re-tapping its
+      // own rail button is the touch-friendly equivalent of pressing Escape to finish it (see
+      // finalizeElbowArrow's own doc), rather than discarding it the way toggling any other tool
+      // off does.
+      finalizeElbowArrow();
       cancelDrawingTool();
     } else {
       setActiveTool(tool);
@@ -214,31 +245,15 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     function onKeyDown(e: KeyboardEvent) {
       if (e.key !== "Escape") return;
       // "elbowArrow" is the one tool Escape *finalizes* instead of discarding — it has no fixed
-      // point count to reach on its own (see handleOverlayClick), so Escape is the only way it
-      // ever completes. Needs at least 2 points to be a line at all; fewer and there's nothing
-      // to commit, same as cancelling any other half-placed tool.
-      if (activeTool === "elbowArrow" && pendingPoint && pendingExtraPoints.length >= 1) {
-        const points = [pendingPoint, ...pendingExtraPoints];
-        const next: TrendLineDrawing[] = [
-          ...drawings,
-          {
-            id: `drawing-${drawingIdRef.current++}`,
-            x1: points[0].x,
-            y1: points[0].y,
-            x2: points[1].x,
-            y2: points[1].y,
-            lineType: "elbowArrow",
-            extraPoints: points.slice(2),
-          },
-        ];
-        setDrawings(next);
-        onDrawingsChange?.(next);
-      }
+      // point count to reach on its own (see handleOverlayClick), so this used to be the only way
+      // it ever completed (re-picking its own rail tool, or double-clicking/double-tapping the
+      // plot, now also reach finalizeElbowArrow — see its own doc).
+      finalizeElbowArrow();
       cancelDrawingTool();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange, measurePoints]);
+  }, [activeTool, pendingPoint, pendingExtraPoints, drawings, onDrawingsChange, measurePoints, finalizeElbowArrow]);
 
   // Deletes whichever drawing is currently hovered (there's no separate "select" state — hover
   // already tracks the one line the user is pointing at, same thing a click-to-select would give
@@ -321,6 +336,17 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     closeEditModal();
   }
 
+  // Touch's own equivalent of Ctrl/Cmd+C→Ctrl/Cmd+V above — there's no keyboard on a touch
+  // device to reach that with, but the edit modal (opened via double-tap, see
+  // handleOverlayDoubleClick) is already touch-reachable, so its own footer is where this lives
+  // instead. Same offsetDrawingUp nudge as the keyboard path, so a duplicate never lands
+  // perfectly invisible on top of its source.
+  function duplicateEditingDrawing() {
+    if (!editingId || !draft) return;
+    commitDrawings([...drawings, { ...offsetDrawingUp(draft), id: `drawing-${drawingIdRef.current++}` }]);
+    closeEditModal();
+  }
+
   return {
     drawings,
     setDrawings,
@@ -380,11 +406,13 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     removeSymbolOverlay,
     handleAddSymbolOverlay,
     cancelDrawingTool,
+    finalizeElbowArrow,
     handleToolClick,
     handleSelectToolType,
     magnetSnapPrice,
     closeEditModal,
     saveEditModal,
     deleteEditingDrawing,
+    duplicateEditingDrawing,
   };
 }

@@ -110,6 +110,15 @@
   padding: 5px;
 }
 
+/* A bigger tap target on a coarse (touch) pointer — same icon size, just more padding around it.
+   Shared by the drawing-tools rail, the header, and SeasonalityView's own rail (all reuse this
+   one class), so this single rule covers every icon button in the chart at once. */
+@media (pointer: coarse) {
+  .lq-chart__icon-button {
+    padding: 9px;
+  }
+}
+
 .lq-chart__reset-button:hover,
 .lq-chart__icon-button:hover {
   color: var(--lq-color-text);
@@ -118,6 +127,7 @@
 
 .lq-chart__axis-drag {
   fill: transparent;
+  touch-action: none;
 }
 
 .lq-chart__price-volume-divider,
@@ -279,6 +289,16 @@
   height: 100%;
 }
 
+/* Extra breathing room between rail items on a coarse (touch) pointer — every button already
+   grows under this same media query (see .lq-chart__icon-button), and the chevron badge moves
+   below its own button instead of overlapping its corner (see .lq-chart__tool-chevron) — both
+   need somewhere to grow into that a plain 4px gap doesn't have. */
+@media (pointer: coarse) {
+  .lq-chart__tools-rail-items {
+    gap: 22px;
+  }
+}
+
 /* The indicators-manager button sits apart from every tool/toggle above it (it doesn't draw
    anything or change tool state, it opens a management modal) — pinned to the rail's own bottom
    edge via the auto margin above it eating the remaining flex space, rather than living inline
@@ -331,18 +351,43 @@
   border: 1px solid var(--lq-color-border-subtle);
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
-  opacity: 0;
 }
 
-.lq-chart__tool-group:hover .lq-chart__tool-chevron,
-.lq-chart__tool-chevron:focus-visible,
-.lq-chart__tool-chevron--visible {
-  opacity: 1;
+/* Invisible-until-hovered is a mouse-only affordance — touch/coarse-pointer devices have no
+   "hover without committing" gesture to reveal it with, so it stays at the base rule's default
+   (visible) there; this only narrows visibility down for a hover-capable, fine-pointer device. */
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart__tool-chevron {
+    opacity: 0;
+  }
+
+  .lq-chart__tool-group:hover .lq-chart__tool-chevron,
+  .lq-chart__tool-chevron:focus-visible,
+  .lq-chart__tool-chevron--visible {
+    opacity: 1;
+  }
 }
 
 .lq-chart__tool-chevron:hover {
   color: var(--lq-color-text);
   border-color: var(--lq-color-border);
+}
+
+/* A bigger, non-overlapping tap target on a coarse (touch) pointer. Growing it in place at the
+   same corner-badge spot (just bumping width/height) was tried and rejected — at any size worth
+   the trouble it started covering the button's own center, stealing taps meant for the button
+   itself (confirmed via Playwright: a center-tap on the button hit the chevron instead). Dropped
+   below the button instead — zero overlap with the button by construction, using the extra
+   .lq-chart__tools-rail-items gap this same media query opens up above. */
+@media (pointer: coarse) {
+  .lq-chart__tool-chevron {
+    width: 18px;
+    height: 18px;
+    right: auto;
+    bottom: -20px;
+    left: 50%;
+    transform: translateX(-50%);
+  }
 }
 
 .lq-chart__tool-menu {
@@ -413,20 +458,55 @@
   opacity: 0.75;
 }
 
+/* Purely decorative — every pointer event goes to its own invisible sibling instead (see
+   DrawingHandle in ChartCanvasOverlay.tsx and .lq-chart__drawing-handle-hitarea just below). */
 .lq-chart__drawing-handle {
   fill: var(--lq-color-bg);
   stroke: var(--lq-color-accent);
   stroke-width: 2;
+  pointer-events: none;
+}
+
+/* The actual interactive target for a drawing handle — same-position, same r=5 as the visible
+   dot it sits behind, invisible (transparent fill *and* stroke, same "invisible but still
+   hit-tests" trick .lq-chart__overlay's own fill:transparent already relies on). `stroke-width`
+   is 0 by default so a mouse's own hit area is exactly the plain r=5 circle, unchanged from
+   before this was split in two; only a coarse (touch) pointer gets the wide transparent stroke
+   that actually grows the hit radius — the visible dot stays exactly the same small size either
+   way, so dense multi-point drawings (Fibonacci extension, pitchforks, Elliott) don't get any
+   more visually cluttered on touch than they already are on mouse. */
+.lq-chart__drawing-handle-hitarea {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0;
   cursor: grab;
   touch-action: none;
 }
 
-.lq-chart__drawing-handle:active {
+.lq-chart__drawing-handle-hitarea:active {
   cursor: grabbing;
+}
+
+@media (pointer: coarse) {
+  .lq-chart__drawing-handle-hitarea {
+    stroke-width: 26;
+  }
 }
 
 .lq-chart__event-marker {
   cursor: pointer;
+}
+
+.lq-chart__event-marker-hitarea {
+  fill: transparent;
+  stroke: transparent;
+  stroke-width: 0;
+}
+
+@media (pointer: coarse) {
+  .lq-chart__event-marker-hitarea {
+    stroke-width: 20;
+  }
 }
 
 .lq-chart__event-marker circle {
@@ -576,6 +656,25 @@
      size the plot below it) — without border-box the 1px border pushes the real height to 41px,
      a mismatch that let .lq-chart__plot overflow the bottom of .lq-chart by that much. */
   box-sizing: border-box;
+  /* No responsive breakpoint reflows this row's own buttons (back/symbol/timeframe/indicators/
+     save/templates/link/split-screen…) onto a second line — a narrow phone viewport just runs
+     out of width for all of them on one row. Horizontal scroll instead of wrapping: the
+     right-aligned Save/templates/link/split-screen group (see .lq-chart__header-right) has no
+     wrap-friendly layout of its own to fall back to without a bigger redesign, and a scrollable
+     toolbar is the standard, lower-risk mobile pattern for exactly this shape of row. Scrollbar
+     hidden (both engines) so it can never eat into the fixed 40px height above. */
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+
+.lq-chart__header::-webkit-scrollbar {
+  display: none;
+}
+
+.lq-chart__header > * {
+  flex-shrink: 0;
 }
 
 .lq-chart__timeframe-trigger {
@@ -892,8 +991,10 @@
 }
 
 /* Invisible until its own item is hovered/focused — same reveal pattern as
-   .lq-chart__tool-chevron. Double-clicking the label itself opens settings too, so the gear is a
-   discoverable shortcut rather than the only path in. */
+   .lq-chart__tool-chevron, including the same touch exception: a coarse/no-hover pointer has no
+   way to trigger that reveal, so it stays visible there instead (see the media query below).
+   Double-clicking the label itself opens settings too, so the gear is a discoverable shortcut
+   rather than the only path in. */
 .lq-chart__indicator-legend-action {
   display: inline-flex;
   align-items: center;
@@ -903,12 +1004,17 @@
   background: none;
   border: none;
   cursor: pointer;
-  opacity: 0;
 }
 
-.lq-chart__indicator-legend-item:hover .lq-chart__indicator-legend-action,
-.lq-chart__indicator-legend-action:focus-visible {
-  opacity: 0.85;
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart__indicator-legend-action {
+    opacity: 0;
+  }
+
+  .lq-chart__indicator-legend-item:hover .lq-chart__indicator-legend-action,
+  .lq-chart__indicator-legend-action:focus-visible {
+    opacity: 0.85;
+  }
 }
 
 .lq-chart__indicator-legend-action:hover {
@@ -1051,6 +1157,16 @@
   cursor: ns-resize;
   pointer-events: auto;
   touch-action: none;
+}
+
+/* A taller hit strip on a coarse (touch) pointer — still centered on the same divider line
+   (top moves out by exactly half the extra height), just easier to land a fingertip on than an
+   8px band. */
+@media (pointer: coarse) {
+  .lq-chart__pane-resize-handle {
+    top: -8px;
+    height: 16px;
+  }
 }
 
 .lq-chart__indicator-category-filters {
@@ -1314,8 +1430,9 @@
 }
 
 /* Invisible until the row is hovered/focused — same reveal-on-hover convention as the
-   indicator legend's eye/trash/settings actions — unless already favorited, in which case it
-   stays visible so favorited results can be told apart at a glance. */
+   indicator legend's eye/trash/settings actions, including the same touch exception (see the
+   media query below) — unless already favorited, in which case it stays visible so favorited
+   results can be told apart at a glance. */
 .lq-chart__symbol-search-favorite {
   display: flex;
   align-items: center;
@@ -1330,13 +1447,18 @@
   border: none;
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
-  opacity: 0;
 }
 
-.lq-chart__symbol-search-row:hover .lq-chart__symbol-search-favorite,
-.lq-chart__symbol-search-favorite:focus-visible,
-.lq-chart__symbol-search-favorite--active {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart__symbol-search-favorite {
+    opacity: 0;
+  }
+
+  .lq-chart__symbol-search-row:hover .lq-chart__symbol-search-favorite,
+  .lq-chart__symbol-search-favorite:focus-visible,
+  .lq-chart__symbol-search-favorite--active {
+    opacity: 1;
+  }
 }
 
 .lq-chart__symbol-search-favorite:hover {
@@ -1364,13 +1486,18 @@
   border: none;
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
-  opacity: 0;
 }
 
-.lq-chart__symbol-search-row:hover .lq-chart__symbol-search-overlay,
-.lq-chart__symbol-search-overlay:focus-visible,
-.lq-chart__symbol-search-overlay--active {
-  opacity: 1;
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart__symbol-search-overlay {
+    opacity: 0;
+  }
+
+  .lq-chart__symbol-search-row:hover .lq-chart__symbol-search-overlay,
+  .lq-chart__symbol-search-overlay:focus-visible,
+  .lq-chart__symbol-search-overlay--active {
+    opacity: 1;
+  }
 }
 
 .lq-chart__symbol-search-overlay:hover {
@@ -1464,7 +1591,8 @@
   color: var(--lq-color-accent);
 }
 
-/* Same "invisible until the row's hovered/focused" reveal as .lq-chart__indicator-legend-action. */
+/* Same "invisible until the row's hovered/focused" reveal as .lq-chart__indicator-legend-action,
+   including the same touch exception (see the media query below). */
 .lq-chart__template-row-delete {
   display: inline-flex;
   align-items: center;
@@ -1476,12 +1604,17 @@
   background: none;
   border: none;
   cursor: pointer;
-  opacity: 0;
 }
 
-.lq-chart__template-row:hover .lq-chart__template-row-delete,
-.lq-chart__template-row-delete:focus-visible {
-  opacity: 0.85;
+@media (hover: hover) and (pointer: fine) {
+  .lq-chart__template-row-delete {
+    opacity: 0;
+  }
+
+  .lq-chart__template-row:hover .lq-chart__template-row-delete,
+  .lq-chart__template-row-delete:focus-visible {
+    opacity: 0.85;
+  }
 }
 
 .lq-chart__template-row-delete:hover {

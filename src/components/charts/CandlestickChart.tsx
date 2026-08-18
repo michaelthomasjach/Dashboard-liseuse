@@ -196,12 +196,14 @@ export function CandlestickChart({
     removeSymbolOverlay,
     handleAddSymbolOverlay,
     cancelDrawingTool,
+    finalizeElbowArrow,
     handleToolClick,
     handleSelectToolType,
     magnetSnapPrice,
     closeEditModal,
     saveEditModal,
     deleteEditingDrawing,
+    duplicateEditingDrawing,
   } = useDrawingState({ data, defaultDrawings, onDrawingsChange, onAddSymbolOverlay });
 
   const [tfOpen, setTfOpen] = useState(false);
@@ -223,11 +225,9 @@ export function CandlestickChart({
     futureZoneVisible, setFutureZoneVisible,
     now,
   } = useChartAppearance({ YAutoScaling, livePrice });
-  // Swaps the whole chart body for SeasonalityView (see the `seasonality` prop's own doc
-  // comment) — deliberately its own top-level flag, not folded into `chartDisplayMode`, since a
-  // seasonal path isn't another way to draw the same price/date axes the way candle/line/Renko
-  // are; it has its own x-axis (position within a reference year) that drawings/indicators/
-  // volume/events have no meaningful relationship to.
+  // Swaps the whole chart body for SeasonalityView — its own top-level flag, not folded into
+  // `chartDisplayMode`, since its x-axis (position within a reference year) has no meaningful
+  // relationship to drawings/indicators/volume/events the way candle/line/Renko share one.
   const [seasonalityOpen, setSeasonalityOpen] = useState(false);
   const { symbolSearchOpen, setSymbolSearchOpen, symbolSearchQuery, setSymbolSearchQuery, symbolSearchCategory, setSymbolSearchCategory, favoriteSymbolIds, toggleFavoriteSymbol } =
     useSymbolSearchState({ defaultFavoriteSymbolIds, onFavoriteSymbolIdsChange, onSymbolSearchChange });
@@ -478,6 +478,7 @@ export function CandlestickChart({
     brushPointsRef,
     brushDrawingRef,
     hoveredDrawingId,
+    hoveredDrawingIdRef,
     updateHoveredDrawingId,
     setEditingId,
     setDraft,
@@ -488,6 +489,7 @@ export function CandlestickChart({
     dragLineRef,
     isPanningYRef,
     cancelDrawingTool,
+    finalizeElbowArrow,
     magnetSnapPrice,
     zoomRef,
     zoomedXScale,
@@ -691,7 +693,12 @@ export function CandlestickChart({
       <div
         className="lq-chart__plot"
         style={{ width: dims.width, height: plotHeight }}
-        onPointerLeave={() => {
+        onPointerLeave={(e) => {
+          // Touch "leave" fires the instant a finger lifts — pin instead of clear (mouse still
+          // clears normally) so the crosshair's "+" badges and the volume pane's hover-gated
+          // actions survive long enough for a follow-up tap; the next tap elsewhere already
+          // recomputes this via handlePointerMove/handleOverlayPointerDown.
+          if (e.pointerType === "touch") return;
           setHoverIndex(null);
           setHoverY(null);
           setHoverVolumeY(null);
@@ -915,6 +922,7 @@ export function CandlestickChart({
         closeEditModal={closeEditModal}
         saveEditModal={saveEditModal}
         deleteEditingDrawing={deleteEditingDrawing}
+        duplicateEditingDrawing={duplicateEditingDrawing}
         valueAxisLabel={valueAxisLabel}
         defaultColor={defaultDrawingColor}
       />

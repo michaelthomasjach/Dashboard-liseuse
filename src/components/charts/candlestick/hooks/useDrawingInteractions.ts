@@ -53,6 +53,7 @@ export interface UseDrawingInteractionsArgs {
   brushPointsRef: MutableRef<DataPoint[]>;
   brushDrawingRef: MutableRef<boolean>;
   hoveredDrawingId: string | null;
+  hoveredDrawingIdRef: MutableRef<string | null>;
   updateHoveredDrawingId: (id: string | null) => void;
   setEditingId: (id: string | null) => void;
   setDraft: (d: TrendLineDrawing | null) => void;
@@ -63,6 +64,7 @@ export interface UseDrawingInteractionsArgs {
   dragLineRef: MutableRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>;
   isPanningYRef: MutableRef<boolean>;
   cancelDrawingTool: () => void;
+  finalizeElbowArrow: () => void;
   magnetSnapPrice: (rawIndex: number, rawY: number) => number;
   zoomRef: MutableRef<SVGRectElement | null>;
   zoomedXScale: ScaleLinear<number, number>;
@@ -123,6 +125,7 @@ export function useDrawingInteractions({
   brushPointsRef,
   brushDrawingRef,
   hoveredDrawingId,
+  hoveredDrawingIdRef,
   updateHoveredDrawingId,
   setEditingId,
   setDraft,
@@ -133,6 +136,7 @@ export function useDrawingInteractions({
   dragLineRef,
   isPanningYRef,
   cancelDrawingTool,
+  finalizeElbowArrow,
   magnetSnapPrice,
   zoomRef,
   zoomedXScale,
@@ -437,6 +441,14 @@ export function useDrawingInteractions({
   }
 
   function handleOverlayDoubleClick() {
+    // A double-click/double-tap while drawing an in-progress elbowArrow finishes it — the same
+    // touch-reachable finalize path re-tapping its own rail button now offers (see
+    // finalizeElbowArrow's own doc); this one doesn't require switching tools first.
+    if (activeTool === "elbowArrow") {
+      finalizeElbowArrow();
+      cancelDrawingTool();
+      return;
+    }
     if (activeTool) return;
     // Double-clicking a drawing edits it (existing behavior) — double-clicking empty plot space
     // resets the zoom instead, same gesture the axis strips already use for their own axis.
@@ -564,6 +576,64 @@ export function useDrawingInteractions({
     dragAxisRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
   }
+
+  // The crosshair/quick-add-badge/nearest-drawing computation shared between plain hover
+  // (handlePointerMove, continuously fired on mouse) and a touch tap's own pointerdown
+  // (handleOverlayPointerDown) — a stationary tap isn't guaranteed to fire a pointermove first on
+  // every mobile browser, so touch calls this directly on contact instead of only ever reacting
+  // to movement. `hitDistance` widens the whole-line hover/drag-body hit test below for a touch
+  // contact (see its own caller) — far less precise than a mouse pointer — without touching
+  // DRAWING_HIT_DISTANCE, mouse's own precision.
+  function updateHoverState(mouseX: number, mouseY: number, hitDistance: number) {
+    const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
+    setHoverIndex(index);
+    setHoverY(mouseY <= priceHeight ? mouseY : null);
+    // Bounded to volume's own [top, bottom) range (wherever it currently sits among the
+    // indicator panes — see volumeTop), not just a bare "> priceHeight" — without both bounds,
+    // hovering into an "own"-pane indicator (RSI/MACD/CHOP, which also satisfies mouseY >
+    // priceHeight) incorrectly kept showing the volume hover line/badge there too, since nothing
+    // distinguished "below the price section" from "specifically inside the volume pane".
+    setHoverVolumeY(
+      volumeVisible && !volumeCollapsed && mouseY > priceHeight + volumeTop && mouseY <= priceHeight + volumeTop + volumeHeight
+        ? mouseY - priceHeight - volumeTop
+        : null
+    );
+    // Same idea, generalized to whichever "own"-pane indicator (RSI/CHOP/MACD/fundamentals) the
+    // pointer is currently over — resolveValueAxisAtY already knows every pane's own bounds, so
+    // this only needs to filter its answer down to "an indicator, and it isn't collapsed" (a
+    // collapsed pane is just its own header strip, same reasoning as volumeCollapsed above).
+    if (mouseY > priceHeight) {
+      const valueAxis = resolveValueAxisAtY(mouseY);
+      const ind = valueAxis !== "price" && valueAxis !== "volume" ? ownPaneIndicators.find((i) => i.id === valueAxis) : undefined;
+      if (ind && !ind.paneCollapsed) {
+        setHoverIndicatorPaneId(ind.id);
+        setHoverIndicatorPaneY(mouseY - paneScaleAndOffset(ind.id).offset);
+      } else {
+        setHoverIndicatorPaneId(null);
+        setHoverIndicatorPaneY(null);
+      }
+    } else {
+      setHoverIndicatorPaneId(null);
+      setHoverIndicatorPaneY(null);
+    }
+
+    if (activeTool && pendingPoint) {
+      setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
+    } else if (!activeTool && visibleDrawings.length > 0) {
+      let closestId: string | null = null;
+      let closestDist = hitDistance;
+      const hitTestCtx: HitTestContext = { dims, plotBoundedHeight, priceHeight, zoomedXScale, zoomedPriceScale, indexForDate, pixelYForDrawing, overlayProjections };
+      for (const dr of visibleDrawings) {
+        const d = distanceToDrawing(dr, mouseX, mouseY, hitTestCtx);
+        if (d < closestDist) {
+          closestDist = d;
+          closestId = dr.id;
+        }
+      }
+      updateHoveredDrawingId(closestId);
+    }
+  }
+
   function handlePointerMove(e: React.PointerEvent<SVGRectElement>) {
     if (data.length === 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -640,53 +710,9 @@ export function useDrawingInteractions({
 
     if (isPanningYRef.current) return;
 
-    const index = Math.min(data.length - 1, Math.max(0, Math.round(zoomedXScale.invert(mouseX) - 0.5)));
-    setHoverIndex(index);
-    setHoverY(mouseY <= priceHeight ? mouseY : null);
-    // Bounded to volume's own [top, bottom) range (wherever it currently sits among the
-    // indicator panes — see volumeTop), not just a bare "> priceHeight" — without both bounds,
-    // hovering into an "own"-pane indicator (RSI/MACD/CHOP, which also satisfies mouseY >
-    // priceHeight) incorrectly kept showing the volume hover line/badge there too, since nothing
-    // distinguished "below the price section" from "specifically inside the volume pane".
-    setHoverVolumeY(
-      volumeVisible && !volumeCollapsed && mouseY > priceHeight + volumeTop && mouseY <= priceHeight + volumeTop + volumeHeight
-        ? mouseY - priceHeight - volumeTop
-        : null
-    );
-    // Same idea, generalized to whichever "own"-pane indicator (RSI/CHOP/MACD/fundamentals) the
-    // pointer is currently over — resolveValueAxisAtY already knows every pane's own bounds, so
-    // this only needs to filter its answer down to "an indicator, and it isn't collapsed" (a
-    // collapsed pane is just its own header strip, same reasoning as volumeCollapsed above).
-    if (mouseY > priceHeight) {
-      const valueAxis = resolveValueAxisAtY(mouseY);
-      const ind = valueAxis !== "price" && valueAxis !== "volume" ? ownPaneIndicators.find((i) => i.id === valueAxis) : undefined;
-      if (ind && !ind.paneCollapsed) {
-        setHoverIndicatorPaneId(ind.id);
-        setHoverIndicatorPaneY(mouseY - paneScaleAndOffset(ind.id).offset);
-      } else {
-        setHoverIndicatorPaneId(null);
-        setHoverIndicatorPaneY(null);
-      }
-    } else {
-      setHoverIndicatorPaneId(null);
-      setHoverIndicatorPaneY(null);
-    }
-
-    if (activeTool && pendingPoint) {
-      setPreviewPoint({ x: dateForIndex(zoomedXScale.invert(mouseX)), y: zoomedPriceScale.invert(mouseY) });
-    } else if (!activeTool && visibleDrawings.length > 0) {
-      let closestId: string | null = null;
-      let closestDist = DRAWING_HIT_DISTANCE;
-      const hitTestCtx: HitTestContext = { dims, plotBoundedHeight, priceHeight, zoomedXScale, zoomedPriceScale, indexForDate, pixelYForDrawing, overlayProjections };
-      for (const dr of visibleDrawings) {
-        const d = distanceToDrawing(dr, mouseX, mouseY, hitTestCtx);
-        if (d < closestDist) {
-          closestDist = d;
-          closestId = dr.id;
-        }
-      }
-      updateHoveredDrawingId(closestId);
-    }
+    // A touch contact is a much blunter instrument than a mouse pointer, so it gets a wider
+    // whole-line hit tolerance than DRAWING_HIT_DISTANCE alone would give a mouse.
+    updateHoverState(mouseX, mouseY, e.pointerType === "touch" ? DRAWING_HIT_DISTANCE * 2 : DRAWING_HIT_DISTANCE);
   }
 
   // When hovering a drawing, starts a "drag the whole line" gesture — d3-zoom already backs off
@@ -709,13 +735,27 @@ export function useDrawingInteractions({
       return;
     }
     if (activeTool) return;
-    if (hoveredDrawingId) {
+    // Touch has no hover: a stationary tap isn't guaranteed to fire a pointermove before this
+    // (mobile browsers vary), and even when it does, "hovering a drawing" has to already be true
+    // *before* this handler runs to reach the whole-body-drag branch below — there's simply
+    // nothing to have hovered yet on a first touch. Computing it fresh, right here, off the touch
+    // contact's own position is what makes tap-and-drag an existing line actually draggable on
+    // the very first touch instead of always falling through to a Y-pan. Reads back via the ref
+    // (not the `hoveredDrawingId` state param below) since updateHoverState's own setState call
+    // hasn't re-rendered this closure yet — hoveredDrawingIdRef is the one thing it updates
+    // synchronously (see its own doc in useDrawingState).
+    if (e.pointerType === "touch") {
+      const rect = e.currentTarget.getBoundingClientRect();
+      updateHoverState(e.clientX - rect.left, e.clientY - rect.top, DRAWING_HIT_DISTANCE * 2);
+    }
+    const hoveredId = e.pointerType === "touch" ? hoveredDrawingIdRef.current : hoveredDrawingId;
+    if (hoveredId) {
       // Locked: absorb the gesture instead of dragging the line OR falling through to Y-pan —
       // otherwise panning would shift the price scale under the (unmoved) line, breaking hit
       // testing at the original screen position. The drawing stays selectable/deletable/editable
       // (all driven by hover/double-click, untouched here), just not draggable.
       if (drawingsLocked) return;
-      const dr = drawings.find((d) => d.id === hoveredDrawingId);
+      const dr = drawings.find((d) => d.id === hoveredId);
       // Data-driven, same reasoning "locked" absorbs the gesture above — there's no coordinate
       // for a whole-body drag to shift (see the lineType's own doc comment), and falling through
       // to Y-pan here would have the same hit-testing-drifts-under-you problem "locked" avoids.

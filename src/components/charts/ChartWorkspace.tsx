@@ -159,7 +159,16 @@ export function ChartWorkspace({
     <div
       className={["lq-chart-workspace", className].filter(Boolean).join(" ")}
       style={{
-        gridTemplateColumns: `repeat(${columns}, 1fr)`,
+        // Custom properties, not gridTemplateColumns/gridTemplateRows directly — an inline style
+        // always wins the cascade over a stylesheet rule, which would leave .lq-chart-workspace's
+        // own narrow-viewport media query (see ChartWorkspace.css) unable to ever override it.
+        // The actual `grid-template-columns: repeat(var(--lq-workspace-columns), 1fr)` lives in
+        // that stylesheet instead, where the media query can win normally; `--lq-workspace-
+        // panels` is the *panel* count (not `rows`, which is always ≤2 by GRID_ROWS above) so
+        // that same media query can give a collapsed single column one explicit row per panel,
+        // stacked, instead of splitting only 2 rows' worth of height across up to 4 of them.
+        ["--lq-workspace-columns" as string]: columns,
+        ["--lq-workspace-panels" as string]: panels,
         // gridTemplateRows splits the 100vh budget evenly between the rows, and each panel below
         // gets `height: undefined` (see CandlestickChart's own useChartDimensions doc) so it
         // measures and fills its own row's actual share via ResizeObserver rather than a
