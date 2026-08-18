@@ -1,23 +1,21 @@
-import { Children, cloneElement, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { Children, cloneElement, useState, type ReactElement, type ReactNode } from "react";
 import type { CandlestickChartProps } from "./candlestick/interfaces/CandlestickChartProps.interface";
+import type { SymbolSearchCategory } from "./candlestick/interfaces/SymbolSearchCategory.interface";
+import type { SymbolSearchResult } from "./candlestick/interfaces/SymbolSearchResult.interface";
 import { useLinkGroups } from "./workspace/useLinkGroups";
 import { LinkGroupsModal } from "./workspace/LinkGroupsModal";
+import { WatchlistPanel } from "./workspace/WatchlistPanel";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
-import { Popover } from "../forms/Popover";
-import { WatchlistIcon, BellIcon, ChevronDownIcon } from "../icons";
+import { WatchlistIcon, BellIcon } from "../icons";
 import "./ChartWorkspace.css";
 
-/** One named list for the workspace's own docked watchlist tab (see `ChartWorkspaceProps.watchlists`). */
-export interface ChartWorkspaceWatchlist {
-  id: string;
-  /** Shown as the panel's own clickable title while this list is active. */
-  name: string;
-  /** Caller-supplied content for this specific list — same "structure only, caller owns the
-   *  content" shape `sidePanel` used to be (see `watchlists`' own doc for why that prop became
-   *  this one), just one list's worth of it at a time instead of the whole panel. */
-  content: ReactNode;
-}
+export type {
+  ChartWorkspaceWatchlist,
+  ChartWorkspaceWatchlistColumn,
+  ChartWorkspaceWatchlistRow,
+} from "./workspace/ChartWorkspaceWatchlist.interface";
+import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow } from "./workspace/ChartWorkspaceWatchlist.interface";
 
 /** Which of the docked panel's (up to) two tabs is currently showing — see `watchlists`/`alerts`. */
 export type ChartWorkspaceSidePanelTab = "watchlist" | "alerts";
@@ -70,12 +68,37 @@ export interface ChartWorkspaceProps {
    *  reason; set it here instead. More than one list gets a clickable name + caret in the panel's
    *  own header that opens a dropdown of every list to switch between (see
    *  `defaultActiveWatchlistId`) — a single list still gets the same clickable header, simply with
-   *  nothing else to switch to. Omit entirely (or pass an empty array) to skip the watchlist tab
-   *  altogether — its own rail icon only appears once there's at least one list to show. */
+   *  nothing else to switch to. The header also gets a "+" (opens the same `SymbolSearchModal`
+   *  shell `CandlestickChart`'s own symbol search uses, see `watchlistSymbolSearchResults`, to add
+   *  a row to whichever list is active) and a "…" (toggles which of a list's own optional
+   *  `columns` are currently shown, see `defaultVisibleColumnIds`). Omit entirely (or pass an
+   *  empty array) to skip the watchlist tab altogether — its own rail icon only appears once
+   *  there's at least one list to show. */
   watchlists?: ChartWorkspaceWatchlist[];
   /** Uncontrolled initial pick among `watchlists` (by id) — defaults to the first one. */
   defaultActiveWatchlistId?: string;
   onActiveWatchlistChange?: (id: string) => void;
+  /** Uncontrolled initial set of visible optional-column ids (see `ChartWorkspaceWatchlist.columns`)
+   *  — shared across every list rather than tracked per list (see that prop's own doc). Defaults
+   *  to every column, across every list, actually visible. */
+  defaultVisibleColumnIds?: string[];
+  onVisibleColumnsChange?: (ids: string[]) => void;
+  /** Results for the watchlist panel's own "+" (add a symbol) modal — same shape
+   *  `CandlestickChartProps.symbolSearchResults`/`onSymbolSearchChange` already use for the main
+   *  chart's own symbol search (a real app can likely feed both from the same source). Omit to
+   *  leave the modal's own results list empty regardless of what's typed into it. */
+  watchlistSymbolSearchResults?: SymbolSearchResult[];
+  onWatchlistSymbolSearchChange?: (query: string, category: SymbolSearchCategory) => void;
+  /** Fires when a result is picked from the "+" modal — the caller owns `watchlists` itself (see
+   *  its own doc), so this only reports "the user wants `result` added to list `watchlistId`";
+   *  updating that list's own `rows` (and giving the new row whatever `values` it should show) is
+   *  entirely up to whatever this does. */
+  onAddWatchlistSymbol?: (watchlistId: string, result: SymbolSearchResult) => void;
+  /** Fires when a watchlist row is clicked — same "which symbol should show now" role
+   *  `CandlestickChartProps.onSymbolSelect` already plays for the main chart's own symbol search.
+   *  What "opens in the candle chart" means in a multi-panel workspace (which panel gets it) is
+   *  entirely up to whatever this does with it. */
+  onWatchlistRowClick?: (row: ChartWorkspaceWatchlistRow, watchlistId: string) => void;
   /** Content for the docked panel's own "Alertes" tab, alongside `watchlists` — same "structure
    *  only, caller owns the content" shape. Omit entirely to skip the tab — its own rail icon only
    *  appears once this is set. */
@@ -114,6 +137,12 @@ export function ChartWorkspace({
   watchlists,
   defaultActiveWatchlistId,
   onActiveWatchlistChange,
+  defaultVisibleColumnIds,
+  onVisibleColumnsChange,
+  watchlistSymbolSearchResults,
+  onWatchlistSymbolSearchChange,
+  onAddWatchlistSymbol,
+  onWatchlistRowClick,
   alerts,
   defaultSidePanelOpen,
   onSidePanelOpenChange,
@@ -128,9 +157,13 @@ export function ChartWorkspace({
   const hasAlerts = alerts !== undefined;
   const [activeTab, setActiveTab] = useState<ChartWorkspaceSidePanelTab>(defaultSidePanelTab ?? (hasWatchlists ? "watchlist" : "alerts"));
   const [activeWatchlistId, setActiveWatchlistId] = useState(defaultActiveWatchlistId ?? watchlists?.[0]?.id);
-  const [watchlistMenuOpen, setWatchlistMenuOpen] = useState(false);
-  const watchlistTriggerRef = useRef<HTMLButtonElement>(null);
-  const activeWatchlist = watchlists?.find((w) => w.id === activeWatchlistId) ?? watchlists?.[0];
+  // Every column, across every list, visible by default — same "start showing everything, let the
+  // user narrow it down" reasoning `excludedYears` avoids for SeasonalityView's own years filter,
+  // just inverted (a whitelist here reads as the more natural default for "which columns" than an
+  // exclusion list would).
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<string>>(
+    new Set(defaultVisibleColumnIds ?? watchlists?.flatMap((w) => w.columns.map((c) => c.id)) ?? [])
+  );
 
   // Clicking whichever tab is already open collapses the panel (same "click the active one again
   // to close" convention CandlestickChart's own header toggle uses); clicking the *other* tab
@@ -150,7 +183,11 @@ export function ChartWorkspace({
   function selectWatchlist(id: string) {
     setActiveWatchlistId(id);
     onActiveWatchlistChange?.(id);
-    setWatchlistMenuOpen(false);
+  }
+
+  function changeVisibleColumns(ids: Set<string>) {
+    setVisibleColumnIds(ids);
+    onVisibleColumnsChange?.(Array.from(ids));
   }
 
   // Each panel's own last-reported real hover date (or null) — keyed by panel index, not a single
@@ -328,45 +365,32 @@ export function ChartWorkspace({
 
       {(hasWatchlists || hasAlerts) && sidePanelState.open && (
         <ChartSidePanel panelRef={sidePanelState.panelRef} widthPx={sidePanelState.widthPx} startResize={sidePanelState.startResize}>
-          {/* A minimal header of its own just for the active tab's own title — unlike a single
-              CandlestickChart, the workspace has no shared header of its own to host this in
-              (each panel has its own independent one instead), so the panel carries it directly.
-              Open/close/switch itself lives in the rail below instead of a button here. */}
-          <div className="lq-chart-workspace__side-panel-header">
-            {activeTab === "watchlist" && activeWatchlist ? (
-              <>
-                <button
-                  ref={watchlistTriggerRef}
-                  type="button"
-                  className="lq-chart__timeframe-trigger"
-                  onClick={() => setWatchlistMenuOpen((o) => !o)}
-                  aria-label={`Liste : ${activeWatchlist.name}`}
-                >
-                  {activeWatchlist.name}
-                  <ChevronDownIcon size={12} />
-                </button>
-                <Popover open={watchlistMenuOpen} onClose={() => setWatchlistMenuOpen(false)} anchorRef={watchlistTriggerRef} placement="bottom">
-                  <div className="lq-chart__tool-menu">
-                    {watchlists!.map((w) => (
-                      <button
-                        key={w.id}
-                        type="button"
-                        className={["lq-chart__tool-menu-option", w.id === activeWatchlist.id && "lq-chart__tool-menu-option--selected"]
-                          .filter(Boolean)
-                          .join(" ")}
-                        onClick={() => selectWatchlist(w.id)}
-                      >
-                        {w.name}
-                      </button>
-                    ))}
-                  </div>
-                </Popover>
-              </>
-            ) : (
-              <span className="lq-chart-workspace__side-panel-title">Alertes</span>
-            )}
-          </div>
-          {activeTab === "watchlist" ? activeWatchlist?.content : alerts}
+          {activeTab === "watchlist" && hasWatchlists ? (
+            <WatchlistPanel
+              watchlists={watchlists!}
+              activeWatchlistId={activeWatchlistId}
+              onSelectWatchlist={selectWatchlist}
+              visibleColumnIds={visibleColumnIds}
+              onVisibleColumnIdsChange={changeVisibleColumns}
+              onRowClick={onWatchlistRowClick}
+              symbolSearchResults={watchlistSymbolSearchResults}
+              onSymbolSearchChange={onWatchlistSymbolSearchChange}
+              onAddSymbol={onAddWatchlistSymbol}
+            />
+          ) : (
+            <>
+              {/* A minimal header of its own just for the tab's own title — unlike a single
+                  CandlestickChart, the workspace has no shared header of its own to host this in
+                  (each panel has its own independent one instead), so the panel carries it
+                  directly. Open/close/switch itself lives in the rail below instead of a button
+                  here. WatchlistPanel above renders this same header slot itself (it needs its
+                  own name+caret dropdown plus the +/… actions there, not just a plain title). */}
+              <div className="lq-chart-workspace__side-panel-header">
+                <span className="lq-chart-workspace__side-panel-title">Alertes</span>
+              </div>
+              {alerts}
+            </>
+          )}
         </ChartSidePanel>
       )}
 

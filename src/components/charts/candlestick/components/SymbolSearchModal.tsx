@@ -7,6 +7,11 @@ import type { TrendLineDrawing, OverlayDataPoint } from "../interfaces/TrendLine
 import { SYMBOL_SEARCH_CATEGORIES, defaultSymbolLogoColor } from "../symbolSearchCatalog";
 
 export interface SymbolSearchModalProps {
+  /** Default "Symbol search" (CandlestickChart's own usage) — override for a differently-purposed
+   *  reuse of this same search+category+results shell (see ChartWorkspace's own "add a symbol to
+   *  this watchlist" modal, which reuses this component with its own title and no favorites/
+   *  overlay affordances at all). */
+  title?: string;
   symbolSearchOpen: boolean;
   setSymbolSearchOpen: (open: boolean) => void;
   symbolSearchQuery: string;
@@ -14,8 +19,10 @@ export interface SymbolSearchModalProps {
   symbolSearchCategory: SymbolSearchCategory;
   setSymbolSearchCategory: (category: SymbolSearchCategory) => void;
   symbolSearchResults: SymbolSearchResult[] | undefined;
-  favoriteSymbolIds: string[];
-  toggleFavoriteSymbol: (id: string) => void;
+  /** The hover-revealed (always-visible once favorited) star button — omitted entirely, on both
+   *  props at once, for a reuse of this modal with no favorites concept of its own. */
+  favoriteSymbolIds?: string[];
+  toggleFavoriteSymbol?: (id: string) => void;
   onSymbolSelect: ((result: SymbolSearchResult) => void) | undefined;
   onAddSymbolOverlay: ((result: SymbolSearchResult) => OverlayDataPoint[] | Promise<OverlayDataPoint[]>) | undefined;
   symbolOverlays: TrendLineDrawing[];
@@ -24,12 +31,16 @@ export interface SymbolSearchModalProps {
   removeSymbolOverlay: (ticker: string) => void;
 }
 
-/** The "Symbol search" modal (opened by clicking `symbol` when `symbolSearch` is on): a search
- *  field, single-select category pills, and the results list — each row can be clicked to change
- *  the main symbol, starred as a favorite, or (when `onAddSymbolOverlay` is provided) added as a
- *  comparison overlay via its own hover-revealed "+" (a checkmark once active, a spinner while
- *  the caller's promise is in flight). */
+/** The "Symbol search" modal (opened by clicking `symbol` when `symbolSearch` is on, or reused
+ *  wholesale by ChartWorkspace's own "add a symbol to this watchlist" flow — see `title`): a
+ *  search field, single-select category pills, and the results list — each row can be clicked to
+ *  fire `onSymbolSelect` (its own meaning depends on the caller: change the main symbol, or add to
+ *  a watchlist), starred as a favorite (only when both `favoriteSymbolIds`/`toggleFavoriteSymbol`
+ *  are provided), or (when `onAddSymbolOverlay` is provided) added as a comparison overlay via its
+ *  own hover-revealed "+" (a checkmark once active, a spinner while the caller's promise is in
+ *  flight). */
 export function SymbolSearchModal({
+  title = "Symbol search",
   symbolSearchOpen,
   setSymbolSearchOpen,
   symbolSearchQuery,
@@ -48,7 +59,7 @@ export function SymbolSearchModal({
 }: SymbolSearchModalProps) {
   if (!symbolSearchOpen) return null;
   return (
-    <Modal open onClose={() => setSymbolSearchOpen(false)} title="Symbol search" footer={null}>
+    <Modal open onClose={() => setSymbolSearchOpen(false)} title={title} footer={null}>
       <TextField
         placeholder="Rechercher un symbole…"
         value={symbolSearchQuery}
@@ -94,7 +105,7 @@ export function SymbolSearchModal({
           <p className="lq-chart__symbol-search-empty">Aucun résultat.</p>
         ) : (
           (symbolSearchResults ?? []).map((result, i) => {
-            const isFavorite = favoriteSymbolIds.includes(result.id);
+            const isFavorite = favoriteSymbolIds?.includes(result.id) ?? false;
             const isOverlayActive = symbolOverlays.some((d) => d.overlaySymbol === result.ticker);
             const isOverlayLoading = addingOverlaySymbols.has(result.ticker);
             return (
@@ -150,7 +161,10 @@ export function SymbolSearchModal({
                 )}
                 {/* Invisible until the row is hovered/focused (see charts-shared.css) — unless
                     already favorited, in which case it stays visible so favorited results
-                    can actually be told apart from a glance, not just while hovering. */}
+                    can actually be told apart from a glance, not just while hovering. Only
+                    rendered when the caller actually supports favorites (both props set) — same
+                    "no half-working button" reasoning as onAddSymbolOverlay's own "+" above. */}
+                {favoriteSymbolIds && toggleFavoriteSymbol && (
                 <button
                   type="button"
                   className={[
@@ -164,6 +178,7 @@ export function SymbolSearchModal({
                 >
                   <StarIcon size={14} fill={isFavorite ? "currentColor" : "none"} />
                 </button>
+                )}
               </div>
             );
           })

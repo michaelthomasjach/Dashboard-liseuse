@@ -25,7 +25,13 @@ export { ChartEventTooltip } from "./EventTooltip";
 export type { ChartEventTooltipProps } from "./EventTooltip";
 
 export { ChartWorkspace } from "./ChartWorkspace";
-export type { ChartWorkspaceProps } from "./ChartWorkspace";
+export type {
+  ChartWorkspaceProps,
+  ChartWorkspaceWatchlist,
+  ChartWorkspaceWatchlistColumn,
+  ChartWorkspaceWatchlistRow,
+  ChartWorkspaceSidePanelTab,
+} from "./ChartWorkspace";
 
 export { SeasonalityView } from "./SeasonalityView";
 export type { SeasonalityViewProps } from "./SeasonalityView";

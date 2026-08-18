@@ -60,6 +60,7 @@ export {
   StarIcon,
   ArrowRightIcon,
   PlusIcon,
+  MoreHorizontalIcon,
   CopyIcon,
   CursorArrowIcon,
   TrendLineIcon,

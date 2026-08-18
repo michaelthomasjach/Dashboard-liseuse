@@ -446,6 +446,15 @@ export const PlusIcon = (props: IconProps) => (
   </IconBase>
 );
 
+/** Three filled dots — "more options" (ChartWorkspace's own watchlist column-visibility toggle). */
+export const MoreHorizontalIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <circle cx="5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="12" cy="12" r="1.6" fill="currentColor" stroke="none" />
+    <circle cx="19" cy="12" r="1.6" fill="currentColor" stroke="none" />
+  </IconBase>
+);
+
 export const CopyIcon = (props: IconProps) => (
   <IconBase {...props}>
     <rect x="8.5" y="8.5" width="12" height="12" />

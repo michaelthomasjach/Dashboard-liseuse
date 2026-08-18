@@ -11,7 +11,7 @@ import {
   type OverlayDataPoint,
   type CustomIndicatorDef,
 } from "./CandlestickChart";
-import { ChartWorkspace } from "./ChartWorkspace";
+import { ChartWorkspace, type ChartWorkspaceWatchlist } from "./ChartWorkspace";
 import { generateCandles, generateCandlesByTimeframe, type MockTimeframeKey } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -203,55 +203,44 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
   }));
 }
 
-// Placeholder content for `ChartWorkspace`'s own `watchlists`/`alerts` — both props take
-// arbitrary ReactNode per entry (see their own doc on ChartWorkspaceProps), the component has no
-// opinion on what goes there. A short ticker-row list is just the easiest thing to visually
-// verify the panel's own resize/collapse/tab-switching mechanics against, echoing the reference
-// screenshot this feature was built from without the story needing a real positions/watchlist
-// data source of its own.
-function WatchlistRows({ rows }: { rows: { ticker: string; price: string; change: string; up: boolean }[] }) {
-  return (
-    <div style={{ fontSize: 12.5 }}>
-      {rows.map((r) => (
-        <div key={r.ticker} style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid var(--lq-color-border-subtle)" }}>
-          <span>{r.ticker}</span>
-          <span>{r.price}</span>
-          <span style={{ color: r.up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{r.change}</span>
-        </div>
-      ))}
-    </div>
-  );
+// Placeholder data for `ChartWorkspace`'s own `watchlists` — the library only owns the table's
+// own chrome (header, +/… actions, hover/click), row *values* are always caller-supplied content
+// (see ChartWorkspaceWatchlist's own doc), just the easiest thing to visually verify the panel's
+// own resize/collapse/tab-switching/row-click mechanics against without the story needing a real
+// positions/watchlist data source of its own.
+const WATCHLIST_COLUMNS = [
+  { id: "price", label: "Prix" },
+  { id: "change", label: "Variation" },
+];
+
+function watchlistRow(id: string, ticker: string, price: string, change: string, up: boolean) {
+  return {
+    id,
+    ticker,
+    values: { price, change: <span style={{ color: up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{change}</span> },
+  };
 }
 
 // Two named lists — demonstrates the workspace's own name+caret dropdown switcher (see
 // ChartWorkspace's own `watchlists` doc); "Liste de surveillance" is the default name a brand new
 // list gets, "Forex" stands in for a second, user-created one.
-const DEMO_WATCHLISTS = [
+const DEMO_WATCHLISTS: ChartWorkspaceWatchlist[] = [
   {
     id: "surveillance",
     name: "Liste de surveillance",
-    content: (
-      <WatchlistRows
-        rows={[
-          { ticker: "MSFT", price: "412.88", change: "+1.24%", up: true },
-          { ticker: "NVDA", price: "128.47", change: "+2.61%", up: true },
-          { ticker: "AAPL", price: "231.05", change: "-0.38%", up: false },
-          { ticker: "BTCUSD", price: "64 210", change: "-1.02%", up: false },
-        ]}
-      />
-    ),
+    columns: WATCHLIST_COLUMNS,
+    rows: [
+      watchlistRow("msft", "MSFT", "412.88", "+1.24%", true),
+      watchlistRow("nvda", "NVDA", "128.47", "+2.61%", true),
+      watchlistRow("aapl", "AAPL", "231.05", "-0.38%", false),
+      watchlistRow("btcusd", "BTCUSD", "64 210", "-1.02%", false),
+    ],
   },
   {
     id: "forex",
     name: "Forex",
-    content: (
-      <WatchlistRows
-        rows={[
-          { ticker: "EURUSD", price: "1.0842", change: "+0.12%", up: true },
-          { ticker: "XAUUSD", price: "2 415.30", change: "-0.44%", up: false },
-        ]}
-      />
-    ),
+    columns: WATCHLIST_COLUMNS,
+    rows: [watchlistRow("eurusd", "EURUSD", "1.0842", "+0.12%", true), watchlistRow("xauusd", "XAUUSD", "2 415.30", "-0.44%", false)],
   },
 ];
 
@@ -269,6 +258,13 @@ export const AllFeatures: Story = {
     const [results, setResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
     const [currentSymbol, setCurrentSymbol] = useState("MSFT");
     const [displayMode, setDisplayMode] = useState<ChartDisplayMode>("candle");
+    // The caller owns watchlist *data* (see ChartWorkspaceWatchlist's own doc) — this story's own
+    // stand-in for whatever real positions/watchlist store an app would have, updated here purely
+    // by `onAddWatchlistSymbol` below (the library itself never mutates it).
+    const [watchlists, setWatchlists] = useState<ChartWorkspaceWatchlist[]>(DEMO_WATCHLISTS);
+    // Its own results list, independent of the main chart's own `results` above — a real app
+    // could well feed both symbol-search modals from the same source, but they don't have to.
+    const [watchlistSearchResults, setWatchlistSearchResults] = useState<SymbolSearchResult[]>(MOCK_SYMBOL_DB);
     // Storybook's own global decorator (see .storybook/preview.tsx) wraps every story in 32px of
     // padding, unrelated to ChartWorkspace itself — harmless normally, but it's exactly what
     // would keep the workspace (sized to fill 100% of the viewport on its own, see
@@ -280,7 +276,19 @@ export const AllFeatures: Story = {
             template gets cloned into every panel (see ChartWorkspace's own doc on why), so a
             panel-level docked panel would render once per panel instead of once for the whole
             workspace. */}
-        <ChartWorkspace defaultPanels={1} watchlists={DEMO_WATCHLISTS} alerts={<AlertsPlaceholder />}>
+        <ChartWorkspace
+          defaultPanels={1}
+          watchlists={watchlists}
+          watchlistSymbolSearchResults={watchlistSearchResults}
+          onWatchlistSymbolSearchChange={(query, category) => setWatchlistSearchResults(filterMockSymbols(query, category, []))}
+          onAddWatchlistSymbol={(watchlistId, result) =>
+            setWatchlists((prev) =>
+              prev.map((w) => (w.id === watchlistId ? { ...w, rows: [...w.rows, { id: result.id, ticker: result.ticker, values: {} }] } : w))
+            )
+          }
+          onWatchlistRowClick={(row) => setCurrentSymbol(row.ticker)}
+          alerts={<AlertsPlaceholder />}
+        >
           <CandlestickChart
             data={ALL_FEATURES_TIMEFRAME_DATA[timeframe as MockTimeframeKey] ?? ALL_FEATURES_DATASET}
             symbol={currentSymbol}

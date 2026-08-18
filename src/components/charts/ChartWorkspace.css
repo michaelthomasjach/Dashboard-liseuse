@@ -55,22 +55,94 @@
    the active tab's own title (watchlist name + caret, or a plain "Alertes" label), since the
    workspace (unlike a single CandlestickChart) has no shared header of its own to host it in
    otherwise. Open/close/switch itself lives in `.lq-chart-workspace__side-rail` below instead of
-   a button here. */
+   a button here. Vertical padding only, deliberately — `.lq-chart__side-panel-content` (this
+   header's own parent) already insets everything horizontally by `var(--lq-space-3)`; adding
+   *this* row's own horizontal padding on top of that left its own trigger button sitting further
+   right than the watchlist rows below it, which have no horizontal padding of their own and so
+   start flush at that same shared inset. */
 .lq-chart-workspace__side-panel-header {
   display: flex;
   align-items: center;
-  padding: var(--lq-space-2);
+  padding: var(--lq-space-2) 0;
   border-bottom: 1px solid var(--lq-color-border-subtle);
 }
 
 /* The "Alertes" tab's own header — same slot `.lq-chart__timeframe-trigger` fills for the
    watchlist tab, just plain text since there's nothing to switch between (yet — see
-   `ChartWorkspaceProps.alerts`' own doc: no alert spec exists yet, only the panel shell). */
+   `ChartWorkspaceProps.alerts`' own doc: no alert spec exists yet, only the panel shell). No
+   horizontal padding of its own for the same reason `.lq-chart-workspace__side-panel-header`
+   itself has none — flush with the shared content inset instead of doubling up on it. */
 .lq-chart-workspace__side-panel-title {
-  padding: 4px 8px;
+  padding: 4px 0;
   font-size: 0.75rem;
   font-weight: 700;
   color: var(--lq-color-text);
+}
+
+/* The watchlist header's own "+" (add a symbol)/"…" (toggle columns) pair — pushed to the row's
+   own right edge via the auto margin, same trick `.lq-chart__tools-rail-bottom-button` uses to
+   pin itself to the bottom of a column instead of a dedicated `justify-content` on the row. */
+.lq-chart-workspace__watchlist-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+
+/* One row of the watchlist table — a real `<button>` (see WatchlistPanel.tsx) for the actual data
+   rows so the whole row is one click target, but this same class also styles the column-header
+   row above them (a plain, non-interactive `<div>` — see `--header` below), hence resetting
+   button chrome here rather than assuming a real button's own defaults. */
+.lq-chart-workspace__watchlist-row {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+  width: 100%;
+  padding: 6px 0;
+  font-family: inherit;
+  font-size: 0.75rem;
+  color: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--lq-color-border-subtle);
+  cursor: pointer;
+}
+
+.lq-chart-workspace__watchlist-row:hover {
+  background-color: var(--lq-color-hover);
+}
+
+/* The column-labels row above the data rows — same column layout as a real row (so labels line
+   up with their own values below) but muted and non-interactive, since it isn't one. */
+.lq-chart-workspace__watchlist-row--header {
+  padding-top: 0;
+  padding-bottom: 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--lq-color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  cursor: default;
+}
+
+.lq-chart-workspace__watchlist-row--header:hover {
+  background-color: transparent;
+}
+
+.lq-chart-workspace__watchlist-ticker {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lq-chart-workspace__watchlist-cell {
+  flex: 0 0 68px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
 
 /* The always-visible rail that opens/closes/switches the docked panel (`watchlists`/`alerts`) —
