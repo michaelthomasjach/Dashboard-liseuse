@@ -15,6 +15,13 @@ export interface Indicator {
   fastPeriod?: number;
   slowPeriod?: number;
   signalPeriod?: number;
+  /** "macd" only — shows/hides the histogram bars (the MACD/signal lines stay either way).
+   *  Default true. */
+  macdShowHistogram?: boolean;
+  /** "macd" only — histogram bar color above/below zero. Defaults to the chart's own
+   *  up/down colors. */
+  macdHistogramUpColor?: string;
+  macdHistogramDownColor?: string;
   /** "zigzag" only — minimum swing size, as a percentage move from the last confirmed pivot,
    *  before the next one confirms. Default 5. */
   zigzagDeviation?: number;

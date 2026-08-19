@@ -15,6 +15,7 @@ import type { TimeframeEntry } from "../interfaces/TimeframeEntry.interface";
 import type { ChartTemplate } from "../interfaces/ChartTemplate.interface";
 import { CHART_DISPLAY_MODES, type ChartDisplayModeDef } from "../chartModes";
 import { isTimeframeGroup } from "../timeframes";
+import type { BarRangeOption, BarRangeValue } from "../hooks/useBarRangeSelection";
 import { TemplateControls } from "./TemplateControls";
 
 export interface ChartHeaderProps {
@@ -26,6 +27,12 @@ export interface ChartHeaderProps {
   setTfOpen: Dispatch<SetStateAction<boolean>>;
   tfAnchorRef: RefObject<HTMLButtonElement>;
   currentTimeframeLabel: string | null;
+  barRangeOptions: BarRangeOption[];
+  selectedRange: BarRangeValue | null;
+  rangeOpen: boolean;
+  setRangeOpen: Dispatch<SetStateAction<boolean>>;
+  rangeAnchorRef: RefObject<HTMLButtonElement>;
+  applyRange: (range: BarRangeValue) => void;
   displayModeAnchorRef: RefObject<HTMLButtonElement>;
   displayModeOpen: boolean;
   setDisplayModeOpen: Dispatch<SetStateAction<boolean>>;
@@ -72,6 +79,12 @@ export function ChartHeader({
   setTfOpen,
   tfAnchorRef,
   currentTimeframeLabel,
+  barRangeOptions,
+  selectedRange,
+  rangeOpen,
+  setRangeOpen,
+  rangeAnchorRef,
+  applyRange,
   displayModeAnchorRef,
   displayModeOpen,
   setDisplayModeOpen,
@@ -148,6 +161,26 @@ export function ChartHeader({
                   </button>
                 )
               )}
+            </div>
+          </Popover>
+          <button ref={rangeAnchorRef} type="button" className="lq-chart__timeframe-trigger" onClick={() => setRangeOpen((o) => !o)}>
+            {selectedRange ?? "Plage"}
+            <ChevronDownIcon size={12} />
+          </button>
+          <Popover open={rangeOpen} onClose={() => setRangeOpen(() => false)} anchorRef={rangeAnchorRef} placement="bottom">
+            <div className="lq-chart__timeframe-menu">
+              {barRangeOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  className={["lq-chart__timeframe-option", opt.value === selectedRange && "lq-chart__timeframe-option--selected"]
+                    .filter(Boolean)
+                    .join(" ")}
+                  onClick={() => applyRange(opt.value)}
+                >
+                  {opt.label}
+                </button>
+              ))}
             </div>
           </Popover>
         </>

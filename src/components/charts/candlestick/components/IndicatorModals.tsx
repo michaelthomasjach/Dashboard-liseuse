@@ -439,6 +439,37 @@ export function IndicatorModals({
               />
             </div>
           )}
+          {indicatorDraft.kind === "macd" && (
+            <>
+              <Checkbox
+                label="Afficher l'histogramme"
+                checked={indicatorDraft.macdShowHistogram ?? true}
+                onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, macdShowHistogram: checked })}
+              />
+              {(indicatorDraft.macdShowHistogram ?? true) && (
+                <div className="lq-chart__edit-drawing-row">
+                  <div className="lq-field">
+                    <label className="lq-field__label">Histogramme (hausse)</label>
+                    <input
+                      type="color"
+                      className="lq-chart__color-input"
+                      value={indicatorDraft.macdHistogramUpColor ?? "#26a69a"}
+                      onChange={(e) => setIndicatorDraft({ ...indicatorDraft, macdHistogramUpColor: e.target.value })}
+                    />
+                  </div>
+                  <div className="lq-field">
+                    <label className="lq-field__label">Histogramme (baisse)</label>
+                    <input
+                      type="color"
+                      className="lq-chart__color-input"
+                      value={indicatorDraft.macdHistogramDownColor ?? "#ef5350"}
+                      onChange={(e) => setIndicatorDraft({ ...indicatorDraft, macdHistogramDownColor: e.target.value })}
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
           {indicatorDraft.kind === "zigzag" && (
             <>
               <NumberField

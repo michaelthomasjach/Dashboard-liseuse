@@ -414,8 +414,8 @@ export const LargeDataset: Story = {
         2 500 bougies (~10 ans de séance). Les bougies, le volume, le crosshair et les lignes de dessin sont rendus
         sur un seul <code>canvas</code> plutôt qu'un nœud SVG par bougie — zoom/pan/dessin restent fluides à cette
         échelle. Molette ou glisser pour naviguer dans l'historique. S'ouvre sur les 500 dernières bougies par défaut
-        (`initialVisibleCandles`, appliqué une seule fois au montage) plutôt que tout l'historique dézoomé — clic sur
-        "Réinitialiser le zoom" pour voir les 2 500.
+        (`initialVisibleCandles`, appliqué une seule fois au montage) — "Réinitialiser le zoom" revient à cette même
+        vue initiale (pas tout l'historique dézoomé) ; pour voir les 2 500, dézoomer manuellement.
       </p>
       <CandlestickChart data={MEDIUM_DATASET} symbol="GOOGL" drawingTools timeframes={TIMEFRAMES} timeframe="1d" height={STORY_HEIGHT} />
     </div>

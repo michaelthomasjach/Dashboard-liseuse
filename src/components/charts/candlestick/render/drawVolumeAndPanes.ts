@@ -197,16 +197,20 @@ export function drawVolumeAndPanes(ctx: CanvasRenderingContext2D, params: Render
         ctx.stroke();
         ctx.restore();
 
-        for (const p of macdPoints) {
-          if (p.value.histogram === null) continue;
-          const x = zoomedXScale(p.i + 0.5);
-          const y = scale(p.value.histogram);
-          const up = p.value.histogram >= 0;
-          ctx.globalAlpha = isEink ? (up ? 0.25 : 0.45) : 0.6;
-          ctx.fillStyle = isEink ? colorText : up ? colorUp : colorDown;
-          ctx.fillRect(x - candleWidth / 2, Math.min(y, zeroY), Math.max(candleWidth, 1), Math.abs(y - zeroY));
+        if (ind.macdShowHistogram !== false) {
+          const histUpColor = ind.macdHistogramUpColor ?? colorUp;
+          const histDownColor = ind.macdHistogramDownColor ?? colorDown;
+          for (const p of macdPoints) {
+            if (p.value.histogram === null) continue;
+            const x = zoomedXScale(p.i + 0.5);
+            const y = scale(p.value.histogram);
+            const up = p.value.histogram >= 0;
+            ctx.globalAlpha = isEink ? (up ? 0.25 : 0.45) : 0.6;
+            ctx.fillStyle = isEink ? colorText : up ? histUpColor : histDownColor;
+            ctx.fillRect(x - candleWidth / 2, Math.min(y, zeroY), Math.max(candleWidth, 1), Math.abs(y - zeroY));
+          }
+          ctx.globalAlpha = 1;
         }
-        ctx.globalAlpha = 1;
 
         ctx.strokeStyle = color;
         ctx.lineWidth = 1.5;

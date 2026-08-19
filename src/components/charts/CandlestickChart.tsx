@@ -14,6 +14,7 @@ import { useThemePaletteTick } from "./candlestick/hooks/useThemePaletteTick";
 import { useDefaultDrawingColor } from "./candlestick/hooks/useDefaultDrawingColor";
 import { useAddLineHandlers } from "./candlestick/hooks/useAddLineHandlers";
 import { useZoomAndScales } from "./candlestick/hooks/useZoomAndScales";
+import { useBarRangeSelection } from "./candlestick/hooks/useBarRangeSelection";
 import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScales";
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
@@ -340,10 +341,8 @@ export function CandlestickChart({
     yTransform,
     setYTransform,
     setYManuallyAdjusted,
-    xScale,
-    zoomedXScale,
-    indexForDate,
-    dateForIndex,
+    xScale, zoomedXScale,
+    indexForDate, dateForIndex,
     visibleRange,
     symbolOverlays,
     compareMode,
@@ -361,7 +360,7 @@ export function CandlestickChart({
     xAxisWheelRef,
     yAxisWheelRef,
     isZoomed,
-    resetZoom,
+    resetZoom, setVisibleCandleCount,
     resetYAxis,
     candleWidth,
     dateTickValues,
@@ -381,6 +380,8 @@ export function CandlestickChart({
   });
 
   const { effectiveHoverIndex, effectiveHovered, effectiveHoverY } = useHoverSync({ data, hoverIndex, indexForDate, dateForIndex, syncedHoverDate, onHoverDateChange, hoverY, zoomedPriceScale, clampToPriceAxis, syncedHoverPrice, onHoverPriceChange });
+
+  const barRangeState = useBarRangeSelection({ data, timeframe, setVisibleCandleCount });
 
   usePaneDragReorder({
     draggingPaneId,
@@ -640,6 +641,7 @@ export function CandlestickChart({
           setTfOpen={setTfOpen}
           tfAnchorRef={tfAnchorRef}
           currentTimeframeLabel={currentTimeframeLabel}
+          {...barRangeState}
           displayModeAnchorRef={displayModeAnchorRef}
           displayModeOpen={displayModeOpen}
           setDisplayModeOpen={setDisplayModeOpen}
