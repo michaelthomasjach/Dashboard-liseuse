@@ -183,6 +183,17 @@ export function categoryOfTool(type: DrawingToolType): DrawingToolCategory {
   return DRAWING_TOOL_CATEGORIES.find((c) => c.tools.some((t) => t.type === type)) ?? DRAWING_TOOL_CATEGORIES[0];
 }
 
+// Bare-type lookup `drawingToolMeta` below builds on — also useful on its own wherever only a
+// `DrawingToolType` is available and no actual `TrendLineDrawing` exists yet (e.g. the floating
+// toolbar's own bell button, while a tool is merely active with nothing placed yet).
+export function toolMetaForType(toolId: DrawingToolType): { label: string; icon: typeof TrendLineIcon } {
+  for (const category of DRAWING_TOOL_CATEGORIES) {
+    const tool = category.tools.find((t) => t.type === toolId);
+    if (tool) return tool;
+  }
+  return DRAWING_TOOL_CATEGORIES[0].tools[0];
+}
+
 // Which tool would have created a drawing shaped like this one — `lineType` covers most of them
 // directly, but a plain two-point line (undefined `lineType`) is either "Ligne de tendance" or
 // "Ligne fléchée" depending on arrowLeft/arrowRight, since neither of those two tools sets a
@@ -196,12 +207,7 @@ export function drawingToolMeta(dr: TrendLineDrawing): { label: string; icon: ty
   if (dr.lineType === "symbolOverlay") {
     return { label: [dr.overlaySymbol, dr.overlaySymbolName].filter(Boolean).join(" · ") || "Symbole", icon: OverlayBadgeIcon };
   }
-  const toolId: DrawingToolType = dr.lineType ?? (dr.arrowLeft || dr.arrowRight ? "arrowLine" : "trendline");
-  for (const category of DRAWING_TOOL_CATEGORIES) {
-    const tool = category.tools.find((t) => t.type === toolId);
-    if (tool) return tool;
-  }
-  return DRAWING_TOOL_CATEGORIES[0].tools[0];
+  return toolMetaForType(dr.lineType ?? (dr.arrowLeft || dr.arrowRight ? "arrowLine" : "trendline"));
 }
 
 // A drawing's own `text` (set from its edit modal's Texte tab) if it has one, otherwise falls

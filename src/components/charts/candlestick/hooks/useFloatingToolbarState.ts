@@ -1,6 +1,7 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
+import { toolMetaForType, drawingToolMeta } from "../drawingCatalog";
 import { useFloatingToolbarPosition } from "./useFloatingToolbarPosition";
 
 export interface UseFloatingToolbarStateArgs {
@@ -67,6 +68,20 @@ export function useFloatingToolbarState({
     startDrag: startFloatingToolbarDrag,
   } = useFloatingToolbarPosition({ resetKey: toolbarResetKey, plotWidth });
 
+  // The bell button's own target info — the selected drawing's real lineType if one exists,
+  // else the bare active tool (nothing placed yet). "fibonacci"/"fibonacciExtension" are the only
+  // tool types AlertCreateModal treats differently (a level picker instead of the standard
+  // crossing options — see its own doc); every other tool/drawing shares the same options.
+  const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const toolMeta = selectedDrawing ? drawingToolMeta(selectedDrawing) : activeTool ? toolMetaForType(activeTool) : null;
+  const targetLineType = selectedDrawing ? selectedDrawing.lineType : activeTool;
+  const alertTarget = {
+    drawingId: selectedDrawingId,
+    isFibonacciTarget: targetLineType === "fibonacci" || targetLineType === "fibonacciExtension",
+    fibonacciExtension: targetLineType === "fibonacciExtension",
+    targetLabel: toolMeta?.label ?? "",
+  };
+
   return {
     showFloatingToolbar,
     showToolbarStyleControls,
@@ -77,5 +92,9 @@ export function useFloatingToolbarState({
     floatingToolbarPosition,
     floatingToolbarRef,
     startFloatingToolbarDrag,
+    alertModalOpen,
+    openAlertModal: () => setAlertModalOpen(true),
+    closeAlertModal: () => setAlertModalOpen(false),
+    alertTarget,
   };
 }

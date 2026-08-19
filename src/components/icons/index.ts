@@ -101,4 +101,7 @@ export {
   InsidePitchforkIcon,
   PencilIcon,
   TextIcon,
+  CrossingIcon,
+  GreaterThanIcon,
+  LessThanIcon,
 } from "./icons";

@@ -553,6 +553,35 @@
   border-color: var(--lq-color-accent);
 }
 
+/* AlertCreateModal — opened from the floating drawing toolbar's own bell button. */
+.lq-alert-modal__title {
+  display: flex;
+  align-items: baseline;
+  gap: var(--lq-space-1);
+}
+
+.lq-alert-modal__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-3);
+}
+
+/* The trigger dropdown's own parenthetical description ("se déclenche quand…") — reduced
+   opacity, same "secondary, de-emphasized text" convention used throughout this library rather
+   than a separate muted color token. */
+.lq-alert-modal__option-desc {
+  opacity: 0.6;
+}
+
+/* IconDropdown's own trigger button content (icon + label) — Select's own .lq-select__value is
+   plain text-only, this adds just enough to lay out an optional icon beside it without touching
+   that shared class for every other consumer of it. */
+.lq-alert-modal__trigger-value {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .lq-chart__icon-button--active:hover {
   color: var(--lq-color-accent-contrast);
   border-color: var(--lq-color-accent);

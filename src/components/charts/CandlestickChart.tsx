@@ -99,6 +99,8 @@ export function CandlestickChart({
   drawingTools = false,
   defaultDrawings,
   onDrawingsChange,
+  onCreateAlert,
+  alertSoundOptions,
   showIndicators = false,
   defaultIndicators,
   onIndicatorsChange, customIndicators,
@@ -260,15 +262,11 @@ export function CandlestickChart({
   const defaultDrawingColor = useDefaultDrawingColor(ref, themeTick);
 
   const {
-    showFloatingToolbar,
-    showToolbarStyleControls,
-    toolbarColor,
-    toolbarTextColor,
-    toolbarStrokeWidth,
+    showFloatingToolbar, showToolbarStyleControls,
+    toolbarColor, toolbarTextColor, toolbarStrokeWidth,
     updateDrawingOrDefaultStyle,
-    floatingToolbarPosition,
-    floatingToolbarRef,
-    startFloatingToolbarDrag,
+    floatingToolbarPosition, floatingToolbarRef, startFloatingToolbarDrag,
+    alertModalOpen, openAlertModal, closeAlertModal, alertTarget,
   } = useFloatingToolbarState({
     activeTool,
     selectedDrawingId,
@@ -892,7 +890,7 @@ export function CandlestickChart({
             onColorChange={(color) => updateDrawingOrDefaultStyle({ color })}
             onTextColorChange={(textColor) => updateDrawingOrDefaultStyle({ textColor })}
             onStrokeWidthChange={(strokeWidth) => updateDrawingOrDefaultStyle({ strokeWidth })}
-            onOpenAlert={() => {}}
+            onOpenAlert={openAlertModal}
           />
         )}
       </div>
@@ -983,6 +981,11 @@ export function CandlestickChart({
         addingOverlaySymbols={addingOverlaySymbols}
         handleAddSymbolOverlay={handleAddSymbolOverlay}
         removeSymbolOverlay={removeSymbolOverlay}
+        open={alertModalOpen} onClose={closeAlertModal}
+        symbol={symbol} timeframe={timeframe}
+        {...alertTarget}
+        overlayIndicators={overlayIndicators} indicatorLabel={indicatorLabel}
+        soundOptions={alertSoundOptions} onCreate={onCreateAlert}
       />
       </div>
 

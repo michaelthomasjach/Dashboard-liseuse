@@ -853,3 +853,25 @@ export const TextIcon = (props: IconProps) => (
     <path d="M12 6v13" />
   </IconBase>
 );
+
+/** The alert modal's own "crossing" condition — two lines crossing, generic direction. */
+export const CrossingIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M4 6 20 18" />
+    <path d="M20 6 4 18" />
+  </IconBase>
+);
+
+/** The alert modal's own "greater than" condition. */
+export const GreaterThanIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M6 5 18 12 6 19" />
+  </IconBase>
+);
+
+/** The alert modal's own "less than" condition. */
+export const LessThanIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M18 5 6 12 18 19" />
+  </IconBase>
+);

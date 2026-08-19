@@ -11,6 +11,7 @@ import type { ChartEvent } from "./ChartEvent.interface";
 import type { FundamentalDataPoint } from "./FundamentalDataPoint.interface";
 import type { SymbolSearchResult } from "./SymbolSearchResult.interface";
 import type { SymbolSearchCategory } from "./SymbolSearchCategory.interface";
+import type { ChartAlertDraft } from "./ChartAlertDraft.interface";
 
 export interface CandlestickChartProps {
   data: Candle[];
@@ -55,6 +56,15 @@ export interface CandlestickChartProps {
   defaultDrawings?: TrendLineDrawing[];
   /** Fires whenever a drawing is added, moved, or edited. */
   onDrawingsChange?: (drawings: TrendLineDrawing[]) => void;
+  /** Fires when "Créer" is clicked in the alert-creation modal (opened from the floating drawing
+   *  toolbar's own bell button, itself shown while a drawing tool is active or an existing
+   *  drawing is selected). The library only ever collects the form into a `ChartAlertDraft` and
+   *  hands it here — same "caller owns the data" stance as `drawings`/`indicators` — it never
+   *  stores, evaluates, or fires an alert itself. */
+  onCreateAlert?: (alert: ChartAlertDraft) => void;
+  /** Options for the alert modal's own "Son" (sound) picker — this library ships no audio assets,
+   *  so it's purely a label picker, never actually played. Defaults to a small built-in list. */
+  alertSoundOptions?: { value: string; label: string }[];
   /** Shows a header button that opens the technical-indicator picker (SMA, EMA, WMA…) and the
    *  active-indicator legend in the plot's top-left corner. Default false. */
   showIndicators?: boolean;
