@@ -1,6 +1,12 @@
 .lq-popover {
   position: fixed;
-  z-index: 1200;
+  /* Above Modal's own 2000 (see Modal.css) — a Popover portals to document.body, so opening one
+     from inside a Modal (any Select/DatePicker/hand-rolled dropdown built on this) put it as a
+     *sibling* of the modal overlay, not a descendant, and its old z-index (1200) then rendered it
+     entirely behind that overlay: technically open, but invisible and unclickable. Still below
+     Notification's own "modal" variant (2100, see Notification.css) — that one's deliberately the
+     topmost layer regardless of what else is open. */
+  z-index: 2050;
   background-color: var(--lq-color-panel);
   border: 1px solid var(--lq-color-border);
   border-radius: var(--lq-radius-md);
