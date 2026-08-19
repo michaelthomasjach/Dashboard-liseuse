@@ -14,6 +14,7 @@ import type { IndicatorChandelierPoint } from "./interfaces/IndicatorChandelierP
 import type { IndicatorValue } from "./interfaces/IndicatorValue.interface";
 import type { Indicator } from "./interfaces/Indicator.interface";
 import type { CustomIndicatorDef } from "./interfaces/CustomIndicatorDef.interface";
+import type { OverlayDataPoint } from "./interfaces/TrendLineDrawing.interface";
 import { isFundamentalKind } from "./indicatorCatalog";
 
 /** Forward-fills a sparse, date-keyed series (quarterly reports, any other "one number per
@@ -45,6 +46,48 @@ export function computeFundamentalValues(data: Candle[], fundamentals: Fundament
 /** A `CustomIndicatorDef`'s own series, forward-filled the same way — see `forwardFillSeries`. */
 export function computeCustomIndicatorValues(data: Candle[], def: CustomIndicatorDef): (number | null)[] {
   return forwardFillSeries(data, def.data);
+}
+
+/** Rolling Pearson correlation coefficient between the main series' own close and a second
+ *  symbol's own close, over `period`-sized windows — +1 the two move together, -1 they move
+ *  opposite, 0 no linear relationship. The second symbol's own (sparser, possibly
+ *  differently-dated) series is forward-filled onto `data`'s own index space first, same as every
+ *  other date-keyed series above; a window with any still-unfilled (`null`, before that symbol's
+ *  own history starts) point, or with zero variance in either series, has no defined coefficient. */
+export function computeCorrelationValues(data: Candle[], correlationData: OverlayDataPoint[] | undefined, period: number): (number | null)[] {
+  const result: (number | null)[] = new Array(data.length).fill(null);
+  if (!correlationData || correlationData.length === 0) return result;
+  const aligned = forwardFillSeries(data, correlationData.map((p) => ({ date: p.date, value: p.value })));
+  for (let i = period - 1; i < data.length; i++) {
+    let sumX = 0;
+    let sumY = 0;
+    let ok = true;
+    for (let j = i - period + 1; j <= i; j++) {
+      const y = aligned[j];
+      if (y === null) {
+        ok = false;
+        break;
+      }
+      sumX += data[j].close;
+      sumY += y;
+    }
+    if (!ok) continue;
+    const meanX = sumX / period;
+    const meanY = sumY / period;
+    let cov = 0;
+    let varX = 0;
+    let varY = 0;
+    for (let j = i - period + 1; j <= i; j++) {
+      const dx = data[j].close - meanX;
+      const dy = (aligned[j] as number) - meanY;
+      cov += dx * dy;
+      varX += dx * dx;
+      varY += dy * dy;
+    }
+    if (varX === 0 || varY === 0) continue;
+    result[i] = Math.max(-1, Math.min(1, cov / Math.sqrt(varX * varY)));
+  }
+  return result;
 }
 
 // Each returns one value per candle (null during the warm-up period before enough history has
@@ -628,6 +671,8 @@ export function computeIndicatorValues(
       return computeChandelierExitValues(data, period, indicator.chandelierMultiplier ?? 3, indicator.chandelierUseClose ?? true);
     case "adx":
       return computeADXValues(data, period);
+    case "correlation":
+      return computeCorrelationValues(data, indicator.correlationData, period);
     case "parabolicSar":
       return computeParabolicSARValues(data, indicator.sarStep ?? 0.02, indicator.sarMax ?? 0.2);
     case "gaps":

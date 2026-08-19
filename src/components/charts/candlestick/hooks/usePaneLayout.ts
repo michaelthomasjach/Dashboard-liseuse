@@ -159,6 +159,14 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     commitIndicators([...indicators, { id: `indicator-${indicatorIdRef.current++}`, kind: "custom", period: 0, customData: def }]);
   }
 
+  // A lower-level primitive addIndicator/addCustomIndicator above don't need themselves (both
+  // already know their own full shape up front) — for a kind like "correlation" that only knows
+  // what it's adding *after* an async step elsewhere (see useCorrelationSetup), this is the one
+  // piece of "give it a fresh id and commit it" logic worth sharing rather than duplicating.
+  function appendIndicator(partial: Omit<Indicator, "id">) {
+    commitIndicators([...indicators, { id: `indicator-${indicatorIdRef.current++}`, ...partial }]);
+  }
+
   function openIndicatorSettings(id: string) {
     const indicator = indicators.find((i) => i.id === id);
     if (!indicator) return;
@@ -369,6 +377,7 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     loadIndicatorLayout,
     addIndicator,
     addCustomIndicator,
+    appendIndicator,
     openIndicatorSettings,
     closeIndicatorSettings,
     saveIndicatorSettings,

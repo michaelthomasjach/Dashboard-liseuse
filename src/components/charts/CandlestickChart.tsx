@@ -19,6 +19,7 @@ import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
 import { useDrawingToolMenuAnchors } from "./candlestick/hooks/useDrawingToolMenuAnchors";
 import { useFloatingToolbarState } from "./candlestick/hooks/useFloatingToolbarState";
+import { useCorrelationSetup } from "./candlestick/hooks/useCorrelationSetup";
 import { useRenderCandlestickChart } from "./candlestick/hooks/useRenderCandlestickChart";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartHeader } from "./candlestick/components/ChartHeader";
@@ -303,22 +304,19 @@ export function CandlestickChart({
     resetPaneYAxis,
     commitIndicators,
     loadIndicatorLayout,
-    addIndicator, addCustomIndicator,
-    openIndicatorSettings,
-    closeIndicatorSettings,
+    addIndicator, addCustomIndicator, appendIndicator,
+    openIndicatorSettings, closeIndicatorSettings,
     saveIndicatorSettings,
-    deleteEditingIndicator,
-    toggleIndicatorHidden,
+    deleteEditingIndicator, toggleIndicatorHidden,
     removeIndicator,
     volumeVisible, volumeCollapsed,
-    startPaneResize,
-    reorderPanesRef,
+    startPaneResize, reorderPanesRef,
     ownPaneIndicators,
     indicatorPaneHeights, indicatorPaneTops,
-    volumeTop,
-    allPanesOrder,
+    volumeTop, allPanesOrder,
     volumeHeight, priceHeight,
   } = usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolume, plotBoundedHeight });
+  const correlationSetup = useCorrelationSetup({ appendIndicator, onAddSymbolOverlay, onSymbolSearchChange });
 
   const {
     templates,
@@ -914,6 +912,7 @@ export function CandlestickChart({
       )}
 
       <ChartModals
+        {...correlationSetup}
         draft={draft}
         setDraft={setDraft}
         editModalTab={editModalTab}

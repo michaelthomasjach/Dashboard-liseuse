@@ -1,5 +1,6 @@
 import type { IndicatorKind } from "./IndicatorKind.interface";
 import type { CustomIndicatorDef } from "./CustomIndicatorDef.interface";
+import type { OverlayDataPoint } from "./TrendLineDrawing.interface";
 
 export interface Indicator {
   id: string;
@@ -66,6 +67,14 @@ export interface Indicator {
    *  `customIndicators` or the array identity changes — same reasoning `Indicator` never re-reads
    *  its own settings from a live prop anywhere else either. */
   customData?: CustomIndicatorDef;
+  /** "correlation" only — the second symbol its rolling coefficient is computed against, and that
+   *  symbol's own fetched price series (same `OverlayDataPoint[]` shape/fetch path — see
+   *  `CandlestickChartProps.onAddSymbolOverlay` — the "symbolOverlay" drawing type already uses to
+   *  compare an instrument against the main one). Carried directly on the indicator, same
+   *  "self-contained, not a second lookup" reasoning `customData` above already follows. */
+  correlationSymbol?: string;
+  correlationSymbolName?: string;
+  correlationData?: OverlayDataPoint[];
   /** CSS color. Defaults to a color cycled from a small built-in palette. Ignored by "supertrend"
    *  (always the chart's own up/down colors, so its trend-flip reads consistently with candle
    *  coloring) and "parabolicSar" (same reasoning — its dots are colored per-point by which side

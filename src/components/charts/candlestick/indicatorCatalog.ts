@@ -244,6 +244,20 @@ export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     pane: "price",
     category: "Tendance",
   },
+  // The one built-in kind that can't just be added with catalog defaults — it needs a second
+  // symbol's own price series first (see Indicator.correlationSymbol/correlationData's own doc),
+  // so picking it opens a setup modal instead of calling addIndicator directly (see
+  // IndicatorModals.tsx's own picker special-case). `defaultPeriod` still applies once it's added.
+  {
+    kind: "correlation",
+    label: "Coefficient de corrélation",
+    shortLabel: "Corr",
+    defaultPeriod: 20,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "own",
+    category: "Statistiques",
+  },
   // Fundamentals: reported-period figures (see `FundamentalDataPoint`), not computed from `data`
   // at all — `hasPeriod`/`hasStdDev` both false, same as VWAP/MACD, since there's no rolling
   // window to configure on a raw reported number.
@@ -364,6 +378,7 @@ export function indicatorLabel(indicator: Indicator): string {
   if (indicator.kind === "chandelierExit") return `${entry.shortLabel}(${indicator.period},${indicator.chandelierMultiplier ?? 3})`;
   if (indicator.kind === "parabolicSar") return `${entry.shortLabel}(${indicator.sarStep ?? 0.02},${indicator.sarMax ?? 0.2})`;
   if (indicator.kind === "gaps") return `${entry.shortLabel}(${indicator.gapsMinPercent ?? 0.1}%)`;
+  if (indicator.kind === "correlation") return `${entry.shortLabel}(${indicator.correlationSymbol ?? "?"})`;
   if (indicator.kind === "pivotPoints") {
     const typeLabel = { classic: "Classic", fibonacci: "Fibonacci", woodie: "Woodie", camarilla: "Camarilla" }[indicator.pivotType ?? "classic"];
     const periodLabel = { daily: "J", weekly: "S", monthly: "M" }[indicator.pivotPeriod ?? "weekly"];

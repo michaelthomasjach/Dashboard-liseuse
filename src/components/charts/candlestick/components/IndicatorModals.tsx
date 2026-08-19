@@ -19,6 +19,10 @@ export interface IndicatorModalsProps {
   showVolume: boolean;
   setVolumePaneState: (state: "expanded" | "collapsed" | "hidden") => void;
   addIndicator: (entry: IndicatorCatalogEntry) => void;
+  /** Opens the "Confirm Inputs"-style setup modal instead — the picker's own special-case for
+   *  "correlation" (see CorrelationSetupModal's own doc), the one built-in kind that can't just
+   *  be added with catalog defaults the way every other one is. */
+  openCorrelationSetup: () => void;
   /** Caller-supplied indicators (see CandlestickChartProps.customIndicators) — merged into the
    *  picker alongside the built-in catalog, grouped by their own `section`. */
   customIndicators: CustomIndicatorDef[] | undefined;
@@ -60,6 +64,7 @@ export function IndicatorModals({
   showVolume,
   setVolumePaneState,
   addIndicator,
+  openCorrelationSetup,
   customIndicators,
   addCustomIndicator,
   indicatorsManagerOpen,
@@ -163,7 +168,13 @@ export function IndicatorModals({
               type PickerOption = { key: string; label: string; category: string; pane: "price" | "own"; onSelect: () => void };
               const builtinOptions: PickerOption[] = INDICATOR_CATALOG.filter(
                 (entry) => entry.label.toLowerCase().includes(query) || entry.shortLabel.toLowerCase().includes(query)
-              ).map((entry) => ({ key: entry.kind, label: entry.label, category: entry.category, pane: entry.pane, onSelect: () => addIndicator(entry) }));
+              ).map((entry) => ({
+                key: entry.kind,
+                label: entry.label,
+                category: entry.category,
+                pane: entry.pane,
+                onSelect: () => (entry.kind === "correlation" ? openCorrelationSetup() : addIndicator(entry)),
+              }));
               const customOptions: PickerOption[] = (customIndicators ?? [])
                 .filter((def) => def.label.toLowerCase().includes(query) || (def.shortLabel ?? "").toLowerCase().includes(query))
                 .map((def) => ({

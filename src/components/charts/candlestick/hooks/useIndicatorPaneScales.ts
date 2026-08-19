@@ -81,6 +81,8 @@ export function useIndicatorPaneScales({
       const height = indicatorPaneHeights[idx];
       if (ind.kind === "rsi" || ind.kind === "chop" || ind.kind === "adx") {
         scales[ind.id] = d3.scaleLinear().domain([0, 100]).range([height, 0]);
+      } else if (ind.kind === "correlation") {
+        scales[ind.id] = d3.scaleLinear().domain([-1, 1]).range([height, 0]);
       } else if (ind.kind === "macd") {
         const points = (visibleIndicators.find((v) => v.indicator.id === ind.id)?.points ?? []) as { i: number; value: IndicatorMACD }[];
         let lo = 0;
