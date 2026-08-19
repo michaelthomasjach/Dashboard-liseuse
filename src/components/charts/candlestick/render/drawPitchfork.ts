@@ -51,6 +51,25 @@ export function drawPitchforkDrawings(ctx: CanvasRenderingContext2D, params: Ren
     }
     ctx.fill();
 
+    // "A"/"B"/"C" next to each of the 3 points (P0/P1/P2, the same click order every variant
+    // shares — see pitchforkGeometry.ts) — matches the standard Andrews' Pitchfork reference
+    // diagrams this tool is modeled on, where the handle/width-pair points are always labeled
+    // that way. Offset up-right of each dot so the label reads clear of both the marker itself
+    // and whichever line passes closest through it.
+    ctx.save();
+    ctx.font = `700 11px ${fontFamily}`;
+    ctx.fillStyle = lineColor;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    for (const [label, p] of [
+      ["A", p0],
+      ["B", p1],
+      ["C", p2],
+    ] as const) {
+      ctx.fillText(label, p.x + 6, p.y - 6);
+    }
+    ctx.restore();
+
     drawDrawingText(ctx, dr, p0.x, p0.y, p1.x, p1.y, lineColor, fontFamily);
   }
 }

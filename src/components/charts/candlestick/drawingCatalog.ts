@@ -61,13 +61,15 @@ export const MULTI_POINT_TOOLS: Partial<Record<DrawingToolType, { extraPoints: n
   // paired with point 1 to derive the neckline — see drawHeadShoulders.ts), 6 (Épaule droite), 7
   // (the pattern's own confirmation point — below the neckline there confirms the breakout).
   headShoulders: { extraPoints: 5, labels: ["Point 1", "Épaule gauche", "Creux 1", "Tête", "Creux 2", "Épaule droite", "Point 7"] },
-  // The 3 pitchfork points: P0 (x1/y1) is the "manche" (handle) every variant's own median starts
-  // from or targets; P1/P2 (x2/y2, extraPoints[0]) are the two points the parallel tine lines pass
-  // through, unchanged across all 4 variants (see pitchforkGeometry.ts).
-  pitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
-  schiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
-  modifiedSchiffPitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
-  insidePitchfork: { extraPoints: 1, labels: ["Manche", "Point 1", "Point 2"] },
+  // The 3 pitchfork points — labeled A/B/C to match the standard Andrews' Pitchfork reference
+  // diagrams (and the same lettering drawPitchfork.ts itself now draws next to each point on the
+  // chart). A (x1/y1) is the handle every variant's own median starts from or targets; B/C (x2/y2,
+  // extraPoints[0]) are the two points the parallel tine lines pass through, unchanged across all
+  // 4 variants (see pitchforkGeometry.ts).
+  pitchfork: { extraPoints: 1, labels: ["A", "B", "C"] },
+  schiffPitchfork: { extraPoints: 1, labels: ["A", "B", "C"] },
+  modifiedSchiffPitchfork: { extraPoints: 1, labels: ["A", "B", "C"] },
+  insidePitchfork: { extraPoints: 1, labels: ["A", "B", "C"] },
   // Listed here *only* for these labels — same "edit-modal labels only, placement is entirely
   // custom" reasoning disjointChannel's own doc above already explains. x1/y1 = Point de départ
   // (Current), x2/y2 = Max, extraPoints[0] = Min — both Max and Min are first *derived*
