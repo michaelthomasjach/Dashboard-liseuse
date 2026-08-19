@@ -8,7 +8,7 @@ import type { ChartDimensions } from "../../internal/useChartDimensions";
 import type { Candle } from "../interfaces/Candle.interface";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { DrawingToolType } from "../interfaces/DrawingToolType.interface";
-import { MAX_EMPTY_FRACTION, AXIS_BADGE_HALF_HEIGHT, MAX_DATE_TICKS } from "../constants";
+import { MAX_EMPTY_FRACTION, AXIS_BADGE_HALF_HEIGHT, MAX_DATE_TICKS, MIN_DATE_TICK_SPACING_PX } from "../constants";
 import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, type PriceBrick } from "../chartModes";
 
 export interface UseZoomAndScalesArgs {
@@ -431,17 +431,37 @@ export function useZoomAndScales({
 
   // Candle indices (offset .5 to land mid-slot, matching every candle's own cx) the date axis
   // should actually draw a tick at — thinned to at most MAX_DATE_TICKS regardless of how many
-  // candles are currently visible, so labels never overlap into unreadable clutter at low zoom.
+  // candles are currently visible, so labels never overlap into unreadable clutter at low zoom,
+  // *and* further thinned to whatever actually fits dims.boundedWidth at MIN_DATE_TICK_SPACING_PX
+  // per label — MAX_DATE_TICKS alone assumes a full-width chart; a narrower one (a split-screen
+  // panel, a docked side panel eating into the grid) needs fewer ticks long before it needs zero,
+  // or the same fixed count just overlaps into unreadable clutter at a different cause than the
+  // one this was already thinning for.
+  //
+  // Spaced from zoomedXScale's own *unclamped* domain (i0/i1 below), not visibleRange (which
+  // clamps both ends to [0, data.length]) — panned into the reserved past/future empty space
+  // (see MAX_EMPTY_FRACTION), that clamped range can be far narrower than what's actually on
+  // screen, e.g. a domain of [2200, 2900] with only 2500 real candles: clamping *before* spacing
+  // ticks out would cram all of them into however much of dims.boundedWidth that first ~43% of
+  // the domain happens to occupy, overlapping into unreadable clutter even with few enough ticks
+  // to otherwise fit — the same visual symptom as too many ticks, different actual cause. Instead,
+  // step through the real (unclamped) domain — keeping every tick's spacing correct relative to
+  // the pixels it actually maps to via zoomedXScale — and only *then* drop whichever land outside
+  // real data, rather than narrowing the range first and evenly spacing what's left of it.
   const dateTickValues = useMemo(() => {
-    const start = Math.max(0, visibleRange.start);
-    const end = Math.min(data.length, visibleRange.end);
-    const count = end - start;
-    if (count <= 0) return [];
-    const step = Math.max(1, Math.ceil(count / MAX_DATE_TICKS));
+    const [i0, i1] = zoomedXScale.domain();
+    const domainCount = i1 - i0;
+    if (domainCount <= 0 || data.length === 0) return [];
+    const maxTicksForWidth = Math.max(2, Math.floor(dims.boundedWidth / MIN_DATE_TICK_SPACING_PX));
+    const maxTicks = Math.min(MAX_DATE_TICKS, maxTicksForWidth);
+    const step = Math.max(1, Math.ceil(domainCount / maxTicks));
     const values: number[] = [];
-    for (let i = start; i < end; i += step) values.push(i + 0.5);
+    for (let i = Math.floor(i0); i < i1; i += step) {
+      const value = i + 0.5;
+      if (value >= 0 && value < data.length) values.push(value);
+    }
     return values;
-  }, [visibleRange, data.length]);
+  }, [zoomedXScale, data.length, dims.boundedWidth]);
 
   return {
     transform,

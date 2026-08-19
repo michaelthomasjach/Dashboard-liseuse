@@ -27,6 +27,12 @@ export const AXIS_HANDLE_FRACTION_Y = 0.25;
 /** Upper bound on how many date labels the bottom axis shows at once, regardless of how many
  *  candles are actually in view — matches BarChart/DeltaChart's own categorical-axis throttle. */
 export const MAX_DATE_TICKS = 12;
+/** Minimum pixel width reserved per date label before another tick is allowed to share the axis
+ *  with it — see dateTickValues' own width-aware cap. A plain candle count alone (MAX_DATE_TICKS)
+ *  can't account for how much horizontal room is actually available; a narrow split-screen panel
+ *  squeezing the same 12 labels a full-width chart would show into a fraction of the space is
+ *  exactly what overlapped them into unreadable clutter. */
+export const MIN_DATE_TICK_SPACING_PX = 80;
 export const DEFAULT_DRAWING_COLOR = "#6c87c9";
 // Stable reference (not a fresh `[]` every render) for `visibleDrawings` to fall back to while
 // drawings are hidden — avoids retriggering effects/memos keyed on it purely from array identity.
