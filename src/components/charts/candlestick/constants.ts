@@ -4,6 +4,11 @@ import type { TrendLineDrawing } from "./interfaces/TrendLineDrawing.interface";
 export const DEFAULT_MARGIN: Partial<ChartMargin> = { top: 0, right: 72, bottom: 24, left: 0 };
 /** Screen-space distance (px) under which the pointer counts as "hovering" a drawn line. */
 export const DRAWING_HIT_DISTANCE = 8;
+/** Screen-space distance (px) a pointer can move between down and up while still counting as a
+ *  plain click rather than a drag — see useDrawingInteractions' own handleOverlayPointerUp,
+ *  which selects the drawing on a click but leaves an actual body-drag alone (already handled by
+ *  the commitDrawings calls in handlePointerMove). */
+export const CLICK_DRAG_THRESHOLD = 4;
 /** Width of the drawing-tools rail. Added to the left margin so the plot/axes never draw
  *  under it — the rail gets its own reserved strip instead of overlaying the chart. */
 export const TOOLS_RAIL_WIDTH = 40;

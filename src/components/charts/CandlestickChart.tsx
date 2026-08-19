@@ -1,8 +1,7 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
 import * as d3 from "d3";
 import { useChartDimensions } from "./internal/useChartDimensions";
 import { useFullscreen } from "./internal/useFullscreen";
-import { renderCandlestickChart } from "./candlestick/render/renderChart";
 import { useSymbolSearchState } from "./candlestick/hooks/useSymbolSearchState";
 import { useChartEvents } from "./candlestick/hooks/useChartEvents";
 import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
@@ -19,6 +18,8 @@ import { useIndicatorPaneScales } from "./candlestick/hooks/useIndicatorPaneScal
 import { useDrawingState } from "./candlestick/hooks/useDrawingState";
 import { useDrawingInteractions } from "./candlestick/hooks/useDrawingInteractions";
 import { useDrawingToolMenuAnchors } from "./candlestick/hooks/useDrawingToolMenuAnchors";
+import { useFloatingToolbarState } from "./candlestick/hooks/useFloatingToolbarState";
+import { useRenderCandlestickChart } from "./candlestick/hooks/useRenderCandlestickChart";
 import { useSidePanel } from "./candlestick/hooks/useSidePanel";
 import { ChartHeader } from "./candlestick/components/ChartHeader";
 import { ChartSidePanel } from "./candlestick/components/ChartSidePanel";
@@ -27,10 +28,8 @@ import { ChartLegend } from "./candlestick/components/ChartLegend";
 import { PaneHeaders } from "./candlestick/components/PaneHeaders";
 import { ChartCanvasOverlay } from "./candlestick/components/ChartCanvasOverlay";
 import { ChartHoverBadges } from "./candlestick/components/ChartHoverBadges";
-import { DrawingEditModal } from "./candlestick/components/DrawingEditModal";
-import { IndicatorModals } from "./candlestick/components/IndicatorModals";
-import { ChartSettingsModals } from "./candlestick/components/ChartSettingsModals";
-import { SymbolSearchModal } from "./candlestick/components/SymbolSearchModal";
+import { FloatingDrawingToolbar } from "./candlestick/components/FloatingDrawingToolbar";
+import { ChartModals } from "./candlestick/components/ChartModals";
 import { ChartEventTooltip } from "./EventTooltip";
 import { SeasonalityView } from "./SeasonalityView";
 import "./charts-shared.css";
@@ -184,6 +183,10 @@ export function CandlestickChart({
     setDraft,
     editModalTab,
     setEditModalTab,
+    selectedDrawingId,
+    setSelectedDrawingId,
+    defaultDrawingStyle,
+    setDefaultDrawingStyle,
     addingOverlaySymbols,
     dragEndpointRef,
     dragAxisRef,
@@ -255,6 +258,27 @@ export function CandlestickChart({
 
   const themeTick = useThemePaletteTick(ref);
   const defaultDrawingColor = useDefaultDrawingColor(ref, themeTick);
+
+  const {
+    showFloatingToolbar,
+    showToolbarStyleControls,
+    toolbarColor,
+    toolbarTextColor,
+    toolbarStrokeWidth,
+    updateDrawingOrDefaultStyle,
+    floatingToolbarPosition,
+    floatingToolbarRef,
+    startFloatingToolbarDrag,
+  } = useFloatingToolbarState({
+    activeTool,
+    selectedDrawingId,
+    drawings,
+    commitDrawings,
+    defaultDrawingStyle,
+    setDefaultDrawingStyle,
+    defaultDrawingColor,
+    plotWidth: dims.boundedWidth,
+  });
 
   const {
     indicators,
@@ -464,6 +488,7 @@ export function CandlestickChart({
     drawings,
     commitDrawings,
     drawingIdRef,
+    defaultDrawingStyle,
     activeTool,
     setActiveTool,
     pendingPoint,
@@ -482,6 +507,7 @@ export function CandlestickChart({
     hoveredDrawingId,
     hoveredDrawingIdRef,
     updateHoveredDrawingId,
+    setSelectedDrawingId,
     setEditingId,
     setDraft,
     setEditModalTab,
@@ -513,87 +539,60 @@ export function CandlestickChart({
     setXTransformAnimated,
   });
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const wrapper = ref.current;
-    if (!canvas || !wrapper) return;
-    renderCandlestickChart(canvas, wrapper, {
-      dims,
-      plotBoundedHeight,
-      visible,
-      zoomedXScale,
-      zoomedPriceScale,
-      candleWidth,
-      chartDisplayMode,
-      heikinAshiCandles,
-      renkoBricks,
-      lineBreakBricks,
-      tpoProfile,
-      data,
-      visibleRange,
-      upColorOverride,
-      downColorOverride,
-      volumeUpColorOverride,
-      volumeDownColorOverride,
-      volumeVisible,
-      volumeCollapsed,
-      zoomedVolumeScale,
-      volumeHeight,
-      volumeTop,
-      priceHeight,
-      ownPaneIndicators,
-      indicatorPaneHeights,
-      indicatorPaneTops,
-      zoomedOwnPaneScales,
-      indicators,
-      overlayProjections,
-      symbolOverlays,
-      hovered: effectiveHovered,
-      hoverY: effectiveHoverY,
-      hoverVolumeY,
-      hoverIndicatorPaneId,
-      hoverIndicatorPaneY,
-      hoverIndex: effectiveHoverIndex,
-      visibleDrawings,
-      hoveredDrawingId,
-      activeTool,
-      pendingPoint,
-      previewPoint,
-      pendingSecondPoint,
-      pendingExtraPoints,
-      brushPreview,
-      measurePoints,
-      livePrice,
-      visibleIndicators,
-      indexForDate, futureZoneVisible,
-    });
-  }, [
-    visible, zoomedXScale,
-    zoomedPriceScale, candleWidth,
-    chartDisplayMode, heikinAshiCandles,
-    renkoBricks, lineBreakBricks,
-    tpoProfile, data,
-    visibleRange, upColorOverride,
-    downColorOverride, volumeUpColorOverride,
-    volumeDownColorOverride, volumeVisible,
-    volumeCollapsed, zoomedVolumeScale,
-    volumeHeight, volumeTop,
-    priceHeight, ownPaneIndicators,
-    indicatorPaneHeights, indicatorPaneTops,
-    zoomedOwnPaneScales, indicators,
-    overlayProjections, symbolOverlays,
-    effectiveHovered, effectiveHoverY,
-    hoverVolumeY, hoverIndicatorPaneId,
-    hoverIndicatorPaneY, effectiveHoverIndex,
-    visibleDrawings, hoveredDrawingId,
-    activeTool, pendingPoint,
-    previewPoint, pendingSecondPoint,
-    pendingExtraPoints, brushPreview,
-    measurePoints, livePrice,
-    visibleIndicators, indexForDate, futureZoneVisible,
-    dims, plotBoundedHeight,
-    themeTick, ref,
-  ]);
+  useRenderCandlestickChart({
+    canvasRef,
+    wrapperRef: ref,
+    themeTick,
+    dims,
+    plotBoundedHeight,
+    visible,
+    zoomedXScale,
+    zoomedPriceScale,
+    candleWidth,
+    chartDisplayMode,
+    heikinAshiCandles,
+    renkoBricks,
+    lineBreakBricks,
+    tpoProfile,
+    data,
+    visibleRange,
+    upColorOverride,
+    downColorOverride,
+    volumeUpColorOverride,
+    volumeDownColorOverride,
+    volumeVisible,
+    volumeCollapsed,
+    zoomedVolumeScale,
+    volumeHeight,
+    volumeTop,
+    priceHeight,
+    ownPaneIndicators,
+    indicatorPaneHeights,
+    indicatorPaneTops,
+    zoomedOwnPaneScales,
+    indicators,
+    overlayProjections,
+    symbolOverlays,
+    hovered: effectiveHovered,
+    hoverY: effectiveHoverY,
+    hoverVolumeY,
+    hoverIndicatorPaneId,
+    hoverIndicatorPaneY,
+    hoverIndex: effectiveHoverIndex,
+    visibleDrawings,
+    hoveredDrawingId,
+    activeTool,
+    pendingPoint,
+    previewPoint,
+    pendingSecondPoint,
+    pendingExtraPoints,
+    brushPreview,
+    measurePoints,
+    livePrice,
+    visibleIndicators,
+    indexForDate,
+    futureZoneVisible,
+  });
 
   // `ref` always lands on .lq-chart__main (never the outer .lq-chart directly) in every return
   // path here — useChartDimensions' own ResizeObserver effect doesn't re-run on a ref retarget
@@ -881,6 +880,21 @@ export function CandlestickChart({
           setEventModalOpen={setEventModalOpen}
           setActiveEventStack={setActiveEventStack}
         />
+        {showFloatingToolbar && (
+          <FloatingDrawingToolbar
+            position={floatingToolbarPosition}
+            toolbarRef={floatingToolbarRef}
+            startDrag={startFloatingToolbarDrag}
+            showStyleControls={showToolbarStyleControls}
+            color={toolbarColor}
+            textColor={toolbarTextColor}
+            strokeWidth={toolbarStrokeWidth}
+            onColorChange={(color) => updateDrawingOrDefaultStyle({ color })}
+            onTextColorChange={(textColor) => updateDrawingOrDefaultStyle({ textColor })}
+            onStrokeWidthChange={(strokeWidth) => updateDrawingOrDefaultStyle({ strokeWidth })}
+            onOpenAlert={() => {}}
+          />
+        )}
       </div>
       )}
 
@@ -901,7 +915,7 @@ export function CandlestickChart({
         />
       )}
 
-      <DrawingEditModal
+      <ChartModals
         draft={draft}
         setDraft={setDraft}
         editModalTab={editModalTab}
@@ -912,9 +926,6 @@ export function CandlestickChart({
         duplicateEditingDrawing={duplicateEditingDrawing}
         valueAxisLabel={valueAxisLabel}
         defaultColor={defaultDrawingColor}
-      />
-
-      <IndicatorModals
         indicatorPickerOpen={indicatorPickerOpen}
         setIndicatorPickerOpen={setIndicatorPickerOpen}
         indicatorSearchQuery={indicatorSearchQuery}
@@ -930,22 +941,16 @@ export function CandlestickChart({
         volumeVisible={volumeVisible}
         visibleDrawings={visibleDrawings}
         setEditingId={setEditingId}
-        setDraft={setDraft}
-        setEditModalTab={setEditModalTab}
         commitDrawings={commitDrawings}
         drawings={drawings}
         openIndicatorSettings={openIndicatorSettings}
         removeIndicator={removeIndicator}
-        setVolumeSettingsOpen={setVolumeSettingsOpen}
         editingIndicatorId={editingIndicatorId}
         indicatorDraft={indicatorDraft}
         setIndicatorDraft={setIndicatorDraft}
         closeIndicatorSettings={closeIndicatorSettings}
         deleteEditingIndicator={deleteEditingIndicator}
         saveIndicatorSettings={saveIndicatorSettings}
-      />
-
-      <ChartSettingsModals
         settingsOpen={settingsOpen} setSettingsOpen={setSettingsOpen}
         upColorOverride={upColorOverride} setUpColorOverride={setUpColorOverride}
         downColorOverride={downColorOverride}
@@ -963,9 +968,6 @@ export function CandlestickChart({
         setVolumeUpColorOverride={setVolumeUpColorOverride}
         volumeDownColorOverride={volumeDownColorOverride}
         setVolumeDownColorOverride={setVolumeDownColorOverride}
-      />
-
-      <SymbolSearchModal
         symbolSearchOpen={symbolSearchOpen}
         setSymbolSearchOpen={setSymbolSearchOpen}
         symbolSearchQuery={symbolSearchQuery}

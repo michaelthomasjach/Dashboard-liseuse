@@ -1022,6 +1022,98 @@
   pointer-events: none;
 }
 
+/* The small floating toolbar a selected drawing/active tool shows (see FloatingDrawingToolbar) —
+   its own bordered pill, positioned via plain `left`/`top` (set inline from
+   useFloatingToolbarPosition's own tracked {x, y}) rather than a fixed corner the way
+   .lq-chart__plot-topleft is, since dragging it anywhere is the whole point. z-index above
+   .lq-chart__plot-topleft (6) — it's meant to float over the symbol/legend readout, not under it. */
+.lq-chart__floating-toolbar {
+  position: absolute;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-md);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+/* 6 dots (GripIcon) at reduced opacity until hovered/actively dragged — press-and-hold drags the
+   whole toolbar (see startDrag), same "barely-there until you need it" affordance
+   .lq-chart__pane-resize-grip already uses for pane dividers. */
+.lq-chart__floating-toolbar-grip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  color: var(--lq-color-text-muted);
+  background: none;
+  border: none;
+  border-radius: var(--lq-radius-sm);
+  opacity: 0.5;
+  cursor: grab;
+}
+
+.lq-chart__floating-toolbar-grip:hover,
+.lq-chart__floating-toolbar-grip:active {
+  opacity: 1;
+  cursor: grabbing;
+}
+
+.lq-chart__floating-toolbar-divider {
+  align-self: stretch;
+  width: 1px;
+  margin: 2px 0;
+  background-color: var(--lq-color-border-subtle);
+}
+
+/* Icon + a thin color bar underneath representing the current color (line or text) — the bar
+   *is* a native `<input type="color">` (same "no bespoke color-picker component" convention
+   DrawingEditModal's own Style tab already established, just restyled from a full-width 38px box
+   down to a thin strip under the icon) wrapped in its own <label> so clicking either the icon or
+   the bar opens the browser's own picker. */
+.lq-chart__floating-toolbar-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 4px 6px;
+  color: var(--lq-color-text-muted);
+  cursor: pointer;
+}
+
+.lq-chart__floating-toolbar-swatch:hover {
+  color: var(--lq-color-text);
+}
+
+.lq-chart__floating-toolbar-color-bar {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 4px;
+  padding: 0;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  cursor: pointer;
+}
+
+.lq-chart__floating-toolbar-color-bar::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.lq-chart__floating-toolbar-color-bar::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.lq-chart__floating-toolbar-color-bar::-moz-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
 .lq-chart__symbol-info {
   display: flex;
   align-items: baseline;

@@ -99,4 +99,6 @@ export {
   SchiffPitchforkIcon,
   ModifiedSchiffPitchforkIcon,
   InsidePitchforkIcon,
+  PencilIcon,
+  TextIcon,
 } from "./icons";

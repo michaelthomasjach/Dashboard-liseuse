@@ -9,7 +9,7 @@ import { MULTI_POINT_TOOLS } from "../drawingCatalog";
 import { round4, channelOffsetFromClick, rangeForecastMaxMin } from "../drawingGeometry";
 import { distanceToDrawing } from "../drawingHitTest";
 import type { HitTestContext } from "../drawingHitTest";
-import { DRAWING_HIT_DISTANCE } from "../constants";
+import { DRAWING_HIT_DISTANCE, CLICK_DRAG_THRESHOLD } from "../constants";
 
 /** Plain mutable ref shape (matches what `useRef` in another hook already returns) — used instead
  *  of React's own `RefObject<T>` because that type's `current` is only ever mutable when the ref
@@ -37,6 +37,9 @@ export interface UseDrawingInteractionsArgs {
   drawings: TrendLineDrawing[];
   commitDrawings: (next: TrendLineDrawing[]) => void;
   drawingIdRef: MutableRef<number>;
+  /** The style every freshly-placed drawing below is created with — see useDrawingState's own
+   *  doc, edited live by FloatingDrawingToolbar while a tool is active. */
+  defaultDrawingStyle: { color: string; textColor?: string; strokeWidth: number };
   activeTool: DrawingToolType | null;
   setActiveTool: (v: DrawingToolType | null) => void;
   pendingPoint: DataPoint | null;
@@ -55,6 +58,7 @@ export interface UseDrawingInteractionsArgs {
   hoveredDrawingId: string | null;
   hoveredDrawingIdRef: MutableRef<string | null>;
   updateHoveredDrawingId: (id: string | null) => void;
+  setSelectedDrawingId: (id: string | null) => void;
   setEditingId: (id: string | null) => void;
   setDraft: (d: TrendLineDrawing | null) => void;
   setEditModalTab: (t: "coords" | "text" | "style") => void;
@@ -117,6 +121,7 @@ export function useDrawingInteractions({
   drawings,
   commitDrawings,
   drawingIdRef,
+  defaultDrawingStyle,
   activeTool,
   setActiveTool,
   pendingPoint,
@@ -135,6 +140,7 @@ export function useDrawingInteractions({
   hoveredDrawingId,
   hoveredDrawingIdRef,
   updateHoveredDrawingId,
+  setSelectedDrawingId,
   setEditingId,
   setDraft,
   setEditModalTab,
@@ -173,7 +179,13 @@ export function useDrawingInteractions({
   }
 
   function handleOverlayClick(e: React.MouseEvent<SVGRectElement>) {
-    if (!activeTool) return;
+    if (!activeTool) {
+      // A plain click on empty plot space (nothing hovered — a click that landed on an existing
+      // drawing instead is handled by the pointerdown/pointerup pair below, which is what tells a
+      // click apart from a body-drag) clears whatever's currently selected, same as Escape.
+      if (!hoveredDrawingId) setSelectedDrawingId(null);
+      return;
+    }
     const point = toDataPoint(e);
 
     // Axis-constrained lines only have one degree of freedom, so a single click places them —
@@ -192,6 +204,7 @@ export function useDrawingInteractions({
       const value = valueAxis === "price" ? point.y : round4(pane.scale.invert(mouseY - pane.offset));
       const drawing: TrendLineDrawing = {
         id: `drawing-${drawingIdRef.current++}`,
+        ...defaultDrawingStyle,
         x1: d0,
         y1: value,
         x2: d1,
@@ -207,7 +220,7 @@ export function useDrawingInteractions({
       const [p0, p1] = priceScale.domain() as [number, number];
       commitDrawings([
         ...drawings,
-        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: p0, x2: point.x, y2: p1, lineType: "vertical" },
+        { id: `drawing-${drawingIdRef.current++}`, ...defaultDrawingStyle, x1: point.x, y1: p0, x2: point.x, y2: p1, lineType: "vertical" },
       ]);
       cancelDrawingTool();
       return;
@@ -218,7 +231,7 @@ export function useDrawingInteractions({
     if (activeTool === "arrowUp" || activeTool === "arrowDown") {
       commitDrawings([
         ...drawings,
-        { id: `drawing-${drawingIdRef.current++}`, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: activeTool },
+        { id: `drawing-${drawingIdRef.current++}`, ...defaultDrawingStyle, x1: point.x, y1: point.y, x2: point.x, y2: point.y, lineType: activeTool },
       ]);
       cancelDrawingTool();
       return;
@@ -293,6 +306,7 @@ export function useDrawingInteractions({
       const value = valueAxis === "price" ? point.y : round4(pane.scale.invert(mouseY - pane.offset));
       const drawing: TrendLineDrawing = {
         id: `drawing-${drawingIdRef.current++}`,
+        ...defaultDrawingStyle,
         x1: point.x,
         y1: value,
         x2: point.x,
@@ -325,6 +339,7 @@ export function useDrawingInteractions({
         ...drawings,
         {
           id: `drawing-${drawingIdRef.current++}`,
+          ...defaultDrawingStyle,
           x1: pendingPoint.x,
           y1: pendingPoint.y,
           x2: pendingSecondPoint.x,
@@ -362,6 +377,7 @@ export function useDrawingInteractions({
         ...drawings,
         {
           id: `drawing-${drawingIdRef.current++}`,
+          ...defaultDrawingStyle,
           x1: pendingPoint.x,
           y1: pendingPoint.y,
           x2: pendingSecondPoint.x,
@@ -391,6 +407,7 @@ export function useDrawingInteractions({
         ...drawings,
         {
           id: `drawing-${drawingIdRef.current++}`,
+          ...defaultDrawingStyle,
           x1: pendingPoint.x,
           y1: pendingPoint.y,
           x2: max.x,
@@ -429,6 +446,7 @@ export function useDrawingInteractions({
         ...drawings,
         {
           id: `drawing-${drawingIdRef.current++}`,
+          ...defaultDrawingStyle,
           x1: pendingPoint.x,
           y1: pendingPoint.y,
           x2: pendingSecondPoint.x,
@@ -465,6 +483,7 @@ export function useDrawingInteractions({
     }
     const drawing: TrendLineDrawing = {
       id: `drawing-${drawingIdRef.current++}`,
+      ...defaultDrawingStyle,
       x1: pendingPoint.x,
       y1: pendingPoint.y,
       x2: point.x,
@@ -836,15 +855,31 @@ export function useDrawingInteractions({
         const last = points[points.length - 1];
         commitDrawings([
           ...drawings,
-          { id: `drawing-${drawingIdRef.current++}`, x1: first.x, y1: first.y, x2: last.x, y2: last.y, lineType: "brush", extraPoints: points.slice(1, -1) },
+          {
+            id: `drawing-${drawingIdRef.current++}`,
+            ...defaultDrawingStyle,
+            x1: first.x,
+            y1: first.y,
+            x2: last.x,
+            y2: last.y,
+            lineType: "brush",
+            extraPoints: points.slice(1, -1),
+          },
         ]);
       }
       cancelDrawingTool();
       return;
     }
     if (!dragLineRef.current) return;
+    const drag = dragLineRef.current;
     dragLineRef.current = null;
     if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
+    // A plain click (barely any movement since pointerdown) selects the drawing instead of
+    // leaving it as just a no-op drag — an actual drag already committed its own move via the
+    // dragLineRef.current branch in handlePointerMove above, so this only ever fires for a
+    // gesture that never really moved.
+    const moved = Math.hypot(e.clientX - drag.startClientX, e.clientY - drag.startClientY);
+    if (moved < CLICK_DRAG_THRESHOLD) setSelectedDrawingId(drag.id);
   }
 
 

@@ -836,3 +836,20 @@ export const InsidePitchforkIcon = (props: IconProps) => (
     <circle cx="21" cy="12" r="1.4" fill="currentColor" stroke="none" />
   </IconBase>
 );
+
+/** The floating drawing toolbar's own "line color" control — a pencil, tip pointing down-left
+ *  toward where it would be writing. */
+export const PencilIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M17.5 3.5a2.1 2.1 0 0 1 3 3L8 19 3 21l2-5Z" />
+    <path d="M14.5 6.5 17.5 9.5" />
+  </IconBase>
+);
+
+/** The floating drawing toolbar's own "text color" control — a plain capital T. */
+export const TextIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <path d="M5 6h14" />
+    <path d="M12 6v13" />
+  </IconBase>
+);
