@@ -203,6 +203,40 @@ export function computeTPOProfile(candles: Candle[], binCount: number): TpoProfi
   };
 }
 
+export interface TpoSessionProfile {
+  /** Both relative to the `candles` array `computeTPOSessionProfiles` was given, same index space
+   *  its own caller's `visibleRange` slice already uses — not absolute indices into the chart's
+   *  full `data`. */
+  startIndex: number;
+  endIndex: number;
+  profile: TpoProfile;
+}
+
+/** One `TpoProfile` per trading session (calendar day) instead of a single one for the whole
+ *  range — real TPO/Market Profile charts show a profile per session, each read against *that*
+ *  session's own bars, not one block pinned to a fixed edge (see `drawPriceCandles`' own "tpo"
+ *  branch for how each is positioned against its own `startIndex`/`endIndex`). A session with
+ *  under 3 candles is skipped entirely rather than rendering a near-meaningless profile off
+ *  almost no data (most visibly, this quietly does nothing extra on a daily-or-coarser timeframe,
+ *  where every "session" is just 1-2 candles). */
+export function computeTPOSessionProfiles(candles: Candle[], binCount: number): TpoSessionProfile[] {
+  if (candles.length === 0) return [];
+  const sessions: TpoSessionProfile[] = [];
+  const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  let sessionStart = 0;
+  for (let i = 1; i <= candles.length; i++) {
+    const sameDay = i < candles.length && dayKey(candles[i].date) === dayKey(candles[sessionStart].date);
+    if (sameDay) continue;
+    const endIndex = i - 1;
+    if (endIndex - sessionStart + 1 >= 3) {
+      const profile = computeTPOProfile(candles.slice(sessionStart, endIndex + 1), binCount);
+      if (profile) sessions.push({ startIndex: sessionStart, endIndex, profile });
+    }
+    sessionStart = i;
+  }
+  return sessions;
+}
+
 export interface ChartDisplayModeDef {
   mode: ChartDisplayMode;
   label: string;
@@ -215,5 +249,5 @@ export const CHART_DISPLAY_MODES: ChartDisplayModeDef[] = [
   { mode: "heikinAshi", label: "Heikin Ashi", icon: HeikinAshiModeIcon },
   { mode: "renko", label: "Renko", icon: RenkoModeIcon },
   { mode: "lineBreak", label: "Line Break", icon: LineBreakModeIcon },
-  { mode: "tpo", label: "Time Price Opportunities (VAH/POC/VAL)", icon: TpoModeIcon },
+  { mode: "tpo", label: "Time Price Opportunities (par séance)", icon: TpoModeIcon },
 ];

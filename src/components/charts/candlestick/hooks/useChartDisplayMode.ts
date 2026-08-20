@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 import type { Candle } from "../interfaces/Candle.interface";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
-import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, computeTPOProfile } from "../chartModes";
+import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, computeTPOSessionProfiles } from "../chartModes";
 
 export interface UseChartDisplayModeArgs {
   data: Candle[];
@@ -43,14 +43,22 @@ export function useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaul
     () => (chartDisplayMode === "lineBreak" ? computeLineBreakBricks(data, 3) : []),
     [data, chartDisplayMode]
   );
-  // Recomputed on pan/zoom (not just `data`), same as `YAutoScaling` above — the profile
-  // describes whatever's currently on screen, not the whole dataset.
-  const tpoProfile = useMemo(() => {
-    if (chartDisplayMode !== "tpo") return null;
+  // Recomputed on pan/zoom (not just `data`), same as `YAutoScaling` above — the profiles
+  // describe whatever's currently on screen, not the whole dataset. One per session (see
+  // computeTPOSessionProfiles's own doc) rather than a single aggregate.
+  const tpoSessionProfiles = useMemo(() => {
+    if (chartDisplayMode !== "tpo") return [];
     const start = Math.max(0, visibleRange.start);
     const end = Math.min(data.length, visibleRange.end);
-    if (end <= start) return null;
-    return computeTPOProfile(data.slice(start, end), 24);
+    if (end <= start) return [];
+    // computeTPOSessionProfiles' own startIndex/endIndex are relative to the slice handed to
+    // it — offset back by `start` so they're absolute indices into `data` again, the index
+    // space zoomedXScale (and every other renderer input) actually expects.
+    return computeTPOSessionProfiles(data.slice(start, end), 24).map((s) => ({
+      ...s,
+      startIndex: s.startIndex + start,
+      endIndex: s.endIndex + start,
+    }));
   }, [data, visibleRange, chartDisplayMode]);
 
   return {
@@ -63,6 +71,6 @@ export function useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaul
     heikinAshiCandles,
     renkoBricks,
     lineBreakBricks,
-    tpoProfile,
+    tpoSessionProfiles,
   };
 }

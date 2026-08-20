@@ -7,7 +7,7 @@ import type { Indicator } from "./Indicator.interface";
 import type { IndicatorValue } from "./IndicatorValue.interface";
 import type { ChartDisplayMode } from "./ChartDisplayMode.interface";
 import type { DrawingToolType } from "./DrawingToolType.interface";
-import type { PriceBrick, TpoProfile } from "../chartModes";
+import type { PriceBrick, TpoSessionProfile } from "../chartModes";
 
 /** Every value `renderCandlestickChart` (and the drawPriceCandles/drawPriceDrawings/
  *  drawVolumeAndPanes phase functions it calls) needs to paint one frame — a plain data bag, not
@@ -24,7 +24,7 @@ export interface RenderCandlestickChartParams {
   heikinAshiCandles: Candle[] | null;
   renkoBricks: PriceBrick[];
   lineBreakBricks: PriceBrick[];
-  tpoProfile: TpoProfile | null;
+  tpoSessionProfiles: TpoSessionProfile[];
   data: Candle[];
   visibleRange: { start: number; end: number };
   upColorOverride: string | undefined;

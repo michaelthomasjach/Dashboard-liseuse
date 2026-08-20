@@ -24,7 +24,7 @@ const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints", "suppo
  *  active), price-overlay indicator lines (SMA/EMA/WMA/VWAP/Bollinger), and the hover crosshair's
  *  horizontal line. */
 export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCandlestickChartParams, style: ChartCanvasStyle) {
-  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoProfile, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
+  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoSessionProfiles, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
     params;
   const { colorUp, colorDown, colorBg, colorText, colorMuted, colorAccent, colorGrid, fontFamily, isEink } = style;
 
@@ -164,43 +164,51 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       }
     }
 
-    if (chartDisplayMode === "tpo" && tpoProfile) {
-      const { bins, poc, vah, val } = tpoProfile;
-      const maxCount = Math.max(1, ...bins.map((b) => b.count));
-      const histMaxWidth = dims.boundedWidth * 0.16;
-      ctx.save();
-      ctx.globalAlpha = 0.3;
-      ctx.fillStyle = colorAccent;
-      for (const bin of bins) {
-        if (bin.count <= 0) continue;
-        const barWidth = (bin.count / maxCount) * histMaxWidth;
-        const yTop = zoomedPriceScale(bin.priceHigh);
-        const yBottom = zoomedPriceScale(bin.priceLow);
-        ctx.fillRect(dims.boundedWidth - barWidth, yTop, barWidth, Math.max(1, yBottom - yTop));
-      }
-      ctx.restore();
+    if (chartDisplayMode === "tpo") {
+      // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its
+      // *own* bars — growing rightward from that session's own left edge, capped at that
+      // session's own width — instead of a single profile pinned to the chart's right edge
+      // regardless of where its own underlying candles actually are. Each session is normalized
+      // to its own tallest bin (not the tallest bin across every visible session), so a quiet
+      // session's own shape still reads clearly instead of being dwarfed by a busier neighbor.
+      for (const session of tpoSessionProfiles) {
+        const { bins, poc } = session.profile;
+        const maxCount = Math.max(1, ...bins.map((b) => b.count));
+        const x0 = zoomedXScale(session.startIndex);
+        const sessionWidth = Math.max(1, zoomedXScale(session.endIndex + 1) - x0);
+        ctx.save();
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = colorAccent;
+        for (const bin of bins) {
+          if (bin.count <= 0) continue;
+          const barWidth = (bin.count / maxCount) * sessionWidth;
+          const yTop = zoomedPriceScale(bin.priceHigh);
+          const yBottom = zoomedPriceScale(bin.priceLow);
+          ctx.fillRect(x0, yTop, barWidth, Math.max(1, yBottom - yTop));
+        }
+        ctx.restore();
 
-      ctx.save();
-      ctx.setLineDash([4, 3]);
-      ctx.lineWidth = 1;
-      ctx.font = `600 10px ${fontFamily}`;
-      ctx.textAlign = "left";
-      ctx.textBaseline = "bottom";
-      for (const level of [
-        { price: vah, label: "VAH" },
-        { price: poc, label: "POC" },
-        { price: val, label: "VAL" },
-      ]) {
-        const y = snapPixel(zoomedPriceScale(level.price));
+        // Just the POC (not VAH/VAL too) — one profile per session already means many of these
+        // side by side, and a session-scoped VAH/VAL pair each adds little over the bars' own
+        // shape already showing where the value area sits.
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1;
+        ctx.font = `600 9px ${fontFamily}`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        const y = snapPixel(zoomedPriceScale(poc));
         ctx.strokeStyle = colorMuted;
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(dims.boundedWidth, y);
+        ctx.moveTo(x0, y);
+        ctx.lineTo(x0 + sessionWidth, y);
         ctx.stroke();
-        ctx.fillStyle = colorMuted;
-        ctx.fillText(level.label, 4, y - 2);
+        if (sessionWidth > 24) {
+          ctx.fillStyle = colorMuted;
+          ctx.fillText("POC", x0 + 2, y - 2);
+        }
+        ctx.restore();
       }
-      ctx.restore();
     }
 
     // Only price-overlay indicators draw here — "own"-pane ones (RSI/CHOP/MACD/ATR/fundamentals)

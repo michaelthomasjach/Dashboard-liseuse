@@ -397,7 +397,7 @@ export function CandlestickChart({
     reorderPanesRef,
   });
 
-  const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoProfile } =
+  const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoSessionProfiles } =
     useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
 
   const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
@@ -550,7 +550,7 @@ export function CandlestickChart({
     heikinAshiCandles,
     renkoBricks,
     lineBreakBricks,
-    tpoProfile,
+    tpoSessionProfiles,
     data,
     visibleRange,
     upColorOverride,
