@@ -21,13 +21,14 @@ export interface ChartWorkspaceWatchlistRow {
    *  results already use. Omit both for no logo at all. */
   logoUrl?: string;
   logoColor?: string;
-  /** Freeform asset class ("Stock", "Crypto", "Index", …) and, for equities, sector — both
-   *  entirely caller-defined (no closed union, unlike `SymbolSearchResult.category`), read by the
-   *  list's own exposure/concentration modal (see `WatchlistExposureModal`) to break the list down
-   *  by type and, among whichever rows carry one, by sector. Omit either (or both) for a row the
-   *  breakdown should just leave out of that particular chart. */
+  /** Freeform asset class ("Stock", "Crypto", "Index", …), sector ("Technology Services", …), and
+   *  geographic region ("US", "EU", …) — all three entirely caller-defined (no closed union,
+   *  unlike `SymbolSearchResult.category`), read by the list's own exposure/concentration modal
+   *  (see `WatchlistExposureModal`) for its three breakdown donuts. A row missing any of these
+   *  just lands in that donut's own "Autre" bucket rather than being left out. */
   assetType?: string;
   sector?: string;
+  region?: string;
 }
 
 /** A named sub-group of rows within one list (see `ChartWorkspaceWatchlist.sections`) — e.g.

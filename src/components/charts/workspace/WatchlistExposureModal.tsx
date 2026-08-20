@@ -7,16 +7,15 @@ import type { DonutDatum } from "../DonutChart";
 import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
 import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow } from "./ChartWorkspaceWatchlist.interface";
 
-const UNASSIGNED_TYPE = "Autre";
+const UNASSIGNED = "Autre";
 
-// One count per distinct value of `pick(row)` — used for both donuts below, just fed a different
-// picker (assetType across every row, sector across whichever rows have one). Rows the picker
-// returns undefined/empty for are left out entirely (see callers for which case that is).
+// One count per distinct value of `pick(row)`, a row with none falling into a shared "Autre"
+// bucket rather than being silently dropped — used identically for all three donuts below, just
+// fed a different picker (assetType/sector/region).
 function countBy(rows: ChartWorkspaceWatchlistRow[], pick: (row: ChartWorkspaceWatchlistRow) => string | undefined): DonutDatum[] {
   const counts = new Map<string, number>();
   for (const row of rows) {
-    const key = pick(row);
-    if (!key) continue;
+    const key = pick(row) ?? UNASSIGNED;
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return Array.from(counts, ([label, value]) => ({ id: label, label, value }));
@@ -33,12 +32,11 @@ export interface WatchlistExposureModalProps {
 /** "Concentration/exposure" detail view for one watchlist — opened via the small pie-chart icon
  *  next to the list's own name (see WatchlistPanel). A table of every symbol in the list
  *  (ungrouped rows plus every section's own, flattened together — the breakdown itself doesn't
- *  care which section a row happens to sit in), followed by two donuts: one grouping every row by
- *  its own `assetType` (an "Autre" bucket catches rows with none, so nothing silently vanishes),
- *  one grouping whichever rows carry a `sector` (typically just the equities — nothing hardcodes
- *  "this type means stock," a row simply lands in the second donut the moment it has a sector).
- *  Both `assetType`/`sector` are entirely caller-supplied (see that field's own doc) — this modal
- *  only ever aggregates whatever's already on the rows it's given, never fetches or infers either. */
+ *  care which section a row happens to sit in), followed by three donuts, each grouping every row
+ *  by one of its own `region`/`sector`/`assetType` fields — all entirely caller-supplied (see
+ *  that field's own doc), this modal only ever aggregates whatever's already on the rows it's
+ *  given, never fetches or infers any of the three. A row missing a given field still counts,
+ *  under that donut's own "Autre" bucket, so the three always sum back to the list's own total. */
 export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistExposureModalProps) {
   const rows = useMemo(() => {
     if (!watchlist) return [];
@@ -46,8 +44,9 @@ export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistEx
     return [...watchlist.rows, ...sectionRows];
   }, [watchlist]);
 
-  const typeData = useMemo(() => countBy(rows, (r) => r.assetType ?? UNASSIGNED_TYPE), [rows]);
+  const regionData = useMemo(() => countBy(rows, (r) => r.region), [rows]);
   const sectorData = useMemo(() => countBy(rows, (r) => r.sector), [rows]);
+  const typeData = useMemo(() => countBy(rows, (r) => r.assetType), [rows]);
 
   if (!open || !watchlist) return null;
 
@@ -69,8 +68,9 @@ export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistEx
       ),
     },
     ...watchlist.columns.map((c) => ({ id: c.id, header: c.label, accessor: (r: ChartWorkspaceWatchlistRow) => r.values[c.id] })),
-    { id: "assetType", header: "Type", sortValue: (r) => r.assetType ?? "", accessor: (r) => r.assetType ?? "—" },
+    { id: "region", header: "Région", sortValue: (r) => r.region ?? "", accessor: (r) => r.region ?? "—" },
     { id: "sector", header: "Secteur", sortValue: (r) => r.sector ?? "", accessor: (r) => r.sector ?? "—" },
+    { id: "assetType", header: "Type", sortValue: (r) => r.assetType ?? "", accessor: (r) => r.assetType ?? "—" },
   ];
 
   return (
@@ -81,8 +81,9 @@ export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistEx
           <>
             <h3 className="lq-watchlist-exposure__section-title">Exposition</h3>
             <div className="lq-watchlist-exposure__charts">
+              <DonutChart data={regionData} centerValue={regionData.length} centerCaption="Régions" />
+              <DonutChart data={sectorData} centerValue={sectorData.length} centerCaption="Secteurs" />
               <DonutChart data={typeData} centerValue={typeData.length} centerCaption="Types de symboles" />
-              {sectorData.length > 0 && <DonutChart data={sectorData} centerValue={sectorData.length} centerCaption="Secteurs" />}
             </div>
           </>
         )}
