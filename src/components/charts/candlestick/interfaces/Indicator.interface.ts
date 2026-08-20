@@ -7,7 +7,7 @@ export interface Indicator {
   kind: IndicatorKind;
   /** Lookback window, in candles. Ignored by "vwap" (a cumulative, unwindowed average) and
    *  "macd"/"ichimoku" (their own multi-period settings below instead). Doubles as "atr"'s and
-   *  "supertrend"'s own ATR period. */
+   *  "supertrend"'s own ATR period, and "supportResistance"'s own detection window. */
   period: number;
   /** Band width, in standard deviations. Only used by "bollinger". Default 2. */
   stdDev?: number;
@@ -57,6 +57,10 @@ export interface Indicator {
   /** "pivotPoints" only — draws just the current (most recent) period's own levels instead of the
    *  usual staircase of every past period still in view. Default false. */
   pivotShowLastOnly?: boolean;
+  /** "supportResistance" only — how many of the strongest detected levels to keep (see
+   *  `computeSupportResistanceValues`'s own doc for how "strongest" is ranked). `period` above
+   *  doubles as this indicator's own lookback, in candles. Default 6. */
+  srMaxLevels?: number;
   /** "chandelierExit" only — the ATR multiplier both stops are offset by (`period` above doubles
    *  as its own ATR length and the highest/lowest lookback, same reuse `supertrendMultiplier`'s
    *  own doc explains for Supertrend). Default 3, the Pine Script original's own default. */

@@ -14,6 +14,9 @@ export type IndicatorKind =
   | "gaps"
   | "ichimoku"
   | "pivotPoints"
+  /** Auto-detected horizontal support/resistance levels — see `Indicator.srMaxLevels` and
+   *  `computeSupportResistanceValues`'s own doc. */
+  | "supportResistance"
   | "adx"
   | "chandelierExit"
   /** Rolling Pearson correlation coefficient (-1 to +1) against a second, user-picked symbol —

@@ -218,6 +218,19 @@ export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     pane: "price",
     category: "Structure",
   },
+  // Own value shape (IndicatorSRLevel[] — a flat, ranked list of levels, not a line) — `period`
+  // is reused as-is for its own lookback window (hasPeriod true), its only other setting
+  // (srMaxLevels, how many of the strongest levels to keep) not being stdDev either.
+  {
+    kind: "supportResistance",
+    label: "Support/Résistance (auto)",
+    shortLabel: "S/R",
+    defaultPeriod: 100,
+    hasPeriod: true,
+    hasStdDev: false,
+    pane: "price",
+    category: "Structure",
+  },
   // Own value shape (IndicatorADXPoint — the ADX line plus +DI/-DI) but no settings beyond the
   // one shared `period` field (its own ATR/DMI lookback) — hasPeriod true, hasStdDev false, same
   // as RSI/CHOP/ATR above it.

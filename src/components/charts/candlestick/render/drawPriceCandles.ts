@@ -6,6 +6,7 @@ import type { IndicatorSupertrendPoint } from "../interfaces/IndicatorSupertrend
 import type { IndicatorIchimokuPoint } from "../interfaces/IndicatorIchimokuPoint.interface";
 import type { IndicatorGapPoint } from "../interfaces/IndicatorGapPoint.interface";
 import type { IndicatorPivotPointsPoint } from "../interfaces/IndicatorPivotPointsPoint.interface";
+import type { IndicatorSRLevel } from "../interfaces/IndicatorSRLevel.interface";
 import type { IndicatorChandelierPoint } from "../interfaces/IndicatorChandelierPoint.interface";
 import { snapPixel } from "../drawingGeometry";
 import { drawPillLabel } from "../drawingRender";
@@ -14,7 +15,7 @@ import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicatorCatalo
 // "gaps"/"parabolicSar"/"pivotPoints" are point-based (a rectangle, a dot, or a single flat
 // segment all render fine on their own) rather than line-shaped like every other indicator here,
 // so they're exempt from the "needs at least 2 points to draw anything" gate below.
-const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints"]);
+const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints", "supportResistance"]);
 
 /** Phase 1 of `renderCandlestickChart`: opens the price section's own clip (left open — closed by
  *  `drawPriceDrawings`, always called right after this in the same synchronous pass, see
@@ -478,6 +479,36 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
             ctx.fillText(label, x0 + 2, y - 2);
           }
           groupStart = k;
+        }
+        ctx.restore();
+      } else if (indicator.kind === "supportResistance") {
+        // Every point in range shares the same ranked levels array (see
+        // computeSupportResistanceValues) — reading it off the last one is just the simplest way
+        // to get at it. Colored by whether the most recent close sits above (support) or below
+        // (resistance) each — dynamic, not fixed to whichever side a level started on, since one
+        // often flips role over time. Drawn from its own first touch out to the chart's right
+        // edge (into "future" empty space, same as a "ray" drawing already extends), the usual
+        // forward-projecting way a support/resistance line is actually used.
+        const srPoints = points as { i: number; value: IndicatorSRLevel[] }[];
+        const levels = srPoints.length > 0 ? srPoints[srPoints.length - 1].value : [];
+        const lastClose = data.length > 0 ? data[data.length - 1].close : 0;
+        ctx.save();
+        ctx.setLineDash([4, 3]);
+        ctx.lineWidth = 1;
+        ctx.font = `600 10px ${fontFamily}`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "bottom";
+        for (const level of levels) {
+          const levelColor = lastClose >= level.price ? colorUp : colorDown;
+          const x0 = zoomedXScale(level.startIndex);
+          const y = snapPixel(zoomedPriceScale(level.price));
+          ctx.strokeStyle = levelColor;
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(dims.boundedWidth, y);
+          ctx.stroke();
+          ctx.fillStyle = levelColor;
+          ctx.fillText(`${level.price.toFixed(2)} ×${level.touchCount}`, x0 + 2, y - 2);
         }
         ctx.restore();
       } else if (indicator.customData?.draw === "histogram") {

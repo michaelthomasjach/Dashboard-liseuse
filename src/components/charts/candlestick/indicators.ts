@@ -11,6 +11,7 @@ import type { IndicatorGapPoint } from "./interfaces/IndicatorGapPoint.interface
 import type { IndicatorPivotPointsPoint } from "./interfaces/IndicatorPivotPointsPoint.interface";
 import type { IndicatorADXPoint } from "./interfaces/IndicatorADXPoint.interface";
 import type { IndicatorChandelierPoint } from "./interfaces/IndicatorChandelierPoint.interface";
+import type { IndicatorSRLevel } from "./interfaces/IndicatorSRLevel.interface";
 import type { IndicatorValue } from "./interfaces/IndicatorValue.interface";
 import type { Indicator } from "./interfaces/Indicator.interface";
 import type { CustomIndicatorDef } from "./interfaces/CustomIndicatorDef.interface";
@@ -581,6 +582,75 @@ export function computePivotPointsValues(
   return result;
 }
 
+// Auto support/resistance: fractal swing highs/lows within the lookback window (a candle whose
+// own high/low is the most extreme among `fractalSpan` neighbors on each side — the same "local
+// extremum" idea `computeZigZagValues` confirms by %-deviation instead, simpler here since level
+// *detection* only cares about density of touches, not a clean directional zigzag line), then
+// clustered by price (sorted, walked once, a new cluster wherever the gap to the previous swing
+// exceeds `tolerance`) so repeated touches near the same price collapse into one level instead of
+// one per candle. Ranked by touch count and capped at `maxLevels` — a level nobody's ever
+// re-touched (`touchCount < 2`) isn't a level, just a single swing.
+export function computeSupportResistanceValues(data: Candle[], period: number, maxLevels: number): (IndicatorSRLevel[] | null)[] {
+  const n = data.length;
+  const result: (IndicatorSRLevel[] | null)[] = new Array(n).fill(null);
+  if (n === 0) return result;
+
+  const lookback = Math.min(n, Math.max(10, Math.round(period)));
+  const start = n - lookback;
+  const fractalSpan = 3;
+
+  const swings: { price: number; index: number }[] = [];
+  for (let i = start; i < n; i++) {
+    const lo = Math.max(start, i - fractalSpan);
+    const hi = Math.min(n - 1, i + fractalSpan);
+    if (hi - lo < fractalSpan * 2) continue;
+    let isHigh = true;
+    let isLow = true;
+    for (let j = lo; j <= hi; j++) {
+      if (j === i) continue;
+      if (data[j].high >= data[i].high) isHigh = false;
+      if (data[j].low <= data[i].low) isLow = false;
+    }
+    if (isHigh) swings.push({ price: data[i].high, index: i });
+    if (isLow) swings.push({ price: data[i].low, index: i });
+  }
+  if (swings.length === 0) return result;
+
+  let rangeLo = Infinity;
+  let rangeHi = -Infinity;
+  for (let i = start; i < n; i++) {
+    rangeLo = Math.min(rangeLo, data[i].low);
+    rangeHi = Math.max(rangeHi, data[i].high);
+  }
+  const tolerance = (rangeHi - rangeLo) * 0.01;
+
+  swings.sort((a, b) => a.price - b.price);
+  const clusters: { prices: number[]; indices: number[] }[] = [];
+  for (const s of swings) {
+    const current = clusters[clusters.length - 1];
+    if (current && s.price - current.prices[current.prices.length - 1] <= tolerance) {
+      current.prices.push(s.price);
+      current.indices.push(s.index);
+    } else {
+      clusters.push({ prices: [s.price], indices: [s.index] });
+    }
+  }
+
+  const levels: IndicatorSRLevel[] = clusters
+    .map((c) => ({
+      price: c.prices.reduce((a, b) => a + b, 0) / c.prices.length,
+      startIndex: Math.min(...c.indices),
+      touchCount: c.prices.length,
+    }))
+    .filter((l) => l.touchCount >= 2)
+    .sort((a, b) => b.touchCount - a.touchCount)
+    .slice(0, Math.max(1, Math.round(maxLevels)));
+  if (levels.length === 0) return result;
+
+  for (let i = start; i < n; i++) result[i] = levels;
+  return result;
+}
+
 // Hand-rolled rather than routed through `technicalindicators`' own IchimokuCloud (which trims
 // its warm-up period from the front the same way RSI/MACD do, same convention every other
 // indicator here null-pads back in) — the reason is the two Senkou spans' own *displacement*:
@@ -679,6 +749,8 @@ export function computeIndicatorValues(
       return computeGapValues(data, indicator.gapsMinPercent ?? 0.1);
     case "pivotPoints":
       return computePivotPointsValues(data, indicator.pivotType ?? "classic", indicator.pivotPeriod ?? "weekly");
+    case "supportResistance":
+      return computeSupportResistanceValues(data, period, indicator.srMaxLevels ?? 6);
     case "ichimoku":
       return computeIchimokuValues(
         data,

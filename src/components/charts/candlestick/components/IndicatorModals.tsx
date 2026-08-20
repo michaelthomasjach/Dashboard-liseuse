@@ -586,6 +586,16 @@ export function IndicatorModals({
               onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, pivotShowLastOnly: checked })}
             />
           )}
+          {indicatorDraft.kind === "supportResistance" && (
+            <NumberField
+              label="Nombre de niveaux"
+              min={1}
+              max={20}
+              step={1}
+              value={indicatorDraft.srMaxLevels ?? 6}
+              onChange={(v) => setIndicatorDraft({ ...indicatorDraft, srMaxLevels: v === "" ? indicatorDraft.srMaxLevels : v })}
+            />
+          )}
           {indicatorDraft.kind === "ichimoku" && (
             <div className="lq-chart__edit-drawing-row">
               <NumberField
@@ -624,11 +634,15 @@ export function IndicatorModals({
           )}
           {/* Supertrend always uses the chart's own up/down colors (so its trend flips read
               consistently with candle coloring), Parabolic SAR colors each dot by which side of
-              price it's on, and Chandelier Exit colors both its stops/fill/signals the same
-              up/down way — none of the three reads `color` at all, so the picker would be a dead
-              control for them. ADX *does* read it (for its own ADX line only — +DI/-DI stay
-              fixed), so it's deliberately not excluded here. */}
-          {indicatorDraft.kind !== "supertrend" && indicatorDraft.kind !== "parabolicSar" && indicatorDraft.kind !== "chandelierExit" && (
+              price it's on, Chandelier Exit colors both its stops/fill/signals the same up/down
+              way, and Support/Résistance colors each level by whether the last close currently
+              sits above or below it — none of the four reads `color` at all, so the picker would
+              be a dead control for them. ADX *does* read it (for its own ADX line only — +DI/-DI
+              stay fixed), so it's deliberately not excluded here. */}
+          {indicatorDraft.kind !== "supertrend" &&
+            indicatorDraft.kind !== "parabolicSar" &&
+            indicatorDraft.kind !== "chandelierExit" &&
+            indicatorDraft.kind !== "supportResistance" && (
             <div className="lq-field">
               <label className="lq-field__label">Couleur</label>
               <input
