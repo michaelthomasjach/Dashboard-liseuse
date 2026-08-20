@@ -17,6 +17,28 @@ import { indicatorCatalogEntry, defaultIndicatorColor } from "../indicatorCatalo
 // so they're exempt from the "needs at least 2 points to draw anything" gate below.
 const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints", "supportResistance"]);
 
+// TPO's own 4-stop gradient (red → green → cyan → purple, roughly matching every real TPO tool's
+// own default palette) — `t` (0 = a session's first block, 1 = its last) picked over the theme's
+// own colors since it's meant to read the same "how early/late in the session" way regardless of
+// light/dark/E-ink, not adapt to it the way indicator lines normally do.
+const TPO_GRADIENT_STOPS: [number, number, number][] = [
+  [224, 92, 110],
+  [111, 174, 111],
+  [79, 195, 200],
+  [143, 111, 209],
+];
+function tpoGradientColor(t: number): string {
+  const scaled = Math.min(1, Math.max(0, t)) * (TPO_GRADIENT_STOPS.length - 1);
+  const i = Math.min(TPO_GRADIENT_STOPS.length - 2, Math.floor(scaled));
+  const localT = scaled - i;
+  const [r0, g0, b0] = TPO_GRADIENT_STOPS[i];
+  const [r1, g1, b1] = TPO_GRADIENT_STOPS[i + 1];
+  const r = Math.round(r0 + (r1 - r0) * localT);
+  const g = Math.round(g0 + (g1 - g0) * localT);
+  const b = Math.round(b0 + (b1 - b0) * localT);
+  return `rgb(${r}, ${g}, ${b})`;
+}
+
 /** Phase 1 of `renderCandlestickChart`: opens the price section's own clip (left open — closed by
  *  `drawPriceDrawings`, always called right after this in the same synchronous pass, see
  *  `renderChart.ts`), then paints its gridlines, the candles themselves (or Renko/Line Break
@@ -24,7 +46,7 @@ const POINT_BASED_KINDS = new Set(["gaps", "parabolicSar", "pivotPoints", "suppo
  *  active), price-overlay indicator lines (SMA/EMA/WMA/VWAP/Bollinger), and the hover crosshair's
  *  horizontal line. */
 export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCandlestickChartParams, style: ChartCanvasStyle) {
-  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoSessionProfiles, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
+  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoSessionProfiles, tpoSplitByBlocks, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
     params;
   const { colorUp, colorDown, colorBg, colorText, colorMuted, colorAccent, colorGrid, fontFamily, isEink } = style;
 
@@ -165,47 +187,82 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
     }
 
     if (chartDisplayMode === "tpo") {
+      if (tpoSessionProfiles.length === 0) {
+        // Needs candles finer than a session (see computeTPOSessionProfiles' own doc) to have
+        // more than one time block to letter at all — a daily-or-coarser timeframe has no
+        // intrabar data left to slice, so nothing qualifies. Says so instead of silently
+        // rendering a blank pane, which otherwise reads as "TPO is broken."
+        ctx.save();
+        ctx.fillStyle = colorMuted;
+        ctx.font = `600 12px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("TPO nécessite un intervalle infrajournalier (ex. 30 min, 1 heure)", dims.boundedWidth / 2, priceHeight / 2);
+        ctx.restore();
+      }
       // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its
       // *own* bars — growing rightward from that session's own left edge, capped at that
-      // session's own width — instead of a single profile pinned to the chart's right edge
-      // regardless of where its own underlying candles actually are. Each session is normalized
-      // to its own tallest bin (not the tallest bin across every visible session), so a quiet
-      // session's own shape still reads clearly instead of being dwarfed by a busier neighbor.
+      // session's own width, one column per time block (its own letter/number stamped at every
+      // price row it touched) — instead of a single block pinned to the chart's right edge
+      // regardless of where its own underlying candles actually are.
       for (const session of tpoSessionProfiles) {
-        const { bins, poc } = session.profile;
-        const maxCount = Math.max(1, ...bins.map((b) => b.count));
+        const { rows, blocks, pocRow, vahRow, valRow } = session;
         const x0 = zoomedXScale(session.startIndex);
         const sessionWidth = Math.max(1, zoomedXScale(session.endIndex + 1) - x0);
+        const blockWidth = sessionWidth / blocks.length;
+        // "Split by blocks": a small gap between adjacent blocks' own cells, even within the
+        // same row, so distinct blocks read as visually separate rather than one unbroken run.
+        const gap = tpoSplitByBlocks ? Math.min(1.5, blockWidth * 0.12) : 0;
+        const showLetters = blockWidth > 9;
+
         ctx.save();
-        ctx.globalAlpha = 0.3;
-        ctx.fillStyle = colorAccent;
-        for (const bin of bins) {
-          if (bin.count <= 0) continue;
-          const barWidth = (bin.count / maxCount) * sessionWidth;
-          const yTop = zoomedPriceScale(bin.priceHigh);
-          const yBottom = zoomedPriceScale(bin.priceLow);
-          ctx.fillRect(x0, yTop, barWidth, Math.max(1, yBottom - yTop));
-        }
+        ctx.font = `700 8px ${fontFamily}`;
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        blocks.forEach((block, bi) => {
+          const cellColor = tpoGradientColor(blocks.length > 1 ? bi / (blocks.length - 1) : 0);
+          const cellX = x0 + bi * blockWidth;
+          for (const r of block.rows) {
+            const yTop = zoomedPriceScale(rows[r].priceHigh);
+            const cellHeight = Math.max(1, zoomedPriceScale(rows[r].priceLow) - yTop);
+            const insideValueArea = r >= valRow && r <= vahRow;
+            ctx.globalAlpha = insideValueArea ? (isEink ? 0.7 : 0.9) : isEink ? 0.35 : 0.5;
+            ctx.fillStyle = cellColor;
+            ctx.fillRect(cellX + gap / 2, yTop, Math.max(1, blockWidth - gap), cellHeight);
+            if (showLetters && cellHeight > 7) {
+              ctx.globalAlpha = 1;
+              ctx.fillStyle = "#ffffff";
+              ctx.fillText(block.label, cellX + blockWidth / 2, yTop + cellHeight / 2 + 0.5);
+            }
+          }
+        });
+        ctx.globalAlpha = 1;
         ctx.restore();
 
-        // Just the POC (not VAH/VAL too) — one profile per session already means many of these
-        // side by side, and a session-scoped VAH/VAL pair each adds little over the bars' own
-        // shape already showing where the value area sits.
+        // VAH/POC/VAL, scoped to this session's own width — same convention every other
+        // horizontal-level indicator (Pivot Points, S/R) already draws its own reference lines.
         ctx.save();
         ctx.setLineDash([4, 3]);
         ctx.lineWidth = 1;
         ctx.font = `600 9px ${fontFamily}`;
         ctx.textAlign = "left";
         ctx.textBaseline = "bottom";
-        const y = snapPixel(zoomedPriceScale(poc));
-        ctx.strokeStyle = colorMuted;
-        ctx.beginPath();
-        ctx.moveTo(x0, y);
-        ctx.lineTo(x0 + sessionWidth, y);
-        ctx.stroke();
-        if (sessionWidth > 24) {
-          ctx.fillStyle = colorMuted;
-          ctx.fillText("POC", x0 + 2, y - 2);
+        const levels: [number, string][] = [
+          [rows[vahRow].priceHigh, "VAH"],
+          [(rows[pocRow].priceLow + rows[pocRow].priceHigh) / 2, "POC"],
+          [rows[valRow].priceLow, "VAL"],
+        ];
+        for (const [price, label] of levels) {
+          const y = snapPixel(zoomedPriceScale(price));
+          ctx.strokeStyle = colorMuted;
+          ctx.beginPath();
+          ctx.moveTo(x0, y);
+          ctx.lineTo(x0 + sessionWidth, y);
+          ctx.stroke();
+          if (sessionWidth > 24) {
+            ctx.fillStyle = colorMuted;
+            ctx.fillText(label, x0 + 2, y - 2);
+          }
         }
         ctx.restore();
       }

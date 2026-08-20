@@ -117,7 +117,7 @@ export function CandlestickChart({
   onTimeframeChange,
   defaultChartDisplayMode,
   onChartDisplayModeChange,
-  renkoAtrPeriod = 14,
+  renkoAtrPeriod = 14, tpoBlockMinutes = 30, tpoSplitByBlocks = true, tpoLabelStyle = "letters",
   symbol,
   events,
   fundamentals,
@@ -398,7 +398,7 @@ export function CandlestickChart({
   });
 
   const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoSessionProfiles } =
-    useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
+    useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, tpoBlockMinutes, tpoLabelStyle, defaultChartDisplayMode });
 
   const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
     useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
@@ -550,7 +550,7 @@ export function CandlestickChart({
     heikinAshiCandles,
     renkoBricks,
     lineBreakBricks,
-    tpoSessionProfiles,
+    tpoSessionProfiles, tpoSplitByBlocks,
     data,
     visibleRange,
     upColorOverride,

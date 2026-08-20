@@ -148,59 +148,19 @@ export function computeLineBreakBricks(data: Candle[], lineCount: number): Price
   return lines;
 }
 
-export interface TpoProfile {
-  bins: { priceLow: number; priceHigh: number; count: number }[];
-  poc: number;
-  vah: number;
-  val: number;
+export interface TpoRow {
+  priceLow: number;
+  priceHigh: number;
 }
 
-/** "Time Price Opportunities": approximates time-spent-at-price (real TPO needs intrabar/tick
- *  data, not available here) by spreading one unit of weight across every price bin a candle's
- *  [low, high] range overlaps — a reasonable stand-in given only OHLC. POC is the busiest bin;
- *  the value area expands outward from it, always toward whichever neighboring bin holds more,
- *  until it encloses ≥70% of the total weight — the standard Market Profile definition. */
-export function computeTPOProfile(candles: Candle[], binCount: number): TpoProfile | null {
-  if (candles.length === 0) return null;
-  let lo = Infinity;
-  let hi = -Infinity;
-  for (const d of candles) {
-    lo = Math.min(lo, d.low);
-    hi = Math.max(hi, d.high);
-  }
-  if (!(hi > lo)) return null;
-  const binSize = (hi - lo) / binCount;
-  const counts = new Array(binCount).fill(0);
-  for (const d of candles) {
-    const startBin = Math.min(binCount - 1, Math.max(0, Math.floor((d.low - lo) / binSize)));
-    const endBin = Math.min(binCount - 1, Math.max(0, Math.floor((d.high - lo) / binSize)));
-    for (let b = startBin; b <= endBin; b++) counts[b] += 1;
-  }
-  const total = counts.reduce((a: number, b: number) => a + b, 0);
-  if (total === 0) return null;
-  let pocIndex = 0;
-  for (let b = 1; b < binCount; b++) if (counts[b] > counts[pocIndex]) pocIndex = b;
-  let areaLow = pocIndex;
-  let areaHigh = pocIndex;
-  let areaSum = counts[pocIndex];
-  while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < binCount - 1)) {
-    const below = areaLow > 0 ? counts[areaLow - 1] : -1;
-    const above = areaHigh < binCount - 1 ? counts[areaHigh + 1] : -1;
-    if (above >= below) {
-      areaHigh++;
-      areaSum += counts[areaHigh];
-    } else {
-      areaLow--;
-      areaSum += counts[areaLow];
-    }
-  }
-  const bins = counts.map((count: number, b: number) => ({ priceLow: lo + b * binSize, priceHigh: lo + (b + 1) * binSize, count }));
-  return {
-    bins,
-    poc: lo + (pocIndex + 0.5) * binSize,
-    vah: lo + (areaHigh + 1) * binSize,
-    val: lo + areaLow * binSize,
-  };
+/** One time block within a session — real TPO letters/numbers, each shown at every price `Row`
+ *  (by index into the session's own `rows`) any candle inside this block's own time window
+ *  touched. `label` wraps letters back to "A" after "Z" (there's no data-driven upper bound on
+ *  how many blocks a long session at a fine `blockMinutes` can produce) — good enough for typical
+ *  session/block combinations without needing a second letter tier, and numbers never need to. */
+export interface TpoBlock {
+  label: string;
+  rows: number[];
 }
 
 export interface TpoSessionProfile {
@@ -209,28 +169,96 @@ export interface TpoSessionProfile {
    *  full `data`. */
   startIndex: number;
   endIndex: number;
-  profile: TpoProfile;
+  rows: TpoRow[];
+  blocks: TpoBlock[];
+  pocRow: number;
+  vahRow: number;
+  valRow: number;
 }
 
-/** One `TpoProfile` per trading session (calendar day) instead of a single one for the whole
- *  range — real TPO/Market Profile charts show a profile per session, each read against *that*
- *  session's own bars, not one block pinned to a fixed edge (see `drawPriceCandles`' own "tpo"
- *  branch for how each is positioned against its own `startIndex`/`endIndex`). A session with
- *  under 3 candles is skipped entirely rather than rendering a near-meaningless profile off
- *  almost no data (most visibly, this quietly does nothing extra on a daily-or-coarser timeframe,
- *  where every "session" is just 1-2 candles). */
-export function computeTPOSessionProfiles(candles: Candle[], binCount: number): TpoSessionProfile[] {
+function tpoBlockLabel(index: number, style: "letters" | "numbers"): string {
+  if (style === "numbers") return String(index + 1);
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  return letters[index % letters.length];
+}
+
+/** "Time Price Opportunities": real Market Profile charts slice each session into fixed-length
+ *  time blocks (`blockMinutes` — 30 minutes on a real exchange floor, historically), stamping
+ *  that block's own letter/number at every price level a candle inside it touched — this needs
+ *  candles *finer* than `blockMinutes` to produce more than a single block per session (on a
+ *  daily-or-coarser timeframe there's no intrabar data left to slice, so no session below
+ *  qualifies at all — see the "tpo" mode's own empty-state message for that case, not a bug).
+ *  Rows are a fixed count across each session's own [low, high] (independent of `blockMinutes` —
+ *  finer blocks just mean more distinct letters landing in the same rows, not more rows), same
+ *  price-binning idea a volume profile already uses. POC is the row the most blocks touched; the
+ *  value area expands outward from it, always toward whichever neighboring row more blocks
+ *  touched, until it encloses ≥70% of all (block, row) touches — the standard Market Profile
+ *  definition, just counted in blocks-per-row instead of volume-per-row. */
+export function computeTPOSessionProfiles(candles: Candle[], rowCount: number, blockMinutes: number, labelStyle: "letters" | "numbers"): TpoSessionProfile[] {
   if (candles.length === 0) return [];
   const sessions: TpoSessionProfile[] = [];
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+  const blockMs = Math.max(1, blockMinutes) * 60_000;
+
   let sessionStart = 0;
   for (let i = 1; i <= candles.length; i++) {
     const sameDay = i < candles.length && dayKey(candles[i].date) === dayKey(candles[sessionStart].date);
     if (sameDay) continue;
     const endIndex = i - 1;
-    if (endIndex - sessionStart + 1 >= 3) {
-      const profile = computeTPOProfile(candles.slice(sessionStart, endIndex + 1), binCount);
-      if (profile) sessions.push({ startIndex: sessionStart, endIndex, profile });
+    const sessionCandles = candles.slice(sessionStart, endIndex + 1);
+
+    if (sessionCandles.length >= 2) {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const d of sessionCandles) {
+        lo = Math.min(lo, d.low);
+        hi = Math.max(hi, d.high);
+      }
+      if (hi > lo) {
+        const rowSize = (hi - lo) / rowCount;
+        const rowOf = (price: number) => Math.min(rowCount - 1, Math.max(0, Math.floor((price - lo) / rowSize)));
+
+        // Groups candles by which block index (time-since-session-start / blockMinutes) they
+        // fall in — only indices a real candle actually landed in become a block at all, so a
+        // session much shorter than a full "day's worth" of blocks doesn't pad out empty ones.
+        const sessionStartMs = sessionCandles[0].date.getTime();
+        const rowsByBlockIndex = new Map<number, Set<number>>();
+        for (const d of sessionCandles) {
+          const blockIndex = Math.floor((d.date.getTime() - sessionStartMs) / blockMs);
+          let rows = rowsByBlockIndex.get(blockIndex);
+          if (!rows) {
+            rows = new Set();
+            rowsByBlockIndex.set(blockIndex, rows);
+          }
+          for (let r = rowOf(d.low); r <= rowOf(d.high); r++) rows.add(r);
+        }
+
+        if (rowsByBlockIndex.size >= 2) {
+          const orderedBlockIndices = Array.from(rowsByBlockIndex.keys()).sort((a, b) => a - b);
+          const blocks: TpoBlock[] = orderedBlockIndices.map((bi, i) => ({
+            label: tpoBlockLabel(i, labelStyle),
+            rows: Array.from(rowsByBlockIndex.get(bi)!).sort((a, b) => a - b),
+          }));
+
+          const touchCounts = new Array(rowCount).fill(0);
+          for (const block of blocks) for (const r of block.rows) touchCounts[r]++;
+          const total = touchCounts.reduce((a: number, b: number) => a + b, 0);
+          let pocRow = 0;
+          for (let r = 1; r < rowCount; r++) if (touchCounts[r] > touchCounts[pocRow]) pocRow = r;
+          let areaLow = pocRow;
+          let areaHigh = pocRow;
+          let areaSum = touchCounts[pocRow];
+          while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < rowCount - 1)) {
+            const below = areaLow > 0 ? touchCounts[areaLow - 1] : -1;
+            const above = areaHigh < rowCount - 1 ? touchCounts[areaHigh + 1] : -1;
+            if (above >= below) areaSum += touchCounts[++areaHigh];
+            else areaSum += touchCounts[--areaLow];
+          }
+
+          const rows: TpoRow[] = Array.from({ length: rowCount }, (_, r) => ({ priceLow: lo + r * rowSize, priceHigh: lo + (r + 1) * rowSize }));
+          sessions.push({ startIndex: sessionStart, endIndex, rows, blocks, pocRow, vahRow: areaHigh, valRow: areaLow });
+        }
+      }
     }
     sessionStart = i;
   }

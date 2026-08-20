@@ -131,6 +131,19 @@ export interface CandlestickChartProps {
    *  many candles' worth of average true range past the last one) — recomputed from the whole
    *  dataset, not just what's visible. Default 14. */
   renkoAtrPeriod?: number;
+  /** "tpo" display mode only — how much real time each lettered/numbered block covers within its
+   *  own session (see `computeTPOSessionProfiles`'s own doc). Default 30 (minutes). Needs candles
+   *  finer than this to produce more than one block per session — on a daily-or-coarser
+   *  timeframe there's no intrabar data to slice, so no session qualifies (see the "tpo" mode's
+   *  own empty-state message for that case). */
+  tpoBlockMinutes?: number;
+  /** "tpo" display mode only — inserts a small gap between each block's own cells (even within
+   *  the same price row) so distinct blocks read as visually separate, instead of every block
+   *  touching a given row merging into one unbroken run. Default true. */
+  tpoSplitByBlocks?: boolean;
+  /** "tpo" display mode only — labels each session's blocks A, B, C, … (wrapping after Z to a, b,
+   *  c, …) or 1, 2, 3, … Default "letters". */
+  tpoLabelStyle?: "letters" | "numbers";
   /** Instrument name shown top-left of the price plot, followed by the current chart-type label
    *  (e.g. "AAPL · Bougies") — double-clicking that label opens the chart-settings modal (up/down
    *  bar colors, auto-rescale, event visibility). Omit to show just the chart-type label on its

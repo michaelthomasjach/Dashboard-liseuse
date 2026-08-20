@@ -25,6 +25,7 @@ export interface RenderCandlestickChartParams {
   renkoBricks: PriceBrick[];
   lineBreakBricks: PriceBrick[];
   tpoSessionProfiles: TpoSessionProfile[];
+  tpoSplitByBlocks: boolean;
   data: Candle[];
   visibleRange: { start: number; end: number };
   upColorOverride: string | undefined;
