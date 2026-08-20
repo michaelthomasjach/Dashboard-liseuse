@@ -8,6 +8,7 @@ import { WatchlistExposureModal } from "./WatchlistExposureModal";
 import { useSymbolSearchState } from "../candlestick/hooks/useSymbolSearchState";
 import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
 import { useWatchlistRowDrag, watchlistDropZoneProps } from "./useWatchlistRowDrag";
+import { useWatchlistSectionDrag } from "./useWatchlistSectionDrag";
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon, PieChartIcon } from "../../icons";
 import type { SymbolSearchCategory } from "../candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../candlestick/interfaces/SymbolSearchResult.interface";
@@ -38,6 +39,7 @@ export interface WatchlistPanelProps {
   onRemoveRow: ((watchlistId: string, rowId: string, sectionId: string | null) => void) | undefined;
   onMoveRow: ((watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void) | undefined;
   onRemoveSection: ((watchlistId: string, sectionId: string) => void) | undefined;
+  onReorderSections: ((watchlistId: string, orderedSectionIds: string[]) => void) | undefined;
 }
 
 /**
@@ -67,6 +69,7 @@ export function WatchlistPanel({
   onRemoveRow,
   onMoveRow,
   onRemoveSection,
+  onReorderSections,
 }: WatchlistPanelProps) {
   const activeWatchlist = watchlists.find((w) => w.id === activeWatchlistId) ?? watchlists[0];
   const [watchlistMenuOpen, setWatchlistMenuOpen] = useState(false);
@@ -87,6 +90,10 @@ export function WatchlistPanel({
     onMove: activeWatchlist
       ? ({ rowId, fromSectionId, toSectionId }) => onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId)
       : undefined,
+  });
+  const { draggingSectionId, startDrag: startSectionDrag } = useWatchlistSectionDrag({
+    sectionOrder: activeWatchlist.sections?.map((s) => s.id) ?? [],
+    onReorder: onReorderSections ? (order) => onReorderSections(activeWatchlist.id, order) : undefined,
   });
   // No favorites concept here (see SymbolSearchModal's own doc on reusing it without them) —
   // `useSymbolSearchState` still owns the open/query/category state either way.
@@ -256,7 +263,7 @@ export function WatchlistPanel({
             itself, closer in spirit to the name than to those per-row/per-column actions. */}
         <button
           type="button"
-          className="lq-chart__icon-button"
+          className="lq-chart__icon-button lq-chart-workspace__exposure-button"
           onClick={() => setExposureModalOpen(true)}
           aria-label="Répartition de la liste"
           title="Répartition de la liste"
@@ -338,11 +345,24 @@ export function WatchlistPanel({
               className={[
                 "lq-chart-workspace__watchlist-section-header",
                 dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
+                draggingSectionId === section.id && "lq-chart-workspace__watchlist-row--dragging",
               ]
                 .filter(Boolean)
                 .join(" ")}
+              data-watchlist-section-id={section.id}
               {...watchlistDropZoneProps(section.id)}
             >
+              {onReorderSections && (
+                <button
+                  type="button"
+                  className="lq-chart-workspace__watchlist-grip"
+                  onPointerDown={() => startSectionDrag(section.id)}
+                  aria-label={`Déplacer la section ${section.name}`}
+                  title="Glisser pour déplacer"
+                >
+                  <GripIcon size={12} />
+                </button>
+              )}
               <button type="button" className="lq-chart-workspace__watchlist-section-toggle" onClick={() => toggleSectionCollapsed(section.id)}>
                 {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
                 {section.name}

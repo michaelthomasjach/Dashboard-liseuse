@@ -135,6 +135,11 @@ export interface ChartWorkspaceProps {
    *  doc. The caller owns `watchlists` itself, so this only reports the move; actually moving the
    *  row between `rows`/`sections[].rows` arrays is up to whatever this does. */
   onMoveWatchlistRow?: (watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void;
+  /** Fires while a section is being dragged (via its own grip handle) past a neighbor — live, not
+   *  just on drop (see `useWatchlistSectionDrag`'s own doc) — with the section list's own new
+   *  order. Same "caller owns `watchlists`, this only reports the intent" shape as
+   *  `onMoveWatchlistRow`; reordering `sections` itself is up to whatever this does. */
+  onReorderWatchlistSections?: (watchlistId: string, orderedSectionIds: string[]) => void;
   /** Content for the docked panel's own "Alertes" tab, alongside `watchlists` — same "structure
    *  only, caller owns the content" shape. Omit entirely to skip the tab — its own rail icon only
    *  appears once this is set. */
@@ -184,6 +189,7 @@ export function ChartWorkspace({
   onRemoveWatchlistSymbol,
   onRemoveWatchlistSection,
   onMoveWatchlistRow,
+  onReorderWatchlistSections,
   alerts,
   defaultSidePanelOpen,
   onSidePanelOpenChange,
@@ -482,6 +488,7 @@ export function ChartWorkspace({
               onRemoveRow={onRemoveWatchlistSymbol}
               onMoveRow={onMoveWatchlistRow}
               onRemoveSection={onRemoveWatchlistSection}
+              onReorderSections={onReorderWatchlistSections}
             />
           ) : (
             <>

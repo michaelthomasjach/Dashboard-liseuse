@@ -105,7 +105,7 @@ const CUSTOM_INDICATORS: CustomIndicatorDef[] = [
   {
     id: "grossMarginPct",
     label: "Marge brute (%)",
-    section: "fundamentals",
+    section: "Fondamentaux",
     type: "overlay",
     draw: "line",
     color: "#7fb37f",
@@ -115,7 +115,7 @@ const CUSTOM_INDICATORS: CustomIndicatorDef[] = [
   {
     id: "dividendPerShare",
     label: "Dividende par action",
-    section: "fundamentals",
+    section: "Fondamentaux",
     type: "own",
     draw: "histogram",
     color: "#6c87c9",
@@ -125,7 +125,7 @@ const CUSTOM_INDICATORS: CustomIndicatorDef[] = [
   {
     id: "incomeTax",
     label: "Impôt sur le revenu",
-    section: "fundamentals",
+    section: "Fondamentaux",
     type: "own",
     draw: "area",
     color: "#c96c8f",
@@ -350,6 +350,19 @@ export const AllFeatures: Story = {
       );
     }
 
+    // Same "caller owns `watchlists`, this only reports the new order" shape as
+    // handleMoveWatchlistRow above — just reshuffling `sections` itself by the ids reported,
+    // rather than moving a row between them.
+    function handleReorderWatchlistSections(watchlistId: string, orderedSectionIds: string[]) {
+      setWatchlists((prev) =>
+        prev.map((w) => {
+          if (w.id !== watchlistId || !w.sections) return w;
+          const byId = new Map(w.sections.map((s) => [s.id, s]));
+          return { ...w, sections: orderedSectionIds.map((id) => byId.get(id)!) };
+        })
+      );
+    }
+
     // Storybook's own global decorator (see .storybook/preview.tsx) wraps every story in 32px of
     // padding, unrelated to ChartWorkspace itself — harmless normally, but it's exactly what
     // would keep the workspace (sized to fill 100% of the viewport on its own, see
@@ -387,6 +400,7 @@ export const AllFeatures: Story = {
           onRemoveWatchlistSymbol={handleRemoveWatchlistSymbol}
           onRemoveWatchlistSection={handleRemoveWatchlistSection}
           onMoveWatchlistRow={handleMoveWatchlistRow}
+          onReorderWatchlistSections={handleReorderWatchlistSections}
           alerts={<AlertsPlaceholder />}
         >
           <CandlestickChart
