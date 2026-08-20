@@ -582,6 +582,41 @@
   gap: 6px;
 }
 
+/* "Son" field + its play button — flex-end so the button lines up with the Select's own control,
+   not its label sitting above. */
+.lq-alert-modal__sound-row {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--lq-space-2);
+}
+
+.lq-alert-modal__sound-select {
+  flex: 1;
+}
+
+.lq-alert-modal__play-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  color: var(--lq-color-text-muted);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border-subtle);
+  border-radius: var(--lq-radius-sm);
+  cursor: pointer;
+}
+
+.lq-alert-modal__play-button:hover:not(:disabled) {
+  color: var(--lq-color-text);
+  border-color: var(--lq-color-border);
+}
+
+.lq-alert-modal__play-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .lq-chart__icon-button--active:hover {
   color: var(--lq-color-accent-contrast);
   border-color: var(--lq-color-accent);

@@ -21,6 +21,11 @@ export interface UseZoomAndScalesArgs {
   drawings: TrendLineDrawing[];
   activeTool: DrawingToolType | null;
   hoveredDrawingIdRef: RefObject<string | null>;
+  /** Whether the pointer is currently over the measure tool's own rectangle body — same reason
+   *  hoveredDrawingIdRef is checked below: kept live by useDrawingInteractions' own
+   *  handlePointerMove so it's already correct by the time a *later* pointerdown needs it to
+   *  decide whether to start a whole-body drag instead of this hook's own pan. */
+  measureBodyHoveredRef: RefObject<boolean>;
   yAutoScalingState: boolean;
   zoomable: boolean;
   initialVisibleCandles: number | undefined;
@@ -45,6 +50,7 @@ export function useZoomAndScales({
   drawings,
   activeTool,
   hoveredDrawingIdRef,
+  measureBodyHoveredRef,
   yAutoScalingState,
   zoomable,
   initialVisibleCandles,
@@ -335,7 +341,7 @@ export function useZoomAndScales({
     enabled: zoomable && activeTool === null,
     scaleExtent: [1, maxXZoom],
     onZoom: setTransform,
-    filter: () => hoveredDrawingIdRef.current === null,
+    filter: () => hoveredDrawingIdRef.current === null && !measureBodyHoveredRef.current,
     constrain: constrainXPan,
   });
 

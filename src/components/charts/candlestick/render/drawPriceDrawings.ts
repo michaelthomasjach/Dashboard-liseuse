@@ -416,10 +416,14 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       const sign = dr.y2 >= dr.y1 ? "+" : "";
       const fmtDate = (d: Date) => `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear()}`;
 
+      // Labels follow the drawing's own text color (like every other drawing type's own text —
+      // see drawDrawingText), not the line color — only the change line in the middle stays
+      // sign-colored (green/red by up/down), since that's meaningful info rather than styling.
+      const textColor = dr.textColor ?? lineColor;
       ctx.save();
       ctx.textAlign = "left";
       ctx.textBaseline = "bottom";
-      ctx.fillStyle = lineColor;
+      ctx.fillStyle = textColor;
       ctx.font = `600 11px ${fontFamily}`;
       ctx.fillText(dr.y1.toFixed(2), ax + 6, ay - 4);
       ctx.font = `400 10px ${fontFamily}`;
@@ -428,7 +432,7 @@ export function drawPriceDrawings(ctx: CanvasRenderingContext2D, params: RenderC
       ctx.fillStyle = pctChange >= 0 ? colorUp : colorDown;
       ctx.font = `600 11px ${fontFamily}`;
       ctx.fillText(`${sign}${(dr.y2 - dr.y1).toFixed(2)} (${sign}${pctChange.toFixed(2)}%) en ${days}j`, bx + 6, by - 12);
-      ctx.fillStyle = lineColor;
+      ctx.fillStyle = textColor;
       ctx.font = `400 10px ${fontFamily}`;
       ctx.fillText(`${dr.y2.toFixed(2)} · ${fmtDate(dr.x2)}`, bx + 6, by + 4);
       ctx.restore();

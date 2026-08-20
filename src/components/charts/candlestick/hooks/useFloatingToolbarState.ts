@@ -52,7 +52,10 @@ export function useFloatingToolbarState({
   }
 
   const selectedDrawing = selectedDrawingId ? (drawings.find((d) => d.id === selectedDrawingId) ?? null) : null;
-  const showFloatingToolbar = activeTool !== null || selectedDrawingId !== null;
+  // Deliberately not `activeTool !== null` too — merely arming a tool from the rail (before
+  // anything is actually clicked/placed on the chart) shouldn't pop the toolbar up on its own;
+  // it should only appear once there's a real drawing to style, i.e. one the user has selected.
+  const showFloatingToolbar = selectedDrawingId !== null;
   // "measure"/"zoomIn" produce no persistent styled drawing — the pencil/text/stroke sections
   // have nothing to act on for either, only the grip and bell apply.
   const showToolbarStyleControls = activeTool !== "measure" && activeTool !== "zoomIn";

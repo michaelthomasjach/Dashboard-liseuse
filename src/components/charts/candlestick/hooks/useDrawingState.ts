@@ -114,6 +114,16 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
   // above) is currently being dragged — same generic pointer-capture pattern as dragEndpointRef,
   // just keyed by "p1"/"p2" instead of a drawing id + pointIndex since there's only ever one.
   const dragMeasureRef = useRef<"p1" | "p2" | null>(null);
+  // Set while dragging the measurement's whole body (pointer down inside its rectangle, not on
+  // either handle) — moves p1/p2 together by the same pixel delta, same "orig" + startClientX/Y
+  // replay pattern as dragLineRef below, just for measurePoints instead of a `drawings` entry.
+  const dragMeasureBodyRef = useRef<{ startClientX: number; startClientY: number; orig: { p1: DataPoint; p2: DataPoint } } | null>(null);
+  // Kept up to date on every pointermove (see useDrawingInteractions' own handlePointerMove),
+  // same "set *before* the drag-starting pointerdown, not during it" timing hoveredDrawingIdRef
+  // already relies on — useZoomAndScales' own d3-zoom filter checks this the same way, since a
+  // native listener attached to the same element fires before this file's React handler could
+  // set anything from inside that same pointerdown.
+  const measureBodyHoveredRef = useRef(false);
   const drawingIdRef = useRef(0);
 
   // Mirrors hoveredDrawingId so useD3Zoom's filter (a plain callback, run outside React) can
@@ -424,6 +434,8 @@ export function useDrawingState({ data, defaultDrawings, onDrawingsChange, onAdd
     dragEndpointRef,
     dragAxisRef,
     dragMeasureRef,
+    dragMeasureBodyRef,
+    measureBodyHoveredRef,
     drawingIdRef,
     hoveredDrawingIdRef,
     updateHoveredDrawingId,

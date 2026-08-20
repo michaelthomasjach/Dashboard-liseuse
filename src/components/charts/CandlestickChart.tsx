@@ -102,7 +102,7 @@ export function CandlestickChart({
   defaultDrawings,
   onDrawingsChange,
   onCreateAlert,
-  alertSoundOptions,
+  alertSoundOptions, onPlaySound,
   showIndicators = false,
   defaultIndicators,
   onIndicatorsChange, customIndicators,
@@ -194,7 +194,7 @@ export function CandlestickChart({
     addingOverlaySymbols,
     dragEndpointRef,
     dragAxisRef,
-    dragMeasureRef,
+    dragMeasureRef, dragMeasureBodyRef, measureBodyHoveredRef,
     drawingIdRef,
     hoveredDrawingIdRef,
     updateHoveredDrawingId,
@@ -373,7 +373,7 @@ export function CandlestickChart({
     paneYTransform,
     drawings,
     activeTool,
-    hoveredDrawingIdRef,
+    hoveredDrawingIdRef, measureBodyHoveredRef,
     yAutoScalingState,
     zoomable,
     initialVisibleCandles,
@@ -495,7 +495,7 @@ export function CandlestickChart({
     setPendingSecondPoint,
     pendingExtraPoints,
     setPendingExtraPoints,
-    setMeasurePoints,
+    measurePoints, setMeasurePoints,
     drawingsLocked,
     visibleDrawings,
     setBrushPreview,
@@ -510,7 +510,7 @@ export function CandlestickChart({
     setEditModalTab,
     dragEndpointRef,
     dragAxisRef,
-    dragMeasureRef,
+    dragMeasureRef, dragMeasureBodyRef, measureBodyHoveredRef,
     dragLineRef,
     isPanningYRef,
     cancelDrawingTool,
@@ -986,7 +986,7 @@ export function CandlestickChart({
         symbol={symbol} timeframe={timeframe}
         {...alertTarget}
         overlayIndicators={overlayIndicators} indicatorLabel={indicatorLabel}
-        soundOptions={alertSoundOptions} onCreate={onCreateAlert}
+        soundOptions={alertSoundOptions} onCreate={onCreateAlert} onPlaySound={onPlaySound}
       />
       </div>
 

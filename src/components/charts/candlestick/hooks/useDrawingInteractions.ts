@@ -49,6 +49,7 @@ export interface UseDrawingInteractionsArgs {
   setPendingSecondPoint: (v: DataPoint | null) => void;
   pendingExtraPoints: DataPoint[];
   setPendingExtraPoints: (v: DataPoint[] | ((prev: DataPoint[]) => DataPoint[])) => void;
+  measurePoints: { p1: DataPoint; p2: DataPoint } | null;
   setMeasurePoints: (v: { p1: DataPoint; p2: DataPoint } | null | ((prev: { p1: DataPoint; p2: DataPoint } | null) => { p1: DataPoint; p2: DataPoint } | null)) => void;
   drawingsLocked: boolean;
   visibleDrawings: TrendLineDrawing[];
@@ -65,6 +66,8 @@ export interface UseDrawingInteractionsArgs {
   dragEndpointRef: MutableRef<{ id: string; pointIndex: number } | null>;
   dragAxisRef: MutableRef<{ id: string } | null>;
   dragMeasureRef: MutableRef<"p1" | "p2" | null>;
+  dragMeasureBodyRef: MutableRef<{ startClientX: number; startClientY: number; orig: { p1: DataPoint; p2: DataPoint } } | null>;
+  measureBodyHoveredRef: MutableRef<boolean>;
   dragLineRef: MutableRef<{ id: string; startClientX: number; startClientY: number; orig: TrendLineDrawing } | null>;
   isPanningYRef: MutableRef<boolean>;
   cancelDrawingTool: () => void;
@@ -131,6 +134,7 @@ export function useDrawingInteractions({
   setPendingSecondPoint,
   pendingExtraPoints,
   setPendingExtraPoints,
+  measurePoints,
   setMeasurePoints,
   drawingsLocked,
   visibleDrawings,
@@ -147,6 +151,8 @@ export function useDrawingInteractions({
   dragEndpointRef,
   dragAxisRef,
   dragMeasureRef,
+  dragMeasureBodyRef,
+  measureBodyHoveredRef,
   dragLineRef,
   isPanningYRef,
   cancelDrawingTool,
@@ -716,6 +722,21 @@ export function useDrawingInteractions({
       return;
     }
 
+    if (dragMeasureBodyRef.current) {
+      const drag = dragMeasureBodyRef.current;
+      const dxPixels = e.clientX - drag.startClientX;
+      const dyPixels = e.clientY - drag.startClientY;
+      const shift = (p: DataPoint): DataPoint => {
+        const origX = zoomedXScale(indexForDate(p.x) + 0.5);
+        return {
+          x: dateForIndex(zoomedXScale.invert(origX + dxPixels)),
+          y: round4(zoomedPriceScale.invert(zoomedPriceScale(p.y) + dyPixels)),
+        };
+      };
+      setMeasurePoints({ p1: shift(drag.orig.p1), p2: shift(drag.orig.p2) });
+      return;
+    }
+
     if (dragLineRef.current) {
       const drag = dragLineRef.current;
       const dxPixels = e.clientX - drag.startClientX;
@@ -766,6 +787,19 @@ export function useDrawingInteractions({
     }
 
     if (isPanningYRef.current) return;
+
+    // Kept current on every move (not just computed at drag-start) so it's already correct by
+    // the time a *later* pointerdown needs it — see measureBodyHoveredRef's own doc for why.
+    if (measurePoints) {
+      const mx1 = zoomedXScale(indexForDate(measurePoints.p1.x) + 0.5);
+      const my1 = zoomedPriceScale(measurePoints.p1.y);
+      const mx2 = zoomedXScale(indexForDate(measurePoints.p2.x) + 0.5);
+      const my2 = zoomedPriceScale(measurePoints.p2.y);
+      measureBodyHoveredRef.current =
+        mouseX >= Math.min(mx1, mx2) && mouseX <= Math.max(mx1, mx2) && mouseY >= Math.min(my1, my2) && mouseY <= Math.max(my1, my2);
+    } else {
+      measureBodyHoveredRef.current = false;
+    }
 
     // A touch contact is a much blunter instrument than a mouse pointer, so it gets a wider
     // whole-line hit tolerance than DRAWING_HIT_DISTANCE alone would give a mouse.
@@ -823,6 +857,17 @@ export function useDrawingInteractions({
         return;
       }
     }
+    // Pointer down inside the measurement's own rectangle (not on either handle, already handled
+    // by handleMeasureHandlePointerDown before this ever fires) — drags the whole thing, moving
+    // p1/p2 together instead of only ever being able to redefine one endpoint at a time. Reads
+    // the hover ref (kept live by handlePointerMove) rather than re-deriving it here, since that's
+    // also what useZoomAndScales' own filter already had to check *before* this same pointerdown
+    // to back off its own pan — recomputing a fresh answer here would just disagree with it.
+    if (measurePoints && measureBodyHoveredRef.current) {
+      e.currentTarget.setPointerCapture(e.pointerId);
+      dragMeasureBodyRef.current = { startClientX: e.clientX, startClientY: e.clientY, orig: measurePoints };
+      return;
+    }
     if (!zoomable) return;
     const startClientY = e.clientY;
     const startYTransform = yTransform;
@@ -868,6 +913,11 @@ export function useDrawingInteractions({
         ]);
       }
       cancelDrawingTool();
+      return;
+    }
+    if (dragMeasureBodyRef.current) {
+      dragMeasureBodyRef.current = null;
+      if (e.currentTarget.hasPointerCapture(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
       return;
     }
     if (!dragLineRef.current) return;

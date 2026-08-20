@@ -65,6 +65,10 @@ export interface CandlestickChartProps {
   /** Options for the alert modal's own "Son" (sound) picker — this library ships no audio assets,
    *  so it's purely a label picker, never actually played. Defaults to a small built-in list. */
   alertSoundOptions?: { value: string; label: string }[];
+  /** Plays the given sound option's own value — the create-alert modal's "Son" field shows a
+   *  play button next to it only while this is provided (the library ships no audio assets of
+   *  its own, see AlertCreateModal's own doc, so there's nothing to play without it). */
+  onPlaySound?: (value: string) => void;
   /** Shows a header button that opens the technical-indicator picker (SMA, EMA, WMA…) and the
    *  active-indicator legend in the plot's top-left corner. Default false. */
   showIndicators?: boolean;

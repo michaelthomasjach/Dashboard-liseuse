@@ -17,6 +17,7 @@ import {
   RefreshIcon,
   CandleModeIcon,
   ActivityIcon,
+  PlayIcon,
 } from "../../../icons";
 import type { Indicator } from "../interfaces/Indicator.interface";
 import type { ChartAlertCrossing, ChartAlertDraft } from "../interfaces/ChartAlertDraft.interface";
@@ -149,6 +150,9 @@ export interface AlertCreateModalProps {
   /** This library ships no audio assets — purely a label picker, no playback. Default a small
    *  built-in list. */
   soundOptions?: { value: string; label: string }[];
+  /** Plays the currently selected sound — shows a play button next to "Son" only while provided
+   *  (see CandlestickChartProps.onPlaySound's own doc for why: no callback, nothing to play). */
+  onPlaySound?: (value: string) => void;
   onCreate: ((alert: ChartAlertDraft) => void) | undefined;
 }
 
@@ -168,6 +172,7 @@ export function AlertCreateModal({
   overlayIndicators,
   indicatorLabel,
   soundOptions = DEFAULT_SOUND_OPTIONS,
+  onPlaySound,
   onCreate,
 }: AlertCreateModalProps) {
   const fibLevels = fibonacciExtension ? FIBONACCI_EXTENSION_LEVELS : FIBONACCI_LEVELS;
@@ -278,7 +283,21 @@ export function AlertCreateModal({
           onChange={setTrigger}
         />
 
-        <Select label="Son" options={soundOptions} value={sound} onChange={setSound} />
+        <div className="lq-alert-modal__sound-row">
+          <Select className="lq-alert-modal__sound-select" label="Son" options={soundOptions} value={sound} onChange={setSound} />
+          {onPlaySound && (
+            <button
+              type="button"
+              className="lq-alert-modal__play-button"
+              onClick={() => onPlaySound(sound)}
+              disabled={sound === "none"}
+              aria-label="Écouter le son"
+              title="Écouter le son"
+            >
+              <PlayIcon size={14} />
+            </button>
+          )}
+        </div>
 
         <TextField
           label="Message"
