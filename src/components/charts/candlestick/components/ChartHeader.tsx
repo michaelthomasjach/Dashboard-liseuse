@@ -120,7 +120,7 @@ export function ChartHeader({
       {timeframes && timeframes.length > 0 && (
         <>
           <button ref={tfAnchorRef} type="button" className="lq-chart__timeframe-trigger" onClick={() => setTfOpen((o) => !o)}>
-            {currentTimeframeLabel ?? "Intervalle"}
+            <span className="lq-chart__timeframe-trigger-label">{currentTimeframeLabel ?? "Intervalle"}</span>
             <ChevronDownIcon size={12} />
           </button>
           <Popover open={tfOpen} onClose={() => setTfOpen(() => false)} anchorRef={tfAnchorRef} placement="bottom">
@@ -164,7 +164,7 @@ export function ChartHeader({
             </div>
           </Popover>
           <button ref={rangeAnchorRef} type="button" className="lq-chart__timeframe-trigger" onClick={() => setRangeOpen((o) => !o)}>
-            {selectedRange ?? "Plage"}
+            <span className="lq-chart__timeframe-trigger-label">{selectedRange ?? "Plage"}</span>
             <ChevronDownIcon size={12} />
           </button>
           <Popover open={rangeOpen} onClose={() => setRangeOpen(() => false)} anchorRef={rangeAnchorRef} placement="bottom">

@@ -224,7 +224,7 @@ export function WatchlistPanel({
           onClick={() => setWatchlistMenuOpen((o) => !o)}
           aria-label={`Liste : ${activeWatchlist.name}`}
         >
-          {activeWatchlist.name}
+          <span className="lq-chart__timeframe-trigger-label">{activeWatchlist.name}</span>
           <ChevronDownIcon size={12} />
         </button>
         <Popover open={watchlistMenuOpen} onClose={() => setWatchlistMenuOpen(false)} anchorRef={watchlistTriggerRef} placement="bottom">
@@ -273,7 +273,7 @@ export function WatchlistPanel({
           aria-label="Répartition de la liste"
           title="Répartition de la liste"
         >
-          <PieChartIcon size={13} />
+          <PieChartIcon size={14} />
         </button>
 
         <div className="lq-chart-workspace__watchlist-actions">

@@ -333,7 +333,7 @@ export function SeasonalityView({ data, symbol, onBack, showHeader = true, heigh
             onClick={() => setViewModeMenuOpen((o) => !o)}
             aria-label={`Mode d'affichage : ${currentViewModeLabel}`}
           >
-            {currentViewModeLabel}
+            <span className="lq-chart__timeframe-trigger-label">{currentViewModeLabel}</span>
             <ChevronDownIcon size={12} />
           </button>
           <Popover open={viewModeMenuOpen} onClose={() => setViewModeMenuOpen(false)} anchorRef={viewModeAnchorRef} placement="bottom">

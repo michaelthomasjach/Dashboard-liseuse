@@ -882,6 +882,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* Lets the button shrink below its label's own natural width in a tight flex parent (e.g. a
+     narrowed side panel) instead of forcing the row to wrap or overflow — the label itself
+     (.lq-chart__timeframe-trigger-label below) is what actually clips to one line. */
+  min-width: 0;
   padding: 4px 8px;
   font-family: inherit;
   font-size: 0.75rem;
@@ -895,6 +899,22 @@
 
 .lq-chart__timeframe-trigger:hover {
   border-color: var(--lq-color-border);
+}
+
+/* Wraps the trigger's own text (not its chevron, which stays a fixed size right after this) —
+   crops to one line with an ellipsis instead of ever wrapping the button onto two. */
+.lq-chart__timeframe-trigger-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+/* The chevron would otherwise be just as free to shrink as the label above it once the button
+   runs out of room — flex-shrink applies to any flex child regardless of its own intrinsic
+   width/height, SVG included. */
+.lq-chart__timeframe-trigger svg {
+  flex-shrink: 0;
 }
 
 .lq-chart__timeframe-menu {
