@@ -110,6 +110,13 @@
   font-weight: 700;
 }
 
+/* Matches :hover:not(:disabled)'s own 3-selector specificity (a plain --selected:hover, at only
+   2, would still lose to it) — without this, hovering the selected day loses its own
+   contrast-matched background to :hover's. */
+.lq-date-picker__day--selected:hover:not(:disabled) {
+  background-color: var(--lq-color-fill);
+}
+
 /* Continuous band between a range's start/end — cells sit flush (no grid gap, no radius) so
    it reads as one unbroken highlight rather than a row of separately-rounded chips. */
 .lq-date-picker__day--range-middle {
@@ -144,6 +151,12 @@
   background-color: var(--lq-color-fill);
   color: var(--lq-color-accent-contrast);
   font-weight: 700;
+}
+
+/* Without this, hovering the selected cell loses its own contrast-matched background to
+   :hover's. */
+.lq-date-picker__cell--selected:hover {
+  background-color: var(--lq-color-fill);
 }
 
 /* DateTimePicker: calendar on the left, a time-of-day panel docked to the right. */
@@ -219,6 +232,12 @@
   background-color: var(--lq-color-fill);
   color: var(--lq-color-accent-contrast);
   font-weight: 700;
+}
+
+/* Without this, hovering the selected option loses its own contrast-matched background to
+   :hover's. */
+.lq-date-picker__time-option--selected:hover {
+  background-color: var(--lq-color-fill);
 }
 
 .lq-date-picker__time-confirm {

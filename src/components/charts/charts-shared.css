@@ -547,6 +547,17 @@
   font-weight: 700;
 }
 
+/* Without this, hovering an already-selected option lost its own contrast-matched text color's
+   background: `:hover` (two selectors: the base class + the pseudo-class) outranks `--selected`
+   (one class) on specificity alone, so `:hover`'s own lighter background-color won regardless of
+   source order, while `--selected`'s own light `color` (only ever meant to read against *its*
+   background) stayed — light text on a light hover background. Same specificity as `:hover`
+   itself (also two selectors), so this instead wins on being the later rule, keeping the selected
+   look — and its own already-legible contrast — through a hover instead of fighting it. */
+.lq-chart__tool-menu-option--selected:hover {
+  background-color: var(--lq-color-fill);
+}
+
 .lq-chart__icon-button--active {
   color: var(--lq-color-accent-contrast);
   background-color: var(--lq-color-accent);
@@ -932,6 +943,12 @@
   font-weight: 700;
 }
 
+/* Same specificity fight as .lq-chart__tool-menu-option--selected:hover above — without this,
+   hovering the selected option loses its own contrast-matched background to :hover's. */
+.lq-chart__timeframe-option--selected:hover {
+  background-color: var(--lq-color-fill);
+}
+
 .lq-chart__display-mode-menu {
   display: flex;
   flex-direction: column;
@@ -963,6 +980,12 @@
   background-color: var(--lq-color-fill);
   color: var(--lq-color-accent-contrast);
   font-weight: 700;
+}
+
+/* Same specificity fight as .lq-chart__tool-menu-option--selected:hover above — without this,
+   hovering the selected option loses its own contrast-matched background to :hover's. */
+.lq-chart__display-mode-option--selected:hover {
+  background-color: var(--lq-color-fill);
 }
 
 /* Edit-drawing modal: pairs of fields side by side, plus a couple of native inputs styled to
@@ -1511,6 +1534,14 @@
 .lq-chart__indicator-category-filter--selected {
   color: var(--lq-color-accent-contrast);
   background-color: var(--lq-color-fill);
+}
+
+/* Same specificity fight as .lq-chart__tool-menu-option--selected:hover above, just via `color`
+   here instead of `background-color` — without this, hovering the selected pill loses its own
+   contrast-matched text color to :hover's (dark-on-dark in the E-ink palette, where `--lq-color-
+   fill` and plain `--lq-color-text` both resolve to the same near-black). */
+.lq-chart__indicator-category-filter--selected:hover {
+  color: var(--lq-color-accent-contrast);
 }
 
 .lq-chart__indicator-picker {

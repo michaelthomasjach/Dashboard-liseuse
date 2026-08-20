@@ -61,6 +61,14 @@
   font-weight: 700;
 }
 
+/* Without this, hovering the selected option loses its own contrast-matched background to
+   :hover's — same specificity fight as any ".foo--selected" + separate ".foo:hover" pairing (two
+   selectors on :hover outrank one on --selected alone), same fix (equal specificity, later rule
+   wins). */
+.lq-dropdown-panel__option--selected:hover {
+  background-color: var(--lq-color-fill);
+}
+
 .lq-dropdown-panel__footer {
   display: flex;
   flex-wrap: wrap;
