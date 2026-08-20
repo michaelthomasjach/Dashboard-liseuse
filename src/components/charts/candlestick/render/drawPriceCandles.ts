@@ -188,16 +188,17 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
 
     if (chartDisplayMode === "tpo") {
       if (tpoSessionProfiles.length === 0) {
-        // Needs candles finer than a session (see computeTPOSessionProfiles' own doc) to have
-        // more than one time block to letter at all — a daily-or-coarser timeframe has no
-        // intrabar data left to slice, so nothing qualifies. Says so instead of silently
-        // rendering a blank pane, which otherwise reads as "TPO is broken."
+        // Needs at least a couple of sessions' worth of candles to form even one profile (see
+        // computeTPOSessionProfiles' own doc) — genuinely rare once there's any real history in
+        // view, but says so instead of silently rendering a blank pane on the visible range that
+        // does hit it (e.g. right after mounting on a tiny dataset), which otherwise reads as
+        // "TPO is broken."
         ctx.save();
         ctx.fillStyle = colorMuted;
         ctx.font = `600 12px ${fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("TPO nécessite un intervalle infrajournalier (ex. 30 min, 1 heure)", dims.boundedWidth / 2, priceHeight / 2);
+        ctx.fillText("Pas assez de bougies visibles pour former une séance TPO", dims.boundedWidth / 2, priceHeight / 2);
         ctx.restore();
       }
       // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its

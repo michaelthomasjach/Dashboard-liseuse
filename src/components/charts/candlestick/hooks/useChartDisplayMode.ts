@@ -8,6 +8,7 @@ export interface UseChartDisplayModeArgs {
   visibleRange: { start: number; end: number };
   renkoAtrPeriod: number;
   tpoBlockMinutes: number;
+  tpoCandlesPerSession: number;
   tpoLabelStyle: "letters" | "numbers";
   defaultChartDisplayMode: ChartDisplayMode | undefined;
 }
@@ -15,7 +16,15 @@ export interface UseChartDisplayModeArgs {
 /** How the price series itself is drawn (candle/line/Heikin Ashi/Renko/Line Break/TPO) — see
  *  `CandlestickChartProps.defaultChartDisplayMode`/`onChartDisplayModeChange` — plus every
  *  display-mode-specific transform of `data` the canvas draw effect actually paints from. */
-export function useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, tpoBlockMinutes, tpoLabelStyle, defaultChartDisplayMode }: UseChartDisplayModeArgs) {
+export function useChartDisplayMode({
+  data,
+  visibleRange,
+  renkoAtrPeriod,
+  tpoBlockMinutes,
+  tpoCandlesPerSession,
+  tpoLabelStyle,
+  defaultChartDisplayMode,
+}: UseChartDisplayModeArgs) {
   const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>(defaultChartDisplayMode ?? "candle");
   const [displayModeOpen, setDisplayModeOpen] = useState(false);
   const displayModeAnchorRef = useRef<HTMLButtonElement>(null);
@@ -56,12 +65,12 @@ export function useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, tpoBlo
     // computeTPOSessionProfiles' own startIndex/endIndex are relative to the slice handed to
     // it — offset back by `start` so they're absolute indices into `data` again, the index
     // space zoomedXScale (and every other renderer input) actually expects.
-    return computeTPOSessionProfiles(data.slice(start, end), 24, tpoBlockMinutes, tpoLabelStyle).map((s) => ({
+    return computeTPOSessionProfiles(data.slice(start, end), 24, tpoBlockMinutes, tpoCandlesPerSession, tpoLabelStyle).map((s) => ({
       ...s,
       startIndex: s.startIndex + start,
       endIndex: s.endIndex + start,
     }));
-  }, [data, visibleRange, chartDisplayMode, tpoBlockMinutes, tpoLabelStyle]);
+  }, [data, visibleRange, chartDisplayMode, tpoBlockMinutes, tpoCandlesPerSession, tpoLabelStyle]);
 
   return {
     chartDisplayMode,
