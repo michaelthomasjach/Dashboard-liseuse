@@ -4,10 +4,11 @@ import { Checkbox } from "../../forms/Checkbox";
 import { TextField } from "../../forms/TextField";
 import { Modal } from "../../primitives/Modal";
 import { SymbolSearchModal } from "../candlestick/components/SymbolSearchModal";
+import { WatchlistExposureModal } from "./WatchlistExposureModal";
 import { useSymbolSearchState } from "../candlestick/hooks/useSymbolSearchState";
 import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
 import { useWatchlistRowDrag, watchlistDropZoneProps } from "./useWatchlistRowDrag";
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon } from "../../icons";
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon, PieChartIcon } from "../../icons";
 import type { SymbolSearchCategory } from "../candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../candlestick/interfaces/SymbolSearchResult.interface";
 import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow, ChartWorkspaceWatchlistSection } from "./ChartWorkspaceWatchlist.interface";
@@ -81,6 +82,7 @@ export function WatchlistPanel({
   // that section actually has rows in it (see confirmRemoveSection below); an empty section is
   // removed immediately with no modal, since there's nothing a confirmation would be protecting.
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<ChartWorkspaceWatchlistSection | null>(null);
+  const [exposureModalOpen, setExposureModalOpen] = useState(false);
   const { draggingRowId, dropTargetSectionId, startDrag } = useWatchlistRowDrag({
     onMove: activeWatchlist
       ? ({ rowId, fromSectionId, toSectionId }) => onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId)
@@ -249,6 +251,19 @@ export function WatchlistPanel({
           </div>
         </Popover>
 
+        {/* Right next to the name, not grouped with the +/… actions further right (see that
+            div's own `margin-left: auto`) — a concentration/exposure view is about *this list*
+            itself, closer in spirit to the name than to those per-row/per-column actions. */}
+        <button
+          type="button"
+          className="lq-chart__icon-button"
+          onClick={() => setExposureModalOpen(true)}
+          aria-label="Répartition de la liste"
+          title="Répartition de la liste"
+        >
+          <PieChartIcon size={13} />
+        </button>
+
         <div className="lq-chart-workspace__watchlist-actions">
           <button
             type="button"
@@ -384,6 +399,8 @@ export function WatchlistPanel({
         handleAddSymbolOverlay={() => {}}
         removeSymbolOverlay={() => {}}
       />
+
+      <WatchlistExposureModal open={exposureModalOpen} onClose={() => setExposureModalOpen(false)} watchlist={activeWatchlist} />
 
       {nameModal && (
         <NameModal

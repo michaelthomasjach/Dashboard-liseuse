@@ -44,6 +44,7 @@ export {
   MenuIcon,
   BellIcon,
   WatchlistIcon,
+  PieChartIcon,
   SettingsIcon,
   LinkIcon,
   GridIcon,

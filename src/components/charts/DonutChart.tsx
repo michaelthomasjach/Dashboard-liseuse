@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import * as d3 from "d3";
 import { CHART_PALETTE } from "./internal/palette";
 import "./charts-shared.css";
@@ -18,6 +19,11 @@ export interface DonutChartProps {
   formatValue?: (value: number) => string;
   showLegend?: boolean;
   className?: string;
+  /** Overrides the center's own default (non-hovered) value/caption — e.g. a distinct-category
+   *  count ("5" over "Types de symboles") instead of the sum of every slice's own value / "Total".
+   *  Hovering a slice still shows that slice's own value/label as usual either way. */
+  centerValue?: ReactNode;
+  centerCaption?: string;
 }
 
 /** Allocation / breakdown donut, e.g. portfolio composition by asset class. */
@@ -28,6 +34,8 @@ export function DonutChart({
   formatValue,
   showLegend = true,
   className,
+  centerValue,
+  centerCaption,
 }: DonutChartProps) {
   const [activeId, setActiveId] = useState<string | null>(null);
   const radius = size / 2;
@@ -82,9 +90,13 @@ export function DonutChart({
         </svg>
         <div className="lq-donut-chart__center">
           <span className="lq-donut-chart__center-value">
-            {active ? (formatValue ? formatValue(active.value) : active.value) : formatValue ? formatValue(total) : total}
+            {active
+              ? formatValue
+                ? formatValue(active.value)
+                : active.value
+              : (centerValue ?? (formatValue ? formatValue(total) : total))}
           </span>
-          <span className="lq-donut-chart__center-label">{active ? active.label : "Total"}</span>
+          <span className="lq-donut-chart__center-label">{active ? active.label : (centerCaption ?? "Total")}</span>
         </div>
       </div>
 

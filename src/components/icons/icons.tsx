@@ -334,6 +334,13 @@ export const WatchlistIcon = (props: IconProps) => (
   </IconBase>
 );
 
+export const PieChartIcon = (props: IconProps) => (
+  <IconBase {...props}>
+    <circle cx="12" cy="12" r="8.5" />
+    <path d="M12 3.5V12h8.5" />
+  </IconBase>
+);
+
 /** A single scalloped outline tracing the whole cog silhouette (teeth fused to the ring, no
  *  gap) plus the inner hole — reads as an actual toothed gear even at small toolbar sizes,
  *  unlike detached spokes radiating from a small circle. */

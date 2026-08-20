@@ -213,11 +213,13 @@ const WATCHLIST_COLUMNS = [
   { id: "change", label: "Variation" },
 ];
 
-function watchlistRow(id: string, ticker: string, price: string, change: string, up: boolean) {
+function watchlistRow(id: string, ticker: string, price: string, change: string, up: boolean, assetType?: string, sector?: string) {
   return {
     id,
     ticker,
     values: { price, change: <span style={{ color: up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{change}</span> },
+    assetType,
+    sector,
   };
 }
 
@@ -229,11 +231,17 @@ const DEMO_WATCHLISTS: ChartWorkspaceWatchlist[] = [
     id: "surveillance",
     name: "Liste de surveillance",
     columns: WATCHLIST_COLUMNS,
+    // assetType/sector are entirely optional and caller-defined (see that field's own doc) —
+    // populated here purely to demo WatchlistExposureModal's two donuts with a mix worth
+    // actually looking at, not a real classification source of any kind.
     rows: [
-      watchlistRow("msft", "MSFT", "412.88", "+1.24%", true),
-      watchlistRow("nvda", "NVDA", "128.47", "+2.61%", true),
-      watchlistRow("aapl", "AAPL", "231.05", "-0.38%", false),
-      watchlistRow("btcusd", "BTCUSD", "64 210", "-1.02%", false),
+      watchlistRow("msft", "MSFT", "412.88", "+1.24%", true, "Stock", "Technology Services"),
+      watchlistRow("nvda", "NVDA", "128.47", "+2.61%", true, "Stock", "Electronic Technology"),
+      watchlistRow("aapl", "AAPL", "231.05", "-0.38%", false, "Stock", "Technology Services"),
+      watchlistRow("btcusd", "BTCUSD", "64 210", "-1.02%", false, "Crypto"),
+      watchlistRow("spx", "SPX", "5 815.20", "+0.42%", true, "Index"),
+      watchlistRow("wti", "WTI", "78.14", "+0.65%", true, "Futures"),
+      watchlistRow("xauusd", "XAUUSD", "2 415.30", "-0.44%", false, "Commodity"),
     ],
   },
   {

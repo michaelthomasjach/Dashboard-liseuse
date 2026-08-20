@@ -493,3 +493,30 @@
 .lq-link-groups__nested {
   padding-left: var(--lq-space-4);
 }
+
+/* WatchlistExposureModal — table above, the two breakdown donuts below. */
+.lq-watchlist-exposure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--lq-space-4);
+}
+
+.lq-watchlist-exposure__symbol {
+  display: flex;
+  align-items: center;
+  gap: var(--lq-space-2);
+}
+
+.lq-watchlist-exposure__section-title {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--lq-color-text);
+}
+
+.lq-watchlist-exposure__charts {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--lq-space-6);
+}
