@@ -179,6 +179,11 @@
   text-align: left;
   background: none;
   border: none;
+  /* A drag can now start from anywhere on the row, not just its own grip (see
+     WatchlistPanel.tsx's own startDrag wiring) — same "don't also try to scroll" reasoning
+     the grip/delete buttons' own touch-action already documents, just needed here too now
+     that this is a drag surface as well. */
+  touch-action: none;
   cursor: pointer;
 }
 
@@ -356,6 +361,10 @@
   align-items: center;
   margin-top: var(--lq-space-1);
   border-radius: var(--lq-radius-sm);
+  /* A drag can start from anywhere on the header, not just its own grip (see
+     WatchlistPanel.tsx's own startSectionDrag wiring) — same reasoning
+     .lq-chart-workspace__watchlist-row-main's own touch-action documents. */
+  touch-action: none;
 }
 
 .lq-chart-workspace__watchlist-section-header:hover {

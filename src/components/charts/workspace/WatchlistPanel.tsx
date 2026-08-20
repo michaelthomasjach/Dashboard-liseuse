@@ -174,13 +174,18 @@ export function WatchlistPanel({
         <button
           type="button"
           className="lq-chart-workspace__watchlist-grip"
-          onPointerDown={() => startDrag(row.id, sectionId)}
+          onPointerDown={(e) => startDrag(row.id, sectionId, e)}
           aria-label={`Déplacer ${row.ticker}`}
           title="Glisser pour déplacer"
         >
           <GripIcon size={12} />
         </button>
-        <button type="button" className="lq-chart-workspace__watchlist-row-main" onClick={() => onRowClick?.(row, activeWatchlist.id)}>
+        <button
+          type="button"
+          className="lq-chart-workspace__watchlist-row-main"
+          onPointerDown={(e) => startDrag(row.id, sectionId, e)}
+          onClick={() => onRowClick?.(row, activeWatchlist.id)}
+        >
           <span
             className="lq-chart-workspace__watchlist-logo"
             style={row.logoUrl ? undefined : { backgroundColor: row.logoColor ?? defaultSymbolLogoColor(index) }}
@@ -350,18 +355,16 @@ export function WatchlistPanel({
                 .filter(Boolean)
                 .join(" ")}
               data-watchlist-section-id={section.id}
+              onPointerDown={onReorderSections ? (e) => startSectionDrag(section.id, e) : undefined}
               {...watchlistDropZoneProps(section.id)}
             >
+              {/* No onPointerDown of its own — sitting inside the header div above, its
+                  press already bubbles up to that div's own handler, which is exactly the
+                  same startSectionDrag call this would otherwise duplicate. */}
               {onReorderSections && (
-                <button
-                  type="button"
-                  className="lq-chart-workspace__watchlist-grip"
-                  onPointerDown={() => startSectionDrag(section.id)}
-                  aria-label={`Déplacer la section ${section.name}`}
-                  title="Glisser pour déplacer"
-                >
+                <span className="lq-chart-workspace__watchlist-grip" aria-hidden="true">
                   <GripIcon size={12} />
-                </button>
+                </span>
               )}
               <button type="button" className="lq-chart-workspace__watchlist-section-toggle" onClick={() => toggleSectionCollapsed(section.id)}>
                 {collapsed ? <ChevronRightIcon size={12} /> : <ChevronDownIcon size={12} />}
