@@ -54,6 +54,9 @@ export interface Indicator {
    *  the daily bars most charts here actually show, it produces a new (unreadable) segment every
    *  single candle. */
   pivotPeriod?: "daily" | "weekly" | "monthly";
+  /** "pivotPoints" only — draws just the current (most recent) period's own levels instead of the
+   *  usual staircase of every past period still in view. Default false. */
+  pivotShowLastOnly?: boolean;
   /** "chandelierExit" only — the ATR multiplier both stops are offset by (`period` above doubles
    *  as its own ATR length and the highest/lowest lookback, same reuse `supertrendMultiplier`'s
    *  own doc explains for Supertrend). Default 3, the Pine Script original's own default. */

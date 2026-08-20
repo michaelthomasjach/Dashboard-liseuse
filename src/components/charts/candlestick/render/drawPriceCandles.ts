@@ -446,6 +446,13 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         let groupStart = 0;
         for (let k = 0; k <= ppPoints.length; k++) {
           if (k < ppPoints.length && ppPoints[k].value.periodStart === ppPoints[groupStart].value.periodStart) continue;
+          // "Show only the last pivot": every earlier group still needs walking (to find where
+          // the final one actually starts), just not drawn — skip straight to advancing groupStart.
+          const isLastGroup = k === ppPoints.length;
+          if (indicator.pivotShowLastOnly && !isLastGroup) {
+            groupStart = k;
+            continue;
+          }
           const first = ppPoints[groupStart];
           const last = ppPoints[k - 1];
           const x0 = zoomedXScale(first.i);

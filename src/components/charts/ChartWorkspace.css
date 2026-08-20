@@ -139,6 +139,12 @@
   margin-left: auto;
 }
 
+/* Sat flush against the name dropdown's own trigger otherwise — enough of a gap to read as its
+   own separate action, not a third piece of the dropdown control itself. */
+.lq-chart-workspace__exposure-button {
+  margin-left: var(--lq-space-2);
+}
+
 /* One row of the watchlist table — a plain wrapper `<div>` around three pieces (see
    WatchlistPanel.tsx's own renderRow): the grip (drag handle), the clickable "main" button
    (logo/ticker/values), and the delete button — three separate interactive elements can't nest
@@ -178,13 +184,13 @@
 
 /* The column-labels row above the data rows — same column layout as a real row (so labels line
    up with their own values below, see the spacer classes' own doc) but muted and non-interactive.
-   Top margin tuned (empirically, via actual rendered text position — the two sides of this row
-   don't share a font-size/line-height, so their padding alone doesn't translate to equal visual
-   gaps the way equal padding on matching rows would) so the gap above "Symbole"/the column labels
-   (from the dropdown's own divider) reads the same as the gap below them, before the first real
-   row. */
+   Top margin tuned (empirically, via actual rendered box position — this row's own bounding box
+   excludes its margin, so what reads as "the gap above" here is entirely this margin-top, while
+   "the gap below" is whatever margin/padding the first section-toggle or row below already
+   carries on its own) so the gap above "Symbole"/the column labels (from the dropdown's own
+   divider) matches the gap below them, before the first section or row. */
 .lq-chart-workspace__watchlist-row--header {
-  margin-top: var(--lq-space-2);
+  margin-top: var(--lq-space-1);
   font-size: 0.65rem;
   font-weight: 700;
   color: var(--lq-color-text-muted);
@@ -379,11 +385,14 @@
   color: var(--lq-color-text);
 }
 
-/* The section header's own delete button reuses `.lq-chart-workspace__watchlist-delete` wholesale
-   (same look, same hover-to-red) — this just extends that class's own hover-reveal (scoped to
-   `.lq-chart-workspace__watchlist-row:hover`) to also trigger from *this* header, which isn't one. */
+/* The section header's own grip/delete buttons reuse `.lq-chart-workspace__watchlist-grip`/
+   `-delete` wholesale (same look, same hover-to-red for delete) — this just extends those
+   classes' own hover-reveal (scoped to `.lq-chart-workspace__watchlist-row:hover`) to also
+   trigger from *this* header, which isn't one. */
 @media (hover: hover) and (pointer: fine) {
+  .lq-chart-workspace__watchlist-section-header:hover .lq-chart-workspace__watchlist-grip,
   .lq-chart-workspace__watchlist-section-header:hover .lq-chart-workspace__watchlist-delete,
+  .lq-chart-workspace__watchlist-section-header .lq-chart-workspace__watchlist-grip:focus-visible,
   .lq-chart-workspace__watchlist-section-header .lq-chart-workspace__watchlist-delete:focus-visible {
     opacity: 1;
   }

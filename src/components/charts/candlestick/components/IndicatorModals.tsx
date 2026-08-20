@@ -579,6 +579,13 @@ export function IndicatorModals({
               />
             </div>
           )}
+          {indicatorDraft.kind === "pivotPoints" && (
+            <Checkbox
+              label="Afficher uniquement le dernier pivot"
+              checked={indicatorDraft.pivotShowLastOnly ?? false}
+              onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, pivotShowLastOnly: checked })}
+            />
+          )}
           {indicatorDraft.kind === "ichimoku" && (
             <div className="lq-chart__edit-drawing-row">
               <NumberField
