@@ -182,18 +182,76 @@ function tpoBlockLabel(index: number, style: "letters" | "numbers"): string {
   return letters[index % letters.length];
 }
 
+// How much time one candle represents, estimated once across the whole slice as the *median*
+// gap between consecutive candles (robust to weekend/holiday gaps a plain average would skew).
+// Deciding merge-vs-synthesize per candle by comparing it to its own next neighbor *within the
+// session* (an earlier version of this) breaks at exactly the case synthesis exists for: a
+// session that degenerates to a single candle (the norm once candles are daily-or-coarser, since
+// sessions are calendar days) has no next-in-session candle to compare against, and silently
+// falls back to "no gap data" — which reads as "finer than a block" and merges instead of
+// synthesizes. A single dataset-wide estimate has no such boundary to trip over.
+function nominalCandleMs(candles: Candle[]): number {
+  if (candles.length < 2) return 24 * 60 * 60_000;
+  const diffs: number[] = [];
+  for (let i = 1; i < candles.length; i++) {
+    const diff = candles[i].date.getTime() - candles[i - 1].date.getTime();
+    if (diff > 0) diffs.push(diff);
+  }
+  if (diffs.length === 0) return 24 * 60 * 60_000;
+  diffs.sort((a, b) => a - b);
+  return diffs[Math.floor(diffs.length / 2)];
+}
+
+// One candle's own O/H/L/C, turned into `count` synthetic sub-blocks tracing a plausible
+// intrabar path — real TPO needs real intrabar data to know which of a session's own time blocks
+// actually touched which price, not available here (see computeTPOSessionProfiles' own doc), so
+// this instead assumes a bullish candle moved Open -> Low -> High -> Close (dipped, then rallied)
+// and a bearish one Open -> High -> Low -> Close (the mirror image) — the same "4-price" shape
+// several other OHLC-only reconstruction techniques already assume, split into `count` equal-time
+// steps along that path. Each block touches every row between its own start/end price on the
+// path, so a block near a turning point (the low or high) naturally spans more rows than one in a
+// flat stretch — texture a uniform per-row split wouldn't have.
+function tpoSyntheticBlocks(candle: Candle, count: number, rowOf: (price: number) => number): Set<number>[] {
+  if (count <= 1) {
+    const rows = new Set<number>();
+    for (let r = rowOf(candle.low); r <= rowOf(candle.high); r++) rows.add(r);
+    return [rows];
+  }
+  const bullish = candle.close >= candle.open;
+  const path = bullish ? [candle.open, candle.low, candle.high, candle.close] : [candle.open, candle.high, candle.low, candle.close];
+  const priceAt = (t: number) => {
+    const segT = Math.min(0.999999, Math.max(0, t)) * 3;
+    const seg = Math.min(2, Math.floor(segT));
+    return path[seg] + (path[seg + 1] - path[seg]) * (segT - seg);
+  };
+  const blocks: Set<number>[] = [];
+  for (let i = 0; i < count; i++) {
+    const pStart = priceAt(i / count);
+    const pEnd = priceAt((i + 1) / count);
+    const rows = new Set<number>();
+    for (let r = rowOf(Math.min(pStart, pEnd)); r <= rowOf(Math.max(pStart, pEnd)); r++) rows.add(r);
+    blocks.push(rows);
+  }
+  return blocks;
+}
+
 /** "Time Price Opportunities": real Market Profile charts slice each session into fixed-length
  *  time blocks (`blockMinutes` — 30 minutes on a real exchange floor, historically), stamping
  *  that block's own letter/number at every price level a candle inside it touched. A real TPO
  *  tool can do this on a daily chart because it separately pulls finer intraday data behind the
  *  scenes regardless of what the chart itself is showing — this library only ever has the one
- *  `candles` array it's given (see this whole library's own "caller owns the data" stance), so
- *  there's no finer time to slice once a single candle already spans a full day or more. Rather
- *  than requiring an intraday timeframe to show anything at all, a daily-or-coarser run of
- *  candles instead groups every `candlesPerCoarseSession` of them into one session and treats
- *  *each candle* as its own block — the finest time unit actually available. Genuinely intraday
- *  stretches (more than one candle sharing a calendar day) keep the real time-block slicing
- *  instead, which is always the more faithful of the two wherever it's possible.
+ *  `candles` array it's given (see this whole library's own "caller owns the data" stance).
+ *
+ *  So within each session (a calendar day — degenerates to one candle per session on a
+ *  daily-or-coarser timeframe, which is exactly the case that needs the fallback below), every
+ *  real candle contributes blocks one of two ways depending on how the dataset's own candle
+ *  duration (`nominalCandleMs`, estimated once across the whole visible slice) compares to
+ *  `blockMinutes`: candles *finer* than a block (several fit inside one `blockMinutes` window)
+ *  are grouped together into that one real block, same as a genuine TPO tool would read them;
+ *  a candle *coarser* than a block (the block fits inside it several times over, the common case
+ *  once a single candle already spans a whole day or more) is instead split into that many
+ *  synthetic sub-blocks (see `tpoSyntheticBlocks`) — an approximation, but the only way to show
+ *  a real breakdown at all without needing an intraday timeframe.
  *
  *  Rows are a fixed count across each session's own [low, high] (independent of block count —
  *  more blocks just means more distinct letters landing in the same rows, not more rows), same
@@ -201,109 +259,73 @@ function tpoBlockLabel(index: number, style: "letters" | "numbers"): string {
  *  value area expands outward from it, always toward whichever neighboring row more blocks
  *  touched, until it encloses ≥70% of all (block, row) touches — the standard Market Profile
  *  definition, just counted in blocks-per-row instead of volume-per-row. */
-export function computeTPOSessionProfiles(
-  candles: Candle[],
-  rowCount: number,
-  blockMinutes: number,
-  candlesPerCoarseSession: number,
-  labelStyle: "letters" | "numbers"
-): TpoSessionProfile[] {
+export function computeTPOSessionProfiles(candles: Candle[], rowCount: number, blockMinutes: number, labelStyle: "letters" | "numbers"): TpoSessionProfile[] {
   if (candles.length === 0) return [];
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   const blockMs = Math.max(1, blockMinutes) * 60_000;
-  const coarseSize = Math.max(2, Math.round(candlesPerCoarseSession));
-
-  // First pass: calendar-day groups, exactly as real trading sessions are bounded. Second pass
-  // (below) coalesces consecutive single-candle days — nothing left to slice by real time inside
-  // just one of those — into `coarseSize`-candle runs instead, each candle standing in for a
-  // block on its own; a day that already had more than one candle in it is left as its own
-  // (genuine, time-sliceable) session.
-  const dayGroups: { start: number; end: number }[] = [];
-  let dayStart = 0;
-  for (let i = 1; i <= candles.length; i++) {
-    const sameDay = i < candles.length && dayKey(candles[i].date) === dayKey(candles[dayStart].date);
-    if (sameDay) continue;
-    dayGroups.push({ start: dayStart, end: i - 1 });
-    dayStart = i;
-  }
-
-  const runs: { start: number; end: number; coarse: boolean }[] = [];
-  let pendingStart: number | null = null;
-  for (const g of dayGroups) {
-    if (g.end - g.start + 1 >= 2) {
-      if (pendingStart !== null) {
-        runs.push({ start: pendingStart, end: g.start - 1, coarse: true });
-        pendingStart = null;
-      }
-      runs.push({ start: g.start, end: g.end, coarse: false });
-      continue;
-    }
-    if (pendingStart === null) pendingStart = g.start;
-    if (g.end - pendingStart + 1 >= coarseSize) {
-      runs.push({ start: pendingStart, end: g.end, coarse: true });
-      pendingStart = null;
-    }
-  }
-  if (pendingStart !== null) runs.push({ start: pendingStart, end: candles.length - 1, coarse: true });
+  const candleMs = nominalCandleMs(candles);
 
   const sessions: TpoSessionProfile[] = [];
-  for (const run of runs) {
-    const sessionCandles = candles.slice(run.start, run.end + 1);
-    if (sessionCandles.length < 2) continue;
+  let sessionStart = 0;
+  for (let i = 1; i <= candles.length; i++) {
+    const sameDay = i < candles.length && dayKey(candles[i].date) === dayKey(candles[sessionStart].date);
+    if (sameDay) continue;
+    const endIndex = i - 1;
+    const sessionCandles = candles.slice(sessionStart, endIndex + 1);
+
     let lo = Infinity;
     let hi = -Infinity;
     for (const d of sessionCandles) {
       lo = Math.min(lo, d.low);
       hi = Math.max(hi, d.high);
     }
-    if (!(hi > lo)) continue;
-    const rowSize = (hi - lo) / rowCount;
-    const rowOf = (price: number) => Math.min(rowCount - 1, Math.max(0, Math.floor((price - lo) / rowSize)));
+    if (hi > lo) {
+      const rowSize = (hi - lo) / rowCount;
+      const rowOf = (price: number) => Math.min(rowCount - 1, Math.max(0, Math.floor((price - lo) / rowSize)));
 
-    const rowsByBlockKey = new Map<number, Set<number>>();
-    if (run.coarse) {
-      sessionCandles.forEach((d, i) => {
-        const rows = new Set<number>();
-        for (let r = rowOf(d.low); r <= rowOf(d.high); r++) rows.add(r);
-        rowsByBlockKey.set(i, rows);
-      });
-    } else {
-      const sessionStartMs = sessionCandles[0].date.getTime();
-      for (const d of sessionCandles) {
-        const blockIndex = Math.floor((d.date.getTime() - sessionStartMs) / blockMs);
-        let rows = rowsByBlockKey.get(blockIndex);
-        if (!rows) {
-          rows = new Set();
-          rowsByBlockKey.set(blockIndex, rows);
+      const orderedBlocks: Set<number>[] = [];
+      let k = 0;
+      while (k < sessionCandles.length) {
+        if (candleMs <= blockMs) {
+          // Merges every following candle still inside this same blockMinutes-wide window,
+          // starting from candle k's own timestamp, into one real (not synthesized) block.
+          const windowStart = sessionCandles[k].date.getTime();
+          const rows = new Set<number>();
+          let j = k;
+          while (j < sessionCandles.length && sessionCandles[j].date.getTime() - windowStart < blockMs) {
+            for (let r = rowOf(sessionCandles[j].low); r <= rowOf(sessionCandles[j].high); r++) rows.add(r);
+            j++;
+          }
+          orderedBlocks.push(rows);
+          k = j;
+        } else {
+          const subBlockCount = Math.max(1, Math.round(candleMs / blockMs));
+          for (const rows of tpoSyntheticBlocks(sessionCandles[k], subBlockCount, rowOf)) orderedBlocks.push(rows);
+          k++;
         }
-        for (let r = rowOf(d.low); r <= rowOf(d.high); r++) rows.add(r);
+      }
+
+      const blocks: TpoBlock[] = orderedBlocks.map((rows, bi) => ({ label: tpoBlockLabel(bi, labelStyle), rows: Array.from(rows).sort((a, b) => a - b) }));
+      const touchCounts = new Array(rowCount).fill(0);
+      for (const block of blocks) for (const r of block.rows) touchCounts[r]++;
+      const total = touchCounts.reduce((a: number, b: number) => a + b, 0);
+      if (total > 0) {
+        let pocRow = 0;
+        for (let r = 1; r < rowCount; r++) if (touchCounts[r] > touchCounts[pocRow]) pocRow = r;
+        let areaLow = pocRow;
+        let areaHigh = pocRow;
+        let areaSum = touchCounts[pocRow];
+        while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < rowCount - 1)) {
+          const below = areaLow > 0 ? touchCounts[areaLow - 1] : -1;
+          const above = areaHigh < rowCount - 1 ? touchCounts[areaHigh + 1] : -1;
+          if (above >= below) areaSum += touchCounts[++areaHigh];
+          else areaSum += touchCounts[--areaLow];
+        }
+        const rows: TpoRow[] = Array.from({ length: rowCount }, (_, r) => ({ priceLow: lo + r * rowSize, priceHigh: lo + (r + 1) * rowSize }));
+        sessions.push({ startIndex: sessionStart, endIndex, rows, blocks, pocRow, vahRow: areaHigh, valRow: areaLow });
       }
     }
-    if (rowsByBlockKey.size < 2) continue;
-
-    const orderedKeys = Array.from(rowsByBlockKey.keys()).sort((a, b) => a - b);
-    const blocks: TpoBlock[] = orderedKeys.map((k, i) => ({
-      label: tpoBlockLabel(i, labelStyle),
-      rows: Array.from(rowsByBlockKey.get(k)!).sort((a, b) => a - b),
-    }));
-
-    const touchCounts = new Array(rowCount).fill(0);
-    for (const block of blocks) for (const r of block.rows) touchCounts[r]++;
-    const total = touchCounts.reduce((a: number, b: number) => a + b, 0);
-    let pocRow = 0;
-    for (let r = 1; r < rowCount; r++) if (touchCounts[r] > touchCounts[pocRow]) pocRow = r;
-    let areaLow = pocRow;
-    let areaHigh = pocRow;
-    let areaSum = touchCounts[pocRow];
-    while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < rowCount - 1)) {
-      const below = areaLow > 0 ? touchCounts[areaLow - 1] : -1;
-      const above = areaHigh < rowCount - 1 ? touchCounts[areaHigh + 1] : -1;
-      if (above >= below) areaSum += touchCounts[++areaHigh];
-      else areaSum += touchCounts[--areaLow];
-    }
-
-    const rows: TpoRow[] = Array.from({ length: rowCount }, (_, r) => ({ priceLow: lo + r * rowSize, priceHigh: lo + (r + 1) * rowSize }));
-    sessions.push({ startIndex: run.start, endIndex: run.end, rows, blocks, pocRow, vahRow: areaHigh, valRow: areaLow });
+    sessionStart = i;
   }
   return sessions;
 }

@@ -131,15 +131,12 @@ export interface CandlestickChartProps {
    *  many candles' worth of average true range past the last one) — recomputed from the whole
    *  dataset, not just what's visible. Default 14. */
   renkoAtrPeriod?: number;
-  /** "tpo" display mode only — how much real time each lettered/numbered block covers within its
-   *  own session, for stretches of `data` fine enough to have more than one candle a day (see
-   *  `computeTPOSessionProfiles`'s own doc). Default 30 (minutes). */
+  /** "tpo" display mode only — how much real time each lettered/numbered block covers. A candle
+   *  finer than this (several fit in one block) groups the usual, faithful way; a candle coarser
+   *  than this (the common case once a single candle already spans a day or more) is instead
+   *  split into that many *synthetic* sub-blocks reconstructed from its own OHLC — see
+   *  `computeTPOSessionProfiles`'s own doc for why, and exactly how. Default 30 (minutes). */
   tpoBlockMinutes?: number;
-  /** "tpo" display mode only — on a daily-or-coarser stretch of `data` (no finer time left to
-   *  slice `tpoBlockMinutes` by), how many consecutive candles form one session instead, each
-   *  candle standing in for a block on its own (see `computeTPOSessionProfiles`'s own doc).
-   *  Default 10. */
-  tpoCandlesPerSession?: number;
   /** "tpo" display mode only — inserts a small gap between each block's own cells (even within
    *  the same price row) so distinct blocks read as visually separate, instead of every block
    *  touching a given row merging into one unbroken run. Default true. */

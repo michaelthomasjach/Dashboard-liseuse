@@ -8,7 +8,6 @@ export interface UseChartDisplayModeArgs {
   visibleRange: { start: number; end: number };
   renkoAtrPeriod: number;
   tpoBlockMinutes: number;
-  tpoCandlesPerSession: number;
   tpoLabelStyle: "letters" | "numbers";
   defaultChartDisplayMode: ChartDisplayMode | undefined;
 }
@@ -21,7 +20,6 @@ export function useChartDisplayMode({
   visibleRange,
   renkoAtrPeriod,
   tpoBlockMinutes,
-  tpoCandlesPerSession,
   tpoLabelStyle,
   defaultChartDisplayMode,
 }: UseChartDisplayModeArgs) {
@@ -65,12 +63,12 @@ export function useChartDisplayMode({
     // computeTPOSessionProfiles' own startIndex/endIndex are relative to the slice handed to
     // it — offset back by `start` so they're absolute indices into `data` again, the index
     // space zoomedXScale (and every other renderer input) actually expects.
-    return computeTPOSessionProfiles(data.slice(start, end), 24, tpoBlockMinutes, tpoCandlesPerSession, tpoLabelStyle).map((s) => ({
+    return computeTPOSessionProfiles(data.slice(start, end), 24, tpoBlockMinutes, tpoLabelStyle).map((s) => ({
       ...s,
       startIndex: s.startIndex + start,
       endIndex: s.endIndex + start,
     }));
-  }, [data, visibleRange, chartDisplayMode, tpoBlockMinutes, tpoCandlesPerSession, tpoLabelStyle]);
+  }, [data, visibleRange, chartDisplayMode, tpoBlockMinutes, tpoLabelStyle]);
 
   return {
     chartDisplayMode,

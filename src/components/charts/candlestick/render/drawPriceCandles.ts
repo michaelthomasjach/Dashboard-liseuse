@@ -156,11 +156,16 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         ctx.fillRect(rectX, top, rectWidth, rectHeight);
         ctx.strokeRect(rectX, top, rectWidth, rectHeight);
       }
-    } else {
-      // "candle"/"tpo" (TPO overlays its histogram + VAH/POC/VAL on top of ordinary candles
-      // rather than replacing them — a profile with nothing to show it against wouldn't mean
-      // much) and "heikinAshi" (same candle body/wick drawing, just fed transformed OHLC values
-      // that stay 1:1 with `data`'s own indices).
+    } else if (chartDisplayMode !== "tpo") {
+      // "candle"/"heikinAshi" (same candle body/wick drawing, just fed transformed OHLC values
+      // that stay 1:1 with `data`'s own indices). "tpo" draws nothing here — its own block below
+      // this replaces the ordinary candle body entirely (same as a real TPO tool never shows a
+      // separate candlestick underneath its profile) rather than layering under it: once a block
+      // is zoomed in enough to read its own letters, a single session's profile can easily need
+      // more on-screen width than the whole chart has — the tail end of its block sequence (often
+      // exactly the rows the candle's own open/close body covers) clips off past the canvas edge
+      // while an opaque candle body drawn independently of that clipping would not, punching a
+      // solid hole straight through the profile wherever the two disagree.
       const useHA = chartDisplayMode === "heikinAshi" && heikinAshiCandles;
       for (const { d: rawD, i } of visible) {
         const d = useHA ? heikinAshiCandles![i] : rawD;
@@ -188,17 +193,16 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
 
     if (chartDisplayMode === "tpo") {
       if (tpoSessionProfiles.length === 0) {
-        // Needs at least a couple of sessions' worth of candles to form even one profile (see
-        // computeTPOSessionProfiles' own doc) — genuinely rare once there's any real history in
-        // view, but says so instead of silently rendering a blank pane on the visible range that
-        // does hit it (e.g. right after mounting on a tiny dataset), which otherwise reads as
-        // "TPO is broken."
+        // Every candle forms its own session-or-synthesized profile on its own (see
+        // computeTPOSessionProfiles' own doc) — this only hits on a genuinely empty visible
+        // range (e.g. right after mounting before any data has arrived), which otherwise reads
+        // as a silently blank pane, "TPO is broken."
         ctx.save();
         ctx.fillStyle = colorMuted;
         ctx.font = `600 12px ${fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText("Pas assez de bougies visibles pour former une séance TPO", dims.boundedWidth / 2, priceHeight / 2);
+        ctx.fillText("Aucune bougie visible pour former une séance TPO", dims.boundedWidth / 2, priceHeight / 2);
         ctx.restore();
       }
       // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its
