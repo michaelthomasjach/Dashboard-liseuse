@@ -106,6 +106,24 @@ function DrawingHandle({
   );
 }
 
+/** A small "you can drag this axis" hint — a double-headed arrow in a pill, invisible until the
+ *  axis-drag `<rect>` immediately before it in the DOM is hovered (see
+ *  `.lq-chart__axis-drag:hover ~ .lq-chart__axis-hint` in charts-shared.css; a CSS reveal, not a
+ *  JS one, so it needs no pointer-tracking state of its own). Always rendered right after that
+ *  rect, centered at a fixed point within its own strip (see each call site's own `cx`/`cy`). */
+function AxisHintIcon({ orientation, cx, cy }: { orientation: "x" | "y"; cx: number; cy: number }) {
+  return (
+    <g className="lq-chart__axis-hint" transform={`translate(${cx}, ${cy})`}>
+      <circle className="lq-chart__axis-hint-bg" r={10} />
+      {orientation === "y" ? (
+        <path className="lq-chart__axis-hint-arrow" d="M0,-5 L0,5 M0,-5 L-3,-2 M0,-5 L3,-2 M0,5 L-3,2 M0,5 L3,2" />
+      ) : (
+        <path className="lq-chart__axis-hint-arrow" d="M-5,0 L5,0 M-5,0 L-2,-3 M-5,0 L-2,3 M5,0 L2,-3 M5,0 L2,3" />
+      )}
+    </g>
+  );
+}
+
 /** The chart's canvas (candles/volume/indicators/drawings, all pixel-drawn — see the render
  *  effect) plus the SVG layer stacked on top of it: axes, the pan/zoom overlay rect, per-pane
  *  Y-axis drag/wheel strips, drawing/measure handles, and event markers. Purely presentational —
@@ -220,6 +238,7 @@ export function ChartCanvasOverlay({
                     onPointerUp={handlePaneYAxisPointerUp}
                     onDoubleClick={() => resetPaneYAxis("volume")}
                   />
+                  <AxisHintIcon orientation="y" cx={dims.boundedWidth + dims.margin.right / 2} cy={volumeHeight / 2} />
                 </g>
               )}
               {/* Continues the canvas-drawn divider above volume (which only covers
@@ -269,6 +288,7 @@ export function ChartCanvasOverlay({
                       onPointerUp={handlePaneYAxisPointerUp}
                       onDoubleClick={() => resetPaneYAxis(ind.id)}
                     />
+                    <AxisHintIcon orientation="y" cx={dims.boundedWidth + dims.margin.right / 2} cy={paneHeight / 2} />
                   </g>
                 )}
                 <line
@@ -326,6 +346,7 @@ export function ChartCanvasOverlay({
             onPointerUp={yAxisDrag.onPointerUp}
             onDoubleClick={resetYAxis}
           />
+          <AxisHintIcon orientation="y" cx={dims.boundedWidth + dims.margin.right / 2} cy={priceHeight / 2} />
           <rect
             ref={xAxisWheelRef}
             className="lq-chart__axis-drag lq-chart__axis-drag--x"
@@ -338,6 +359,7 @@ export function ChartCanvasOverlay({
             onPointerUp={xAxisDrag.onPointerUp}
             onDoubleClick={resetX}
           />
+          <AxisHintIcon orientation="x" cx={dims.boundedWidth / 2} cy={plotBoundedHeight + dims.margin.bottom / 2} />
 
           {/* Rendered last (on top of the zoom/pan overlay and axis-drag strips) so the handles
               actually receive pointer events instead of the overlay swallowing them first. */}
