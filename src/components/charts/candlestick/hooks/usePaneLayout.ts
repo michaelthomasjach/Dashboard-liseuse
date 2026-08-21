@@ -93,7 +93,10 @@ export function usePaneLayout({ defaultIndicators, onIndicatorsChange, showVolum
     const delta = e.clientY - drag.startPos;
     const factor = Math.exp(-delta * 0.008);
     const k0 = drag.startTransform.k;
-    const k1 = Math.min(20, Math.max(1, k0 * factor));
+    // No natural ceiling for a sub-pane's own Y axis either — same reasoning as the price axis's
+    // own DEFAULT_Y_SCALE_EXTENT in useAxisDragRescale.ts, a generous finite stand-in for
+    // "unbounded" rather than a deliberate limit.
+    const k1 = Math.min(10000, Math.max(1, k0 * factor));
     const center = drag.size / 2;
     const t0 = drag.startTransform.y;
     const t1 = center - (center - t0) * (k1 / k0);

@@ -19,7 +19,15 @@ export interface UseAxisDragRescaleOptions {
  * itself. Scales around the strip's midpoint so the rescale feels centered
  * rather than anchored to wherever the drag happened to start.
  */
-export function useAxisDragRescale({ axis, size, transform, onChange, scaleExtent = [1, 20] }: UseAxisDragRescaleOptions) {
+// Unlike the X axis (naturally capped at data.length — one candle can only ever get so wide, see
+// useZoomAndScales' own maxXZoom), price has no natural zoom ceiling of its own: a very large or
+// very small instrument can legitimately need to be seen down to a tiny fraction of its own
+// range. 10000 isn't a real limit the user should ever bump into in practice — a finite (if very
+// generous) default rather than Infinity purely so d3's own scale/tick math never has to handle
+// an unbounded domain, not because 10000x is a deliberately "enough" ceiling.
+const DEFAULT_Y_SCALE_EXTENT: [number, number] = [1, 10000];
+
+export function useAxisDragRescale({ axis, size, transform, onChange, scaleExtent = DEFAULT_Y_SCALE_EXTENT }: UseAxisDragRescaleOptions) {
   const dragRef = useRef<{ startPos: number; startTransform: d3.ZoomTransform } | null>(null);
 
   function onPointerDown(e: React.PointerEvent) {

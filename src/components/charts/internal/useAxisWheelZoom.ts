@@ -23,11 +23,17 @@ export interface UseAxisWheelZoomOptions {
  * Needs a real DOM listener (not React's onWheel) so preventDefault actually
  * stops the page from scrolling — React attaches wheel handlers as passive.
  */
+// Same reasoning as useAxisDragRescale's own DEFAULT_Y_SCALE_EXTENT — price has no natural zoom
+// ceiling the way the X axis does (capped at data.length there), so this default (only ever
+// actually used for "y" — every "x" caller passes its own [1, maxXZoom]) is a generous, finite
+// stand-in for "unbounded" rather than a deliberate limit.
+const DEFAULT_Y_SCALE_EXTENT: [number, number] = [1, 10000];
+
 export function useAxisWheelZoom<T extends Element>({
   axis,
   transform,
   onChange,
-  scaleExtent = [1, 20],
+  scaleExtent = DEFAULT_Y_SCALE_EXTENT,
   enabled = true,
   size = 0,
 }: UseAxisWheelZoomOptions): RefObject<T> {
