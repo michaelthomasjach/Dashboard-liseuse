@@ -5,6 +5,7 @@ import { useFullscreen } from "./internal/useFullscreen";
 import { useSymbolSearchState } from "./candlestick/hooks/useSymbolSearchState";
 import { useChartEvents } from "./candlestick/hooks/useChartEvents";
 import { useChartDisplayMode } from "./candlestick/hooks/useChartDisplayMode";
+import { useTpoOverlay } from "./candlestick/hooks/useTpoOverlay";
 import { useChartAppearance } from "./candlestick/hooks/useChartAppearance";
 import { usePaneLayout } from "./candlestick/hooks/usePaneLayout";
 import { useChartTemplates } from "./candlestick/hooks/useChartTemplates";
@@ -116,8 +117,7 @@ export function CandlestickChart({
   timeframe,
   onTimeframeChange,
   defaultChartDisplayMode,
-  onChartDisplayModeChange,
-  renkoAtrPeriod = 14, tpoBlockMinutes = 30, tpoSplitByBlocks = true, tpoLabelStyle = "letters",
+  onChartDisplayModeChange, renkoAtrPeriod = 14,
   symbol,
   events,
   fundamentals,
@@ -397,8 +397,9 @@ export function CandlestickChart({
     reorderPanesRef,
   });
 
-  const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks, tpoSessionProfiles } =
-    useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, tpoBlockMinutes, tpoLabelStyle, defaultChartDisplayMode });
+  const { chartDisplayMode, setChartDisplayMode, displayModeOpen, setDisplayModeOpen, displayModeAnchorRef, visible, heikinAshiCandles, renkoBricks, lineBreakBricks } =
+    useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode });
+  const tpoOverlays = useTpoOverlay(data, visibleRange, indicators);
 
   const { hiddenEventKinds, setHiddenEventKinds, activeEventStack, setActiveEventStack, eventModalOpen, setEventModalOpen, eventKinds, eventStacks } =
     useChartEvents({ events, indexForDate, visibleRange, dataLength: data.length });
@@ -549,8 +550,7 @@ export function CandlestickChart({
     chartDisplayMode,
     heikinAshiCandles,
     renkoBricks,
-    lineBreakBricks,
-    tpoSessionProfiles, tpoSplitByBlocks,
+    lineBreakBricks, tpoOverlays,
     data,
     visibleRange,
     upColorOverride,

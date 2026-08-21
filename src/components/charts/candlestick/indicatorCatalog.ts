@@ -231,6 +231,20 @@ export const INDICATOR_CATALOG: IndicatorCatalogEntry[] = [
     pane: "price",
     category: "Structure",
   },
+  // Own value shape (a TpoSessionProfile per session, computed range-aware — see
+  // computeTPOSessionProfiles' own doc — rather than one value per candle) and its own five
+  // settings (tpoBlockMinutes/tpoRowCount/tpoValueAreaPercent/tpoLabelStyle/tpoSplitByBlocks, not
+  // period/stdDev) — hasPeriod/hasStdDev both false, same reasoning as pivotPoints/ichimoku.
+  {
+    kind: "tpo",
+    label: "Time Price Opportunities (TPO)",
+    shortLabel: "TPO",
+    defaultPeriod: 0,
+    hasPeriod: false,
+    hasStdDev: false,
+    pane: "price",
+    category: "Structure",
+  },
   // Own value shape (IndicatorADXPoint — the ADX line plus +DI/-DI) but no settings beyond the
   // one shared `period` field (its own ATR/DMI lookback) — hasPeriod true, hasStdDev false, same
   // as RSI/CHOP/ATR above it.
@@ -392,6 +406,7 @@ export function indicatorLabel(indicator: Indicator): string {
   if (indicator.kind === "parabolicSar") return `${entry.shortLabel}(${indicator.sarStep ?? 0.02},${indicator.sarMax ?? 0.2})`;
   if (indicator.kind === "gaps") return `${entry.shortLabel}(${indicator.gapsMinPercent ?? 0.1}%)`;
   if (indicator.kind === "correlation") return `${entry.shortLabel}(${indicator.correlationSymbol ?? "?"})`;
+  if (indicator.kind === "tpo") return `${entry.shortLabel}(${indicator.tpoBlockMinutes ?? 30}min)`;
   if (indicator.kind === "pivotPoints") {
     const typeLabel = { classic: "Classic", fibonacci: "Fibonacci", woodie: "Woodie", camarilla: "Camarilla" }[indicator.pivotType ?? "classic"];
     const periodLabel = { daily: "J", weekly: "S", monthly: "M" }[indicator.pivotPeriod ?? "weekly"];

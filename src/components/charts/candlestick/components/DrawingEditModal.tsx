@@ -11,13 +11,9 @@ import { drawingLabel, MULTI_POINT_TOOLS } from "../drawingCatalog";
 import { allPointsOf, round4, effectiveExtendOf } from "../drawingGeometry";
 import { contrastingTextColor, toDateInputValue, fromDateInputValue } from "../formatting";
 import { CHART_DISPLAY_MODES } from "../chartModes";
-import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
 
-// Same catalog the main chart's own display-mode menu offers (see ChartHeader), minus "tpo" — a
-// volume-profile histogram has no sensible reading as a second, comparison-only series.
-const OVERLAY_DISPLAY_MODE_OPTIONS = CHART_DISPLAY_MODES.filter((m): m is typeof m & { mode: Exclude<ChartDisplayMode, "tpo"> } => m.mode !== "tpo").map(
-  (m) => ({ value: m.mode, label: m.label })
-);
+// Same catalog the main chart's own display-mode menu offers (see ChartHeader).
+const OVERLAY_DISPLAY_MODE_OPTIONS = CHART_DISPLAY_MODES.map((m) => ({ value: m.mode, label: m.label }));
 
 export interface DrawingEditModalProps {
   draft: TrendLineDrawing | null;

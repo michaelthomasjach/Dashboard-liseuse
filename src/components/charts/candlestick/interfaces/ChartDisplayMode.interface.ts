@@ -1,1 +1,1 @@
-export type ChartDisplayMode = "candle" | "line" | "heikinAshi" | "renko" | "lineBreak" | "tpo";
+export type ChartDisplayMode = "candle" | "line" | "heikinAshi" | "renko" | "lineBreak";

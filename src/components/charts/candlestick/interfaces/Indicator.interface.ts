@@ -31,10 +31,19 @@ export interface Indicator {
   /** "supertrend" only — band width, as a multiple of ATR (see `period` above for the ATR period
    *  itself). Default 3. */
   supertrendMultiplier?: number;
+  /** "supertrend" only — line color while trend is up/down. Defaults to the chart's own
+   *  up/down colors (same as before this existed), so leaving both unset reproduces the exact
+   *  prior behavior. */
+  supertrendUpColor?: string;
+  supertrendDownColor?: string;
   /** "parabolicSar" only — the acceleration factor's own starting value/step per extreme-point
    *  update, and its cap. Defaults 0.02/0.2, the conventional parameters. */
   sarStep?: number;
   sarMax?: number;
+  /** "parabolicSar" only — each dot's color by which side of price it's currently on. Defaults
+   *  to the chart's own up/down colors. */
+  sarUpColor?: string;
+  sarDownColor?: string;
   /** "gaps" only — the minimum jump between one candle's high/low and the next's, as a percentage
    *  of the earlier candle's own price, before it counts as a gap at all. Default 0.1. */
   gapsMinPercent?: number;
@@ -73,6 +82,30 @@ export interface Indicator {
   /** "chandelierExit" only — fills the region between price and whichever stop is currently
    *  active. Default true. */
   chandelierHighlightState?: boolean;
+  /** "chandelierExit" only — its stops/fill/labels' own color while long/short. Defaults to the
+   *  chart's own up/down colors. */
+  chandelierUpColor?: string;
+  chandelierDownColor?: string;
+  /** "tpo" only — how many minutes each lettered block spans. A real candle finer than this
+   *  (several fit in one block) groups the usual way; one coarser than this (the common case
+   *  once a single candle already spans a day or more) is instead split into that many
+   *  *synthetic* sub-blocks reconstructed from its own OHLC — see `computeTPOSessionProfiles`'s
+   *  own doc for why, and exactly how. Default 30. */
+  tpoBlockMinutes?: number;
+  /** "tpo" only — how many equal price bins each session's own [low, high] is divided into
+   *  (independent of block count — more blocks just means more letters landing in the same
+   *  rows, not more rows). Default 24. */
+  tpoRowCount?: number;
+  /** "tpo" only — the percentage of total (block, row) touches the value area (VAH/VAL) must
+   *  enclose, expanding outward from POC toward whichever neighboring row has more touches until
+   *  it's reached. Default 70. */
+  tpoValueAreaPercent?: number;
+  /** "tpo" only — each block's own stamp: sequential letters (wrapping past "Z") or plain
+   *  numbers. Default "letters". */
+  tpoLabelStyle?: "letters" | "numbers";
+  /** "tpo" only — a small gap between adjacent letters' own cells, even within the same row, so
+   *  distinct blocks read as visually separate rather than one unbroken run. Default true. */
+  tpoSplitByBlocks?: boolean;
   /** Set once this indicator represents a `CustomIndicatorDef` the caller supplied via
    *  `CandlestickChartProps.customIndicators`, rather than one of the library's own built-in
    *  kinds — `kind` itself is meaningless in that case ("custom" exists in `IndicatorKind` purely
@@ -89,10 +122,10 @@ export interface Indicator {
   correlationSymbol?: string;
   correlationSymbolName?: string;
   correlationData?: OverlayDataPoint[];
-  /** CSS color. Defaults to a color cycled from a small built-in palette. Ignored by "supertrend"
-   *  (always the chart's own up/down colors, so its trend-flip reads consistently with candle
-   *  coloring) and "parabolicSar" (same reasoning — its dots are colored per-point by which side
-   *  of price they're on, not by a single indicator-wide color). */
+  /** CSS color. Defaults to a color cycled from a small built-in palette. Ignored by
+   *  "supertrend"/"parabolicSar"/"chandelierExit" (each has its own up/down pair above instead —
+   *  a single color can't represent a trend flip) and "supportResistance"/"tpo" (colored by
+   *  their own rules, not a single indicator-wide color). */
   color?: string;
   /** When true, the indicator stays in the legend but its line isn't drawn — toggled from the
    *  legend's eye icon. Only meaningful for a `pane: "price"` indicator (see

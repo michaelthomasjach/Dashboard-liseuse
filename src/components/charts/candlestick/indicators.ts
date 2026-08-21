@@ -751,6 +751,13 @@ export function computeIndicatorValues(
       return computePivotPointsValues(data, indicator.pivotType ?? "classic", indicator.pivotPeriod ?? "weekly");
     case "supportResistance":
       return computeSupportResistanceValues(data, period, indicator.srMaxLevels ?? 6);
+    // "tpo" bypasses this per-candle pipeline entirely — a session profile is a range-aware
+    // aggregate that needs to know what's currently visible (see computeTPOSessionProfiles' own
+    // doc), not a value at a fixed index, so it's computed by its own dedicated, zoom-aware memo
+    // (useTpoOverlay) instead. An explicit no-op case here (rather than falling through to the
+    // `default` SMA below) avoids paying for a real computation nothing ever reads.
+    case "tpo":
+      return data.map(() => null);
     case "ichimoku":
       return computeIchimokuValues(
         data,

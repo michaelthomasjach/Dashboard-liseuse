@@ -1,28 +1,19 @@
 import { useMemo, useRef, useState } from "react";
 import type { Candle } from "../interfaces/Candle.interface";
 import type { ChartDisplayMode } from "../interfaces/ChartDisplayMode.interface";
-import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks, computeTPOSessionProfiles } from "../chartModes";
+import { computeHeikinAshiCandles, computeRenkoBrickSize, computeRenkoBricks, computeLineBreakBricks } from "../chartModes";
 
 export interface UseChartDisplayModeArgs {
   data: Candle[];
   visibleRange: { start: number; end: number };
   renkoAtrPeriod: number;
-  tpoBlockMinutes: number;
-  tpoLabelStyle: "letters" | "numbers";
   defaultChartDisplayMode: ChartDisplayMode | undefined;
 }
 
-/** How the price series itself is drawn (candle/line/Heikin Ashi/Renko/Line Break/TPO) — see
+/** How the price series itself is drawn (candle/line/Heikin Ashi/Renko/Line Break) — see
  *  `CandlestickChartProps.defaultChartDisplayMode`/`onChartDisplayModeChange` — plus every
  *  display-mode-specific transform of `data` the canvas draw effect actually paints from. */
-export function useChartDisplayMode({
-  data,
-  visibleRange,
-  renkoAtrPeriod,
-  tpoBlockMinutes,
-  tpoLabelStyle,
-  defaultChartDisplayMode,
-}: UseChartDisplayModeArgs) {
+export function useChartDisplayMode({ data, visibleRange, renkoAtrPeriod, defaultChartDisplayMode }: UseChartDisplayModeArgs) {
   const [chartDisplayMode, setChartDisplayMode] = useState<ChartDisplayMode>(defaultChartDisplayMode ?? "candle");
   const [displayModeOpen, setDisplayModeOpen] = useState(false);
   const displayModeAnchorRef = useRef<HTMLButtonElement>(null);
@@ -52,23 +43,6 @@ export function useChartDisplayMode({
     () => (chartDisplayMode === "lineBreak" ? computeLineBreakBricks(data, 3) : []),
     [data, chartDisplayMode]
   );
-  // Recomputed on pan/zoom (not just `data`), same as `YAutoScaling` above — the profiles
-  // describe whatever's currently on screen, not the whole dataset. One per session (see
-  // computeTPOSessionProfiles's own doc) rather than a single aggregate.
-  const tpoSessionProfiles = useMemo(() => {
-    if (chartDisplayMode !== "tpo") return [];
-    const start = Math.max(0, visibleRange.start);
-    const end = Math.min(data.length, visibleRange.end);
-    if (end <= start) return [];
-    // computeTPOSessionProfiles' own startIndex/endIndex are relative to the slice handed to
-    // it — offset back by `start` so they're absolute indices into `data` again, the index
-    // space zoomedXScale (and every other renderer input) actually expects.
-    return computeTPOSessionProfiles(data.slice(start, end), 24, tpoBlockMinutes, tpoLabelStyle).map((s) => ({
-      ...s,
-      startIndex: s.startIndex + start,
-      endIndex: s.endIndex + start,
-    }));
-  }, [data, visibleRange, chartDisplayMode, tpoBlockMinutes, tpoLabelStyle]);
 
   return {
     chartDisplayMode,
@@ -80,6 +54,5 @@ export function useChartDisplayMode({
     heikinAshiCandles,
     renkoBricks,
     lineBreakBricks,
-    tpoSessionProfiles,
   };
 }

@@ -217,8 +217,7 @@ export interface TrendLineDrawing {
    *  `overlayDisplayMode` once they're actually present. */
   overlayData?: OverlayDataPoint[];
   /** How this comparison overlay itself renders — same catalog of modes as
-   *  `CandlestickChartProps.defaultChartDisplayMode` (minus "tpo", a volume-profile histogram
-   *  that has no sensible reading as a second, comparison-only series), all computed from the
+   *  `CandlestickChartProps.defaultChartDisplayMode`, all computed from the
    *  overlay's own rebased OHLC instead of `data`'s: "line" (default) draws its rebased close
    *  through every point, same as before this field existed; "candle"/"heikinAshi" draw full
    *  bars, "renko"/"lineBreak" draw bricks (same ATR(14)/3-line settings as the main series' own
@@ -228,7 +227,7 @@ export interface TrendLineDrawing {
    *  `data`'s own candles — and so two overlays in the same non-line mode still stay visually
    *  distinct from each other by outline color. Falls back to "line" if `overlayData` turns out
    *  not to actually carry open/high/low (see its own doc). */
-  overlayDisplayMode?: Exclude<ChartDisplayMode, "tpo">;
+  overlayDisplayMode?: ChartDisplayMode;
   /** Hides a drawing without deleting it — like an indicator's own `hidden`, but generic here
    *  since (unlike indicators) most drawing types have never needed one: only "symbolOverlay"'s
    *  own legend entry exposes a toggle for it today, though nothing stops another drawing type

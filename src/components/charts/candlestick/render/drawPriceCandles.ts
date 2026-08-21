@@ -46,7 +46,7 @@ function tpoGradientColor(t: number): string {
  *  active), price-overlay indicator lines (SMA/EMA/WMA/VWAP/Bollinger), and the hover crosshair's
  *  horizontal line. */
 export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCandlestickChartParams, style: ChartCanvasStyle) {
-  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoSessionProfiles, tpoSplitByBlocks, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
+  const { dims, priceHeight, zoomedPriceScale, zoomedXScale, chartDisplayMode, visible, heikinAshiCandles, candleWidth, tpoOverlays, visibleIndicators, hovered, hoverY, data, visibleRange, renkoBricks, lineBreakBricks, overlayProjections } =
     params;
   const { colorUp, colorDown, colorBg, colorText, colorMuted, colorAccent, colorGrid, fontFamily, isEink } = style;
 
@@ -156,16 +156,9 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         ctx.fillRect(rectX, top, rectWidth, rectHeight);
         ctx.strokeRect(rectX, top, rectWidth, rectHeight);
       }
-    } else if (chartDisplayMode !== "tpo") {
+    } else {
       // "candle"/"heikinAshi" (same candle body/wick drawing, just fed transformed OHLC values
-      // that stay 1:1 with `data`'s own indices). "tpo" draws nothing here — its own block below
-      // this replaces the ordinary candle body entirely (same as a real TPO tool never shows a
-      // separate candlestick underneath its profile) rather than layering under it: once a block
-      // is zoomed in enough to read its own letters, a single session's profile can easily need
-      // more on-screen width than the whole chart has — the tail end of its block sequence (often
-      // exactly the rows the candle's own open/close body covers) clips off past the canvas edge
-      // while an opaque candle body drawn independently of that clipping would not, punching a
-      // solid hole straight through the profile wherever the two disagree.
+      // that stay 1:1 with `data`'s own indices).
       const useHA = chartDisplayMode === "heikinAshi" && heikinAshiCandles;
       for (const { d: rawD, i } of visible) {
         const d = useHA ? heikinAshiCandles![i] : rawD;
@@ -191,30 +184,20 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
       }
     }
 
-    if (chartDisplayMode === "tpo") {
-      if (tpoSessionProfiles.length === 0) {
-        // Every candle forms its own session-or-synthesized profile on its own (see
-        // computeTPOSessionProfiles' own doc) — this only hits on a genuinely empty visible
-        // range (e.g. right after mounting before any data has arrived), which otherwise reads
-        // as a silently blank pane, "TPO is broken."
-        ctx.save();
-        ctx.fillStyle = colorMuted;
-        ctx.font = `600 12px ${fontFamily}`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillText("Aucune bougie visible pour former une séance TPO", dims.boundedWidth / 2, priceHeight / 2);
-        ctx.restore();
-      }
-      // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its
-      // *own* bars, growing rightward from that session's own left edge — but NOT one shared
-      // time-based column per block across every row (that draws a zigzag tracing price over
-      // time, not a real TPO profile). A real TPO/Market Profile lays each price ROW out on its
-      // own: every block that touched that row appends its own letter to that row's own
-      // left-aligned run, in chronological order, *independently* of what any other row is
-      // doing — a row many blocks lingered at reaches further right than one only a couple
-      // passed through. That per-row accumulation is what produces the classic "lying bell
-      // curve" silhouette (wide through the middle, narrow at the extremes), not a diagonal.
-      for (const session of tpoSessionProfiles) {
+    // "tpo" is an overlay indicator (like S/R or Pivot Points), not a chartDisplayMode — drawn
+    // here, before the generic visibleIndicators loop below (which explicitly skips it, see its
+    // own comment), so it layers over the candles just drawn but under every other overlay.
+    // One profile per session (see computeTPOSessionProfiles' own doc) per active "tpo"
+    // indicator, each drawn against its *own* bars, growing rightward from that session's own
+    // left edge — but NOT one shared time-based column per block across every row (that draws a
+    // zigzag tracing price over time, not a real TPO profile). A real TPO/Market Profile lays
+    // each price ROW out on its own: every block that touched that row appends its own letter to
+    // that row's own left-aligned run, in chronological order, *independently* of what any other
+    // row is doing — a row many blocks lingered at reaches further right than one only a couple
+    // passed through. That per-row accumulation is what produces the classic "lying bell curve"
+    // silhouette (wide through the middle, narrow at the extremes), not a diagonal.
+    for (const overlay of tpoOverlays) {
+      for (const session of overlay.profiles) {
         const { rows, blocks, pocRow, vahRow, valRow } = session;
         const x0 = zoomedXScale(session.startIndex);
         const sessionWidth = Math.max(1, zoomedXScale(session.endIndex + 1) - x0);
@@ -231,7 +214,7 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         const cellWidth = sessionWidth / maxTouches;
         // "Split by blocks": a small gap between adjacent letters' own cells, even within the
         // same row, so distinct blocks read as visually separate rather than one unbroken run.
-        const gap = tpoSplitByBlocks ? Math.min(1.5, cellWidth * 0.12) : 0;
+        const gap = overlay.splitByBlocks ? Math.min(1.5, cellWidth * 0.12) : 0;
         const showLetters = cellWidth > 9;
 
         ctx.save();
@@ -289,7 +272,10 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
     }
 
     // Only price-overlay indicators draw here — "own"-pane ones (RSI/CHOP/MACD/ATR/fundamentals)
-    // get their own clipped section further down, alongside volume.
+    // get their own clipped section further down, alongside volume. "tpo" is drawn separately
+    // above (a session profile, not a value at a fixed index — see computeIndicatorValues' own
+    // "tpo" case) and never reaches a branch below: computeIndicatorValues returns it an
+    // all-null array, so `points` is always empty and the next line skips it here for free.
     visibleIndicators.forEach(({ indicator, points }, index) => {
       if (indicator.hidden || indicatorCatalogEntry(indicator).pane !== "price") return;
       if (points.length === 0 || (points.length < 2 && !POINT_BASED_KINDS.has(indicator.kind))) return;
@@ -329,18 +315,21 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           }
         }
       } else if (indicator.kind === "supertrend") {
-        // Colored per-segment by trend (the chart's own up/down colors, not `indicator.color` —
-        // see that field's own doc) rather than one continuous stroke — each tiny 2-point segment
-        // takes the color of the bar it's arriving *at*, which both reads correctly moment-to-
-        // moment and keeps every segment connected to its neighbors (including right across a
-        // flip, where the value itself genuinely jumps from one band to the other — that's the
-        // real Supertrend "flip line" every trading platform shows, not a rendering artifact).
+        // Colored per-segment by trend (the chart's own up/down colors unless overridden by the
+        // indicator's own supertrendUpColor/supertrendDownColor — not `indicator.color`, see that
+        // field's own doc) rather than one continuous stroke — each tiny 2-point segment takes
+        // the color of the bar it's arriving *at*, which both reads correctly moment-to-moment
+        // and keeps every segment connected to its neighbors (including right across a flip,
+        // where the value itself genuinely jumps from one band to the other — that's the real
+        // Supertrend "flip line" every trading platform shows, not a rendering artifact).
         const stPoints = points as { i: number; value: IndicatorSupertrendPoint }[];
+        const stUpColor = indicator.supertrendUpColor ?? colorUp;
+        const stDownColor = indicator.supertrendDownColor ?? colorDown;
         ctx.lineWidth = 1.5;
         for (let k = 1; k < stPoints.length; k++) {
           const from = stPoints[k - 1];
           const to = stPoints[k];
-          ctx.strokeStyle = to.value.trend === "up" ? colorUp : colorDown;
+          ctx.strokeStyle = to.value.trend === "up" ? stUpColor : stDownColor;
           ctx.beginPath();
           ctx.moveTo(zoomedXScale(from.i + 0.5), zoomedPriceScale(from.value.value));
           ctx.lineTo(zoomedXScale(to.i + 0.5), zoomedPriceScale(to.value.value));
@@ -353,6 +342,8 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         // line stops entirely at the last bar of one direction and doesn't resume until that same
         // direction returns, rather than jumping straight across to the other stop's own level.
         const cePoints = points as { i: number; value: IndicatorChandelierPoint }[];
+        const ceUpColor = indicator.chandelierUpColor ?? colorUp;
+        const ceDownColor = indicator.chandelierDownColor ?? colorDown;
         const strokeStop = (get: (v: IndicatorChandelierPoint) => number | null, lineColor: string) => {
           ctx.save();
           ctx.strokeStyle = lineColor;
@@ -376,8 +367,8 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           ctx.stroke();
           ctx.restore();
         };
-        strokeStop((v) => (v.dir === 1 ? v.longStop : null), colorUp);
-        strokeStop((v) => (v.dir === -1 ? v.shortStop : null), colorDown);
+        strokeStop((v) => (v.dir === 1 ? v.longStop : null), ceUpColor);
+        strokeStop((v) => (v.dir === -1 ? v.shortStop : null), ceDownColor);
 
         // Fill between price (Pine's own `ohlc4`) and whichever stop is active, one small quad
         // per consecutive same-direction pair rather than one big closed path — same technique
@@ -398,7 +389,7 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
             const mid1 = (candle1.open + candle1.high + candle1.low + candle1.close) / 4;
             const x0 = zoomedXScale(prev.i + 0.5);
             const x1 = zoomedXScale(curr.i + 0.5);
-            ctx.fillStyle = curr.value.dir === 1 ? colorUp : colorDown;
+            ctx.fillStyle = curr.value.dir === 1 ? ceUpColor : ceDownColor;
             ctx.beginPath();
             ctx.moveTo(x0, zoomedPriceScale(mid0));
             ctx.lineTo(x1, zoomedPriceScale(mid1));
@@ -417,7 +408,7 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           const isBuy = p.value.buySignal;
           const x = zoomedXScale(p.i + 0.5);
           const y = zoomedPriceScale(isBuy ? p.value.longStop : p.value.shortStop);
-          const signalColor = isBuy ? colorUp : colorDown;
+          const signalColor = isBuy ? ceUpColor : ceDownColor;
           ctx.beginPath();
           ctx.fillStyle = signalColor;
           ctx.arc(x, y, 3, 0, Math.PI * 2);
@@ -489,13 +480,16 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         // flip instead of the dots-flip-sides-of-price reading every trading platform shows.
         // Colored by which side of price each dot is actually on (a plain price value has no
         // trend flag of its own to read instead — see computeParabolicSARValues) rather than
-        // `indicator.color`, matching Supertrend's own reasoning.
+        // `indicator.color`, matching Supertrend's own reasoning — sarUpColor/sarDownColor
+        // override the chart's own up/down colors the same way supertrendUpColor/DownColor do.
         const sarPoints = points as { i: number; value: number }[];
+        const sarUpColor = indicator.sarUpColor ?? colorUp;
+        const sarDownColor = indicator.sarDownColor ?? colorDown;
         for (const p of sarPoints) {
           const candle = data[p.i];
           if (!candle) continue;
           const above = p.value > candle.close;
-          ctx.fillStyle = above ? colorDown : colorUp;
+          ctx.fillStyle = above ? sarDownColor : sarUpColor;
           ctx.beginPath();
           ctx.arc(zoomedXScale(p.i + 0.5), zoomedPriceScale(p.value), 2, 0, Math.PI * 2);
           ctx.fill();

@@ -1,12 +1,5 @@
 import { ATR } from "technicalindicators";
-import {
-  CandleModeIcon,
-  LineCloseModeIcon,
-  HeikinAshiModeIcon,
-  RenkoModeIcon,
-  LineBreakModeIcon,
-  TpoModeIcon,
-} from "../../icons";
+import { CandleModeIcon, LineCloseModeIcon, HeikinAshiModeIcon, RenkoModeIcon, LineBreakModeIcon } from "../../icons";
 import type { Candle } from "./interfaces/Candle.interface";
 import type { ChartDisplayMode } from "./interfaces/ChartDisplayMode.interface";
 
@@ -257,9 +250,16 @@ function tpoSyntheticBlocks(candle: Candle, count: number, rowOf: (price: number
  *  more blocks just means more distinct letters landing in the same rows, not more rows), same
  *  price-binning idea a volume profile already uses. POC is the row the most blocks touched; the
  *  value area expands outward from it, always toward whichever neighboring row more blocks
- *  touched, until it encloses ≥70% of all (block, row) touches — the standard Market Profile
- *  definition, just counted in blocks-per-row instead of volume-per-row. */
-export function computeTPOSessionProfiles(candles: Candle[], rowCount: number, blockMinutes: number, labelStyle: "letters" | "numbers"): TpoSessionProfile[] {
+ *  touched, until it encloses `valueAreaFraction` of all (block, row) touches (0.7 = the standard
+ *  Market Profile default) — the same definition, just counted in blocks-per-row instead of
+ *  volume-per-row. */
+export function computeTPOSessionProfiles(
+  candles: Candle[],
+  rowCount: number,
+  blockMinutes: number,
+  labelStyle: "letters" | "numbers",
+  valueAreaFraction: number
+): TpoSessionProfile[] {
   if (candles.length === 0) return [];
   const dayKey = (d: Date) => `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
   const blockMs = Math.max(1, blockMinutes) * 60_000;
@@ -315,7 +315,7 @@ export function computeTPOSessionProfiles(candles: Candle[], rowCount: number, b
         let areaLow = pocRow;
         let areaHigh = pocRow;
         let areaSum = touchCounts[pocRow];
-        while (areaSum / total < 0.7 && (areaLow > 0 || areaHigh < rowCount - 1)) {
+        while (areaSum / total < valueAreaFraction && (areaLow > 0 || areaHigh < rowCount - 1)) {
           const below = areaLow > 0 ? touchCounts[areaLow - 1] : -1;
           const above = areaHigh < rowCount - 1 ? touchCounts[areaHigh + 1] : -1;
           if (above >= below) areaSum += touchCounts[++areaHigh];
@@ -342,5 +342,4 @@ export const CHART_DISPLAY_MODES: ChartDisplayModeDef[] = [
   { mode: "heikinAshi", label: "Heikin Ashi", icon: HeikinAshiModeIcon },
   { mode: "renko", label: "Renko", icon: RenkoModeIcon },
   { mode: "lineBreak", label: "Line Break", icon: LineBreakModeIcon },
-  { mode: "tpo", label: "Time Price Opportunities (par séance)", icon: TpoModeIcon },
 ];
