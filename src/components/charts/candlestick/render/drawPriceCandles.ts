@@ -206,40 +206,55 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
         ctx.restore();
       }
       // One profile per session (see computeTPOSessionProfiles' own doc), each drawn against its
-      // *own* bars — growing rightward from that session's own left edge, capped at that
-      // session's own width, one column per time block (its own letter/number stamped at every
-      // price row it touched) — instead of a single block pinned to the chart's right edge
-      // regardless of where its own underlying candles actually are.
+      // *own* bars, growing rightward from that session's own left edge — but NOT one shared
+      // time-based column per block across every row (that draws a zigzag tracing price over
+      // time, not a real TPO profile). A real TPO/Market Profile lays each price ROW out on its
+      // own: every block that touched that row appends its own letter to that row's own
+      // left-aligned run, in chronological order, *independently* of what any other row is
+      // doing — a row many blocks lingered at reaches further right than one only a couple
+      // passed through. That per-row accumulation is what produces the classic "lying bell
+      // curve" silhouette (wide through the middle, narrow at the extremes), not a diagonal.
       for (const session of tpoSessionProfiles) {
         const { rows, blocks, pocRow, vahRow, valRow } = session;
         const x0 = zoomedXScale(session.startIndex);
         const sessionWidth = Math.max(1, zoomedXScale(session.endIndex + 1) - x0);
-        const blockWidth = sessionWidth / blocks.length;
-        // "Split by blocks": a small gap between adjacent blocks' own cells, even within the
+
+        const rowLetters: { label: string; color: string }[][] = rows.map(() => []);
+        blocks.forEach((block, bi) => {
+          const color = tpoGradientColor(blocks.length > 1 ? bi / (blocks.length - 1) : 0);
+          for (const r of block.rows) rowLetters[r].push({ label: block.label, color });
+        });
+        // Sized off the row with the *most* touches (normally at/near POC) so that row's own
+        // run spans the full session width — same "fills its own candle's footprint" sizing the
+        // old time-column approach had, just measured in touches instead of elapsed time.
+        const maxTouches = rowLetters.reduce((m, letters) => Math.max(m, letters.length), 1);
+        const cellWidth = sessionWidth / maxTouches;
+        // "Split by blocks": a small gap between adjacent letters' own cells, even within the
         // same row, so distinct blocks read as visually separate rather than one unbroken run.
-        const gap = tpoSplitByBlocks ? Math.min(1.5, blockWidth * 0.12) : 0;
-        const showLetters = blockWidth > 9;
+        const gap = tpoSplitByBlocks ? Math.min(1.5, cellWidth * 0.12) : 0;
+        const showLetters = cellWidth > 9;
 
         ctx.save();
         ctx.font = `700 8px ${fontFamily}`;
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        blocks.forEach((block, bi) => {
-          const cellColor = tpoGradientColor(blocks.length > 1 ? bi / (blocks.length - 1) : 0);
-          const cellX = x0 + bi * blockWidth;
-          for (const r of block.rows) {
-            const yTop = zoomedPriceScale(rows[r].priceHigh);
-            const cellHeight = Math.max(1, zoomedPriceScale(rows[r].priceLow) - yTop);
-            const insideValueArea = r >= valRow && r <= vahRow;
-            ctx.globalAlpha = insideValueArea ? (isEink ? 0.7 : 0.9) : isEink ? 0.35 : 0.5;
-            ctx.fillStyle = cellColor;
-            ctx.fillRect(cellX + gap / 2, yTop, Math.max(1, blockWidth - gap), cellHeight);
+        rowLetters.forEach((letters, r) => {
+          if (letters.length === 0) return;
+          const yTop = zoomedPriceScale(rows[r].priceHigh);
+          const cellHeight = Math.max(1, zoomedPriceScale(rows[r].priceLow) - yTop);
+          const insideValueArea = r >= valRow && r <= vahRow;
+          const cellAlpha = insideValueArea ? (isEink ? 0.7 : 0.9) : isEink ? 0.35 : 0.5;
+          letters.forEach((letter, ci) => {
+            const cellX = x0 + ci * cellWidth;
+            ctx.globalAlpha = cellAlpha;
+            ctx.fillStyle = letter.color;
+            ctx.fillRect(cellX + gap / 2, yTop, Math.max(1, cellWidth - gap), cellHeight);
             if (showLetters && cellHeight > 7) {
               ctx.globalAlpha = 1;
               ctx.fillStyle = "#ffffff";
-              ctx.fillText(block.label, cellX + blockWidth / 2, yTop + cellHeight / 2 + 0.5);
+              ctx.fillText(letter.label, cellX + cellWidth / 2, yTop + cellHeight / 2 + 0.5);
             }
-          }
+          });
         });
         ctx.globalAlpha = 1;
         ctx.restore();
