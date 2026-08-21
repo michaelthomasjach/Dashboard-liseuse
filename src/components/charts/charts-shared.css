@@ -1081,6 +1081,12 @@
   margin-top: var(--lq-space-2);
 }
 
+.lq-chart__settings-eink-note {
+  margin: 0 0 var(--lq-space-3);
+  font-size: 0.78rem;
+  color: var(--lq-color-text-muted);
+}
+
 .lq-chart__events-menu {
   display: flex;
   flex-direction: column;
@@ -1121,6 +1127,11 @@
   border: 1px solid var(--lq-color-border-subtle);
   border-radius: var(--lq-radius-sm);
   cursor: pointer;
+}
+
+.lq-chart__color-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .lq-chart__date-input {

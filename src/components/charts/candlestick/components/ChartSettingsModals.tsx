@@ -1,4 +1,4 @@
-import type { Dispatch, SetStateAction } from "react";
+import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import { Modal } from "../../../primitives/Modal";
 import { Checkbox } from "../../../forms/Checkbox";
 import { capitalize } from "../formatting";
@@ -52,18 +52,45 @@ export function ChartSettingsModals({
   volumeDownColorOverride,
   setVolumeDownColorOverride,
 }: ChartSettingsModalsProps) {
+  // What "no override" actually renders as, read fresh off the live theme rather than hardcoded
+  // — the swatch shown when a field is unset used to be a fixed "#26a69a"/"#ef5350" regardless of
+  // the active theme/palette, which could (and, in E-ink, always did) disagree with the color the
+  // chart itself was really drawing. `wrapperRef` sits on a `display: contents` node (renders no
+  // box of its own, just lets its children lay out as if it weren't there) so it's always mounted
+  // — unlike the two modals below, which only exist in the DOM while their own `open` is true —
+  // and inherits the same CSS custom properties the canvas renderer itself reads via
+  // getComputedStyle (see renderChart.ts's own identical technique).
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [theme, setTheme] = useState<{ up: string; down: string; isEink: boolean }>({ up: "#26a69a", down: "#ef5350", isEink: false });
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const computed = getComputedStyle(el);
+    setTheme({
+      up: computed.getPropertyValue("--lq-color-up").trim() || "#26a69a",
+      down: computed.getPropertyValue("--lq-color-down").trim() || "#ef5350",
+      isEink: el.closest('[data-lq-palette="eink"]') !== null,
+    });
+  }, [settingsOpen, volumeSettingsOpen]);
+
   return (
-    <>
+    <div ref={wrapperRef} style={{ display: "contents" }}>
       {settingsOpen && (
         <Modal open onClose={() => setSettingsOpen(false)} title="Paramètres du graphique">
+          {theme.isEink && (
+            <p className="lq-chart__settings-eink-note">
+              La palette E-ink affiche les bougies en creux ou plein plutôt qu'en couleur — les couleurs ci-dessous ne changent rien à leur apparence tant que cette palette est active.
+            </p>
+          )}
           <div className="lq-chart__edit-drawing-row">
             <div className="lq-field">
               <label className="lq-field__label">Bougies haussières</label>
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={upColorOverride ?? "#26a69a"}
+                value={upColorOverride ?? theme.up}
                 onChange={(e) => setUpColorOverride(e.target.value)}
+                disabled={theme.isEink}
               />
             </div>
             <div className="lq-field">
@@ -71,8 +98,9 @@ export function ChartSettingsModals({
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={downColorOverride ?? "#ef5350"}
+                value={downColorOverride ?? theme.down}
                 onChange={(e) => setDownColorOverride(e.target.value)}
+                disabled={theme.isEink}
               />
             </div>
           </div>
@@ -126,14 +154,20 @@ export function ChartSettingsModals({
 
       {volumeSettingsOpen && (
         <Modal open onClose={() => setVolumeSettingsOpen(false)} title="Paramètres du panneau Volume" footer={null}>
+          {theme.isEink && (
+            <p className="lq-chart__settings-eink-note">
+              La palette E-ink affiche les barres en creux ou plein plutôt qu'en couleur — les couleurs ci-dessous ne changent rien à leur apparence tant que cette palette est active.
+            </p>
+          )}
           <div className="lq-chart__edit-drawing-row">
             <div className="lq-field">
               <label className="lq-field__label">Barres haussières</label>
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={volumeUpColorOverride ?? upColorOverride ?? "#26a69a"}
+                value={volumeUpColorOverride ?? upColorOverride ?? theme.up}
                 onChange={(e) => setVolumeUpColorOverride(e.target.value)}
+                disabled={theme.isEink}
               />
             </div>
             <div className="lq-field">
@@ -141,8 +175,9 @@ export function ChartSettingsModals({
               <input
                 type="color"
                 className="lq-chart__color-input"
-                value={volumeDownColorOverride ?? downColorOverride ?? "#ef5350"}
+                value={volumeDownColorOverride ?? downColorOverride ?? theme.down}
                 onChange={(e) => setVolumeDownColorOverride(e.target.value)}
+                disabled={theme.isEink}
               />
             </div>
           </div>
@@ -160,6 +195,6 @@ export function ChartSettingsModals({
           )}
         </Modal>
       )}
-    </>
+    </div>
   );
 }
