@@ -1,15 +1,17 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Modal } from "../../../primitives/Modal";
 import { Tabs } from "../../../primitives/Tabs";
 import { Checkbox } from "../../../forms/Checkbox";
 import { TextField } from "../../../forms/TextField";
 import { NumberField } from "../../../forms/NumberField";
 import { Select } from "../../../forms/Select";
-import { SearchIcon, SettingsIcon, TrashIcon, OverlayBadgeIcon, PaneBadgeIcon } from "../../../icons";
+import { SearchIcon, SettingsIcon, TrashIcon, InfoIcon, OverlayBadgeIcon, PaneBadgeIcon } from "../../../icons";
 import type { TrendLineDrawing } from "../interfaces/TrendLineDrawing.interface";
 import type { Indicator } from "../interfaces/Indicator.interface";
+import type { IndicatorKind } from "../interfaces/IndicatorKind.interface";
 import type { CustomIndicatorDef } from "../interfaces/CustomIndicatorDef.interface";
 import { INDICATOR_CATALOG, type IndicatorCatalogEntry, indicatorCatalogEntry, indicatorLabel, defaultIndicatorColor } from "../indicatorCatalog";
+import { INDICATOR_DESCRIPTIONS, VOLUME_DESCRIPTION } from "../indicatorDescriptions";
 import { drawingToolMeta, drawingLabel } from "../drawingCatalog";
 
 export interface IndicatorModalsProps {
@@ -104,6 +106,26 @@ export function IndicatorModals({
   useEffect(() => {
     setSettingsTab("inputs");
   }, [editingIndicatorId]);
+  // Which indicator's "how it works" info modal is open, if any — "volume" since it isn't a real
+  // IndicatorKind (see VOLUME_DESCRIPTION's own doc). A separate modal stacked on top of the
+  // picker's own (both use the same fixed z-index — see Modal.css — so later-in-DOM wins; this
+  // one's JSX sits after the picker's own), not a replacement for it: closing this one only
+  // clears this state, leaving indicatorPickerOpen (and everything else about the picker, see
+  // pickerScrollTopRef below) completely untouched.
+  const [infoKind, setInfoKind] = useState<IndicatorKind | "volume" | null>(null);
+  // The picker's own scroll position, restored across a close/reopen cycle instead of resetting
+  // to the top every time — a plain ref (not state) since nothing about it should ever trigger a
+  // re-render, and it needs to survive the picker's own unmount (Modal returns null while closed,
+  // dropping any DOM-held scroll position with it) the same way a ref already does for every
+  // other "remember this across remounts" case in this codebase.
+  const pickerScrollRef = useRef<HTMLDivElement>(null);
+  const pickerScrollTopRef = useRef(0);
+  // useLayoutEffect (not useEffect) so the restored position is already in place at first paint
+  // — plain useEffect runs after the browser paints, which would show the list back at the top
+  // for one frame before jumping to the remembered position.
+  useLayoutEffect(() => {
+    if (indicatorPickerOpen && pickerScrollRef.current) pickerScrollRef.current.scrollTop = pickerScrollTopRef.current;
+  }, [indicatorPickerOpen]);
 
   // Scoped to exactly what the manager list itself shows (visibleDrawings, not every drawing that
   // ever existed — a drawing outside the current view has no row here to have deleted it from) so
@@ -163,7 +185,13 @@ export function IndicatorModals({
               )
             )}
           </div>
-          <div className="lq-chart__indicator-picker">
+          <div
+            className="lq-chart__indicator-picker"
+            ref={pickerScrollRef}
+            onScroll={(e) => {
+              pickerScrollTopRef.current = e.currentTarget.scrollTop;
+            }}
+          >
             {(() => {
               const query = indicatorSearchQuery.trim().toLowerCase();
               // Volume has no category of its own (see its own doc below), so it only ever shows
@@ -175,7 +203,17 @@ export function IndicatorModals({
               // IndicatorCatalogEntry/CustomIndicatorDef it actually came from, since only that
               // original shape knows what `onClick` needs to add it (addIndicator vs.
               // addCustomIndicator take different argument types).
-              type PickerOption = { key: string; label: string; category: string; pane: "price" | "own"; onSelect: () => void };
+              // `descriptionKind` is undefined for a custom indicator (no canned description this
+              // library could show for one — see INDICATOR_DESCRIPTIONS' own doc) — its row gets
+              // no info icon rather than one that opens to nothing.
+              type PickerOption = {
+                key: string;
+                label: string;
+                category: string;
+                pane: "price" | "own";
+                onSelect: () => void;
+                descriptionKind?: IndicatorKind;
+              };
               const builtinOptions: PickerOption[] = INDICATOR_CATALOG.filter(
                 (entry) => entry.label.toLowerCase().includes(query) || entry.shortLabel.toLowerCase().includes(query)
               ).map((entry) => ({
@@ -184,6 +222,7 @@ export function IndicatorModals({
                 category: entry.category,
                 pane: entry.pane,
                 onSelect: () => (entry.kind === "correlation" ? openCorrelationSetup() : addIndicator(entry)),
+                descriptionKind: entry.kind,
               }));
               const customOptions: PickerOption[] = (customIndicators ?? [])
                 .filter((def) => def.label.toLowerCase().includes(query) || (def.shortLabel ?? "").toLowerCase().includes(query))
@@ -216,36 +255,53 @@ export function IndicatorModals({
                   {showVolumeOption && (
                     <div className="lq-chart__indicator-picker-group">
                       <div className="lq-chart__indicator-picker-group-label">Volume</div>
-                      <button
-                        type="button"
-                        className="lq-chart__indicator-picker-option"
-                        onClick={() => setVolumePaneState("expanded")}
-                      >
-                        <span className="lq-chart__indicator-picker-name">Volume</span>
-                        <span className="lq-chart__indicators-manager-badge" title="Panneau séparé">
-                          <PaneBadgeIcon size={13} />
-                        </span>
-                      </button>
+                      <div className="lq-chart__indicator-picker-option">
+                        <button
+                          type="button"
+                          className="lq-chart__indicator-picker-select"
+                          onClick={() => setVolumePaneState("expanded")}
+                        >
+                          <span className="lq-chart__indicator-picker-name">Volume</span>
+                          <span className="lq-chart__indicators-manager-badge" title="Panneau séparé">
+                            <PaneBadgeIcon size={13} />
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className="lq-chart__pane-header-action"
+                          onClick={() => setInfoKind("volume")}
+                          aria-label="À propos de Volume"
+                        >
+                          <InfoIcon size={13} />
+                        </button>
+                      </div>
                     </div>
                   )}
                   {groups.map((group) => (
                     <div className="lq-chart__indicator-picker-group" key={group.category}>
                       <div className="lq-chart__indicator-picker-group-label">{group.category}</div>
                       {group.options.map((option) => (
-                        <button
-                          key={option.key}
-                          type="button"
-                          className="lq-chart__indicator-picker-option"
-                          onClick={option.onSelect}
-                        >
-                          <span className="lq-chart__indicator-picker-name">{option.label}</span>
-                          <span
-                            className="lq-chart__indicators-manager-badge"
-                            title={option.pane === "price" ? "Superposé au prix" : "Panneau séparé"}
-                          >
-                            {option.pane === "price" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
-                          </span>
-                        </button>
+                        <div key={option.key} className="lq-chart__indicator-picker-option">
+                          <button type="button" className="lq-chart__indicator-picker-select" onClick={option.onSelect}>
+                            <span className="lq-chart__indicator-picker-name">{option.label}</span>
+                            <span
+                              className="lq-chart__indicators-manager-badge"
+                              title={option.pane === "price" ? "Superposé au prix" : "Panneau séparé"}
+                            >
+                              {option.pane === "price" ? <OverlayBadgeIcon size={13} /> : <PaneBadgeIcon size={13} />}
+                            </span>
+                          </button>
+                          {option.descriptionKind && (
+                            <button
+                              type="button"
+                              className="lq-chart__pane-header-action"
+                              onClick={() => setInfoKind(option.descriptionKind!)}
+                              aria-label={`À propos de ${option.label}`}
+                            >
+                              <InfoIcon size={13} />
+                            </button>
+                          )}
+                        </div>
                       ))}
                     </div>
                   ))}
@@ -255,6 +311,17 @@ export function IndicatorModals({
           </div>
         </Modal>
       )}
+
+      {infoKind &&
+        (() => {
+          const title = infoKind === "volume" ? "Volume" : (INDICATOR_CATALOG.find((entry) => entry.kind === infoKind)?.label ?? infoKind);
+          const description = infoKind === "volume" ? VOLUME_DESCRIPTION : INDICATOR_DESCRIPTIONS[infoKind];
+          return (
+            <Modal open onClose={() => setInfoKind(null)} title={title}>
+              <p className="lq-chart__indicator-info-text">{description}</p>
+            </Modal>
+          );
+        })()}
 
       {indicatorsManagerOpen &&
         (() => {
@@ -773,11 +840,21 @@ export function IndicatorModals({
                 />
               )}
               {indicatorDraft.kind === "tpo" && (
-                <Checkbox
-                  label="Séparer les blocs"
-                  checked={indicatorDraft.tpoSplitByBlocks ?? true}
-                  onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, tpoSplitByBlocks: checked })}
-                />
+                <>
+                  <NumberField
+                    label="Opacité (%)"
+                    min={10}
+                    max={100}
+                    step={5}
+                    value={indicatorDraft.tpoOpacity ?? 100}
+                    onChange={(v) => setIndicatorDraft({ ...indicatorDraft, tpoOpacity: v === "" ? indicatorDraft.tpoOpacity : v })}
+                  />
+                  <Checkbox
+                    label="Séparer les blocs"
+                    checked={indicatorDraft.tpoSplitByBlocks ?? true}
+                    onChange={(checked) => setIndicatorDraft({ ...indicatorDraft, tpoSplitByBlocks: checked })}
+                  />
+                </>
               )}
               {/* Support/Résistance colors each level by whether the last close currently sits
                   above or below it, and (besides its own "Séparer les blocs" toggle just above)

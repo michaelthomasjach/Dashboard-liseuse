@@ -1637,13 +1637,23 @@
 
 /* Flat rows, not individually boxed — a plain hover highlight is enough to tell them apart, same
    "no border where a background does the job" convention as the indicator legend items. */
+/* The row itself is a plain flex container, not a button (see .lq-chart__indicator-picker-select
+   just below for the actual "add this indicator" button) — it needs to hold that button *and* a
+   separate info-icon button as siblings, and a <button> can't nest another <button> inside it. */
 .lq-chart__indicator-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.lq-chart__indicator-picker-select {
   display: flex;
   align-items: center;
   /* Pushes the trailing overlay/pane badge (see .lq-chart__indicators-manager-badge, reused
      here) to the row's own right edge instead of sitting right after the name. */
   justify-content: space-between;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   padding: 8px;
   font-family: inherit;
   text-align: left;
@@ -1654,8 +1664,8 @@
   cursor: pointer;
 }
 
-.lq-chart__indicator-picker-option:hover,
-.lq-chart__indicator-picker-option:focus-visible {
+.lq-chart__indicator-picker-select:hover,
+.lq-chart__indicator-picker-select:focus-visible {
   background-color: var(--lq-color-hover);
 }
 
@@ -1669,6 +1679,13 @@
   font-size: 0.85rem;
   color: var(--lq-color-text-muted);
   text-align: center;
+}
+
+.lq-chart__indicator-info-text {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--lq-color-text);
 }
 
 /* The "Gérer les indicateurs" modal — reuses .lq-chart__indicator-picker-group/-group-label

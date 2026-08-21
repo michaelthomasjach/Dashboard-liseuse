@@ -7,6 +7,7 @@ export interface TpoOverlay {
   indicatorId: string;
   profiles: TpoSessionProfile[];
   splitByBlocks: boolean;
+  opacity: number;
 }
 
 /** "tpo" is the one indicator kind whose value is a range-aware aggregate (a profile per
@@ -40,7 +41,7 @@ export function useTpoOverlay(data: Candle[], visibleRange: { start: number; end
         ind.tpoLabelStyle ?? "letters",
         (ind.tpoValueAreaPercent ?? 70) / 100
       ).map((s) => ({ ...s, startIndex: s.startIndex + start, endIndex: s.endIndex + start }));
-      return { indicatorId: ind.id, profiles, splitByBlocks: ind.tpoSplitByBlocks ?? true };
+      return { indicatorId: ind.id, profiles, splitByBlocks: ind.tpoSplitByBlocks ?? true, opacity: ind.tpoOpacity ?? 100 };
     });
   }, [data, visibleRange, tpoIndicators]);
 }

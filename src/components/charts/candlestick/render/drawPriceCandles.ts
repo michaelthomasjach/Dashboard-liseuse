@@ -226,7 +226,14 @@ export function drawPriceCandles(ctx: CanvasRenderingContext2D, params: RenderCa
           const yTop = zoomedPriceScale(rows[r].priceHigh);
           const cellHeight = Math.max(1, zoomedPriceScale(rows[r].priceLow) - yTop);
           const insideValueArea = r >= valRow && r <= vahRow;
-          const cellAlpha = insideValueArea ? (isEink ? 0.7 : 0.9) : isEink ? 0.35 : 0.5;
+          // overlay.opacity (see Indicator.tpoOpacity's own doc) scales both tiers together
+          // rather than replacing the value-area/rest distinction with one flat alpha — a row
+          // outside the value area stays visibly less prominent than one inside it at any
+          // opacity setting, same ~0.55 ratio the old fixed 0.5/0.9 (color) and 0.35/0.7 (E-ink)
+          // pairs already had. No isEink branch anymore: TPO's own gradient is already
+          // deliberately theme-blind (see tpoGradientColor's own doc) for the same reason.
+          const valueAreaAlpha = Math.min(1, Math.max(0, overlay.opacity / 100));
+          const cellAlpha = insideValueArea ? valueAreaAlpha : valueAreaAlpha * 0.55;
           letters.forEach((letter, ci) => {
             const cellX = x0 + ci * cellWidth;
             ctx.globalAlpha = cellAlpha;

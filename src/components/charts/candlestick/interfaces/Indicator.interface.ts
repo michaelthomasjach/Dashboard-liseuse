@@ -106,6 +106,11 @@ export interface Indicator {
   /** "tpo" only — a small gap between adjacent letters' own cells, even within the same row, so
    *  distinct blocks read as visually separate rather than one unbroken run. Default true. */
   tpoSplitByBlocks?: boolean;
+  /** "tpo" only — how opaque the profile's own cells render, 0-100. A row inside the value area
+   *  always renders somewhat more opaque than one outside it (same emphasis Market Profile tools
+   *  already give the value area) — this scales *both* rather than replacing that relationship
+   *  with a single flat alpha. Default 100 (fully opaque). */
+  tpoOpacity?: number;
   /** Set once this indicator represents a `CustomIndicatorDef` the caller supplied via
    *  `CandlestickChartProps.customIndicators`, rather than one of the library's own built-in
    *  kinds — `kind` itself is meaningless in that case ("custom" exists in `IndicatorKind` purely
