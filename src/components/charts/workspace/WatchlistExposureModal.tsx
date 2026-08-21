@@ -4,6 +4,7 @@ import { DataTable } from "../../finance/DataTable";
 import type { DataTableColumn } from "../../finance/DataTable";
 import { DonutChart } from "../DonutChart";
 import type { DonutDatum } from "../DonutChart";
+import { WorldExposureMap } from "../WorldExposureMap";
 import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
 import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow } from "./ChartWorkspaceWatchlist.interface";
 
@@ -32,11 +33,14 @@ export interface WatchlistExposureModalProps {
 /** "Concentration/exposure" detail view for one watchlist — opened via the small pie-chart icon
  *  next to the list's own name (see WatchlistPanel). A table of every symbol in the list
  *  (ungrouped rows plus every section's own, flattened together — the breakdown itself doesn't
- *  care which section a row happens to sit in), followed by three donuts, each grouping every row
- *  by one of its own `region`/`sector`/`assetType` fields — all entirely caller-supplied (see
- *  that field's own doc), this modal only ever aggregates whatever's already on the rows it's
- *  given, never fetches or infers any of the three. A row missing a given field still counts,
- *  under that donut's own "Autre" bucket, so the three always sum back to the list's own total. */
+ *  care which section a row happens to sit in), followed by a region breakdown (a world map — see
+ *  WorldExposureMap's own doc for how it resolves a freeform `region` label like "US" or "Global"
+ *  to an actual continent) and two donuts (sector/asset type) on their own row below it — all
+ *  three grouping every row by one of its own `region`/`sector`/`assetType` fields, entirely
+ *  caller-supplied (see that field's own doc): this modal only ever aggregates whatever's already
+ *  on the rows it's given, never fetches or infers any of the three. A row missing a given field
+ *  still counts, under that breakdown's own "Autre" bucket, so all three always sum back to the
+ *  list's own total. */
 export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistExposureModalProps) {
   const rows = useMemo(() => {
     if (!watchlist) return [];
@@ -79,9 +83,11 @@ export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistEx
         <DataTable columns={tableColumns} rows={rows} rowKey={(r) => r.id} emptyMessage="Cette liste ne contient aucun symbole" />
         {rows.length > 0 && (
           <>
-            <h3 className="lq-watchlist-exposure__section-title">Exposition</h3>
+            <h3 className="lq-watchlist-exposure__section-title">Exposition par région</h3>
+            <WorldExposureMap data={regionData} />
+
+            <h3 className="lq-watchlist-exposure__section-title">Exposition par secteur et type</h3>
             <div className="lq-watchlist-exposure__charts">
-              <DonutChart data={regionData} centerValue={regionData.length} centerCaption="Régions" />
               <DonutChart data={sectorData} centerValue={sectorData.length} centerCaption="Secteurs" />
               <DonutChart data={typeData} centerValue={typeData.length} centerCaption="Types de symboles" />
             </div>

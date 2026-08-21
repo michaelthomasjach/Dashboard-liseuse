@@ -52,6 +52,7 @@
     "@types/d3": "^7.4.3",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
+    "@types/topojson-client": "^3.1.5",
     "@vitejs/plugin-react": "^4.3.4",
     "d3": "^7.9.0",
     "eslint": "^9.17.0",
@@ -67,6 +68,8 @@
     "vite-plugin-dts": "^4.5.4"
   },
   "dependencies": {
-    "technicalindicators": "^3.1.0"
+    "technicalindicators": "^3.1.0",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
   }
 }

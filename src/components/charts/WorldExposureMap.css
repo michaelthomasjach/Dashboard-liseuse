@@ -1,0 +1,47 @@
+.lq-world-map {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--lq-space-3);
+  width: 100%;
+}
+
+.lq-world-map__country {
+  stroke: var(--lq-color-border-subtle);
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: stroke var(--lq-transition-base);
+}
+
+.lq-world-map__country--highlighted {
+  stroke: var(--lq-color-text);
+  stroke-width: 1.25;
+}
+
+.lq-world-map__tooltip {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -100%) translateY(-8px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--lq-space-2) var(--lq-space-3);
+  background-color: var(--lq-color-panel);
+  border: 1px solid var(--lq-color-border);
+  border-radius: var(--lq-radius-sm);
+  font-size: 0.78rem;
+  color: var(--lq-color-text);
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+}
+
+.lq-world-map__legend {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.lq-world-map__legend-unmatched {
+  color: var(--lq-color-text-muted);
+}

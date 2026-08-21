@@ -43,6 +43,10 @@ export type { GaugeChartProps, GaugeThreshold } from "./GaugeChart";
 
 export { DonutChart } from "./DonutChart";
 export type { DonutChartProps, DonutDatum } from "./DonutChart";
+export { WorldExposureMap } from "./WorldExposureMap";
+export type { WorldExposureMapProps, WorldExposureDatum } from "./WorldExposureMap";
+export { matchContinent, CONTINENT_LABELS, CONTINENTS } from "./worldGeo";
+export type { Continent } from "./worldGeo";
 
 export { Sparkline } from "./Sparkline";
 export type { SparklineProps } from "./Sparkline";
