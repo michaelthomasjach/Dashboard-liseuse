@@ -203,7 +203,9 @@
 .lq-chart__icon-button {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 4px;
+  height: 26px;
   padding: 4px 8px;
   font-family: inherit;
   font-size: 0.7rem;
@@ -886,6 +888,11 @@
      narrowed side panel) instead of forcing the row to wrap or overflow — the label itself
      (.lq-chart__timeframe-trigger-label below) is what actually clips to one line. */
   min-width: 0;
+  /* Matches .lq-chart__icon-button's own height exactly — same toolbar row, so a text trigger
+     and an icon-only button next to it must resolve to the identical box height instead of each
+     sizing off its own (different) content, which drifts the moment either one's font-size,
+     padding, or icon size changes independently of the other. */
+  height: 26px;
   padding: 4px 8px;
   font-family: inherit;
   font-size: 0.75rem;
