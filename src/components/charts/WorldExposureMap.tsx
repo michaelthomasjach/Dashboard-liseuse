@@ -51,7 +51,9 @@ export function WorldExposureMap({ data, width = 480, height = 260, formatValue,
   const [hovered, setHovered] = useState<{ continent: Continent; x: number; y: number; source: "map" | "legend" } | null>(null);
 
   const { totals, unmatched, maxTotal, grandTotal } = useMemo(() => {
-    const byC: Record<Continent, number> = { "north-america": 0, "south-america": 0, europe: 0, africa: 0, asia: 0, oceania: 0 };
+    // Built from CONTINENTS itself (not hardcoded here a second time) so this can't drift out of
+    // sync with worldGeo.ts's own region list the way it once did.
+    const byC = Object.fromEntries(CONTINENTS.map((c) => [c, 0])) as Record<Continent, number>;
     let unmatchedSum = 0;
     let grand = 0;
     for (const d of data) {
