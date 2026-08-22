@@ -6,6 +6,15 @@ export interface ChartWorkspaceWatchlistColumn {
   id: string;
   /** Shown as this column's own header, and as its label in the "..." visibility toggle. */
   label: string;
+  /** Clicking this column's own header sorts every list's rows by this — `values[id]` (see
+   *  `ChartWorkspaceWatchlistRow.values`) is a `ReactNode`, not necessarily a plain comparable
+   *  value (a colored "+1.24%" `<span>`, say), so a column whose own cell is anything beyond a
+   *  bare string/number needs this to say what it should actually sort by. Omit it and the
+   *  column simply isn't sortable — its header click does nothing. Whether the column's first
+   *  click sorts ascending or descending is inferred from this function's own return type on the
+   *  first row (string → A→Z first, matching "Symbole"'s own always-ascending-first behavior;
+   *  number → highest-first, matching how a "Variation" column would read best). */
+  sortValue?: (row: ChartWorkspaceWatchlistRow) => string | number;
 }
 
 /** One row (one symbol) in a workspace's own docked watchlist table. */

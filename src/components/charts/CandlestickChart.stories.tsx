@@ -11,7 +11,7 @@ import {
   type OverlayDataPoint,
   type CustomIndicatorDef,
 } from "./CandlestickChart";
-import { ChartWorkspace, type ChartWorkspaceWatchlist } from "./ChartWorkspace";
+import { ChartWorkspace, type ChartWorkspaceWatchlist, type ChartWorkspaceWatchlistColumn, type ChartWorkspaceWatchlistRow } from "./ChartWorkspace";
 import { generateCandles, generateCandlesByTimeframe, type MockTimeframeKey } from "../../test-data/financeSampleData";
 
 const meta: Meta<typeof CandlestickChart> = {
@@ -207,29 +207,41 @@ function generateOverlaySeries(ticker: string): OverlayDataPoint[] {
 // own chrome (header, +/… actions, hover/click), row *values* are always caller-supplied content
 // (see ChartWorkspaceWatchlist's own doc), just the easiest thing to visually verify the panel's
 // own resize/collapse/tab-switching/row-click mechanics against without the story needing a real
-// positions/watchlist data source of its own.
-const WATCHLIST_COLUMNS = [
-  { id: "price", label: "Prix" },
-  { id: "change", label: "Variation" },
+// positions/watchlist data source of its own. `sortValue` reads `row.raw` (see DemoWatchlistRow)
+// rather than re-parsing `values.price`/`values.change` back out of their own rendered form —
+// `change` in particular is a colored `<span>`, not a plain comparable value, exactly the case
+// ChartWorkspaceWatchlistColumn.sortValue's own doc describes needing an explicit accessor for.
+const WATCHLIST_COLUMNS: ChartWorkspaceWatchlistColumn[] = [
+  { id: "price", label: "Prix", sortValue: (row) => (row as DemoWatchlistRow).raw.price },
+  { id: "change", label: "Variation", sortValue: (row) => (row as DemoWatchlistRow).raw.change },
 ];
+
+type DemoWatchlistRow = ChartWorkspaceWatchlistRow & { raw: { price: number; change: number } };
 
 function watchlistRow(
   id: string,
   ticker: string,
-  price: string,
-  change: string,
-  up: boolean,
+  price: number,
+  change: number,
   assetType?: string,
   sector?: string,
   region?: string
-) {
+): DemoWatchlistRow {
+  const up = change >= 0;
+  // Space-separated thousands, period decimal — matches the plain price formatting the rest of
+  // this story's own demo data already uses elsewhere (e.g. CandlestickChart's own O/H/L/C
+  // readout), not a locale-driven format (which would switch to a comma decimal and read as
+  // inconsistent against it).
+  const priceLabel = price.toFixed(2).replace(/\B(?=(\d{3})+(?!\d)(?=\.))/g, " ");
+  const changeLabel = `${up ? "+" : ""}${change.toFixed(2)}%`;
   return {
     id,
     ticker,
-    values: { price, change: <span style={{ color: up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{change}</span> },
+    values: { price: priceLabel, change: <span style={{ color: up ? "var(--lq-color-up)" : "var(--lq-color-down)" }}>{changeLabel}</span> },
     assetType,
     sector,
     region,
+    raw: { price, change },
   };
 }
 
@@ -245,20 +257,20 @@ const DEMO_WATCHLISTS: ChartWorkspaceWatchlist[] = [
     // doc) — populated here purely to demo WatchlistExposureModal's three donuts with a mix
     // worth actually looking at, not a real classification source of any kind.
     rows: [
-      watchlistRow("msft", "MSFT", "412.88", "+1.24%", true, "Stock", "Technology Services", "US"),
-      watchlistRow("nvda", "NVDA", "128.47", "+2.61%", true, "Stock", "Electronic Technology", "US"),
-      watchlistRow("aapl", "AAPL", "231.05", "-0.38%", false, "Stock", "Technology Services", "US"),
-      watchlistRow("btcusd", "BTCUSD", "64 210", "-1.02%", false, "Crypto", undefined, "Global"),
-      watchlistRow("spx", "SPX", "5 815.20", "+0.42%", true, "Index", undefined, "US"),
-      watchlistRow("wti", "WTI", "78.14", "+0.65%", true, "Futures", undefined, "Global"),
-      watchlistRow("xauusd", "XAUUSD", "2 415.30", "-0.44%", false, "Commodity", undefined, "EU"),
+      watchlistRow("msft", "MSFT", 412.88, 1.24, "Stock", "Technology Services", "US"),
+      watchlistRow("nvda", "NVDA", 128.47, 2.61, "Stock", "Electronic Technology", "US"),
+      watchlistRow("aapl", "AAPL", 231.05, -0.38, "Stock", "Technology Services", "US"),
+      watchlistRow("btcusd", "BTCUSD", 64210, -1.02, "Crypto", undefined, "Global"),
+      watchlistRow("spx", "SPX", 5815.2, 0.42, "Index", undefined, "US"),
+      watchlistRow("wti", "WTI", 78.14, 0.65, "Futures", undefined, "Global"),
+      watchlistRow("xauusd", "XAUUSD", 2415.3, -0.44, "Commodity", undefined, "EU"),
     ],
   },
   {
     id: "forex",
     name: "Forex",
     columns: WATCHLIST_COLUMNS,
-    rows: [watchlistRow("eurusd", "EURUSD", "1.0842", "+0.12%", true), watchlistRow("xauusd", "XAUUSD", "2 415.30", "-0.44%", false)],
+    rows: [watchlistRow("eurusd", "EURUSD", 1.0842, 0.12), watchlistRow("xauusd", "XAUUSD", 2415.3, -0.44)],
   },
   // Demonstrates `sections` — same "Mes favoris" split into "US"/"Indices" sub-groups the user's
   // own request described, all draggable between each other (and back out to the ungrouped list,
@@ -272,9 +284,9 @@ const DEMO_WATCHLISTS: ChartWorkspaceWatchlist[] = [
       {
         id: "favoris-us",
         name: "US",
-        rows: [watchlistRow("fav-aapl", "AAPL", "231.05", "-0.38%", false), watchlistRow("fav-msft", "MSFT", "412.88", "+1.24%", true)],
+        rows: [watchlistRow("fav-aapl", "AAPL", 231.05, -0.38), watchlistRow("fav-msft", "MSFT", 412.88, 1.24)],
       },
-      { id: "favoris-indices", name: "Indices", rows: [watchlistRow("fav-spx", "SPX", "5 815.20", "+0.42%", true)] },
+      { id: "favoris-indices", name: "Indices", rows: [watchlistRow("fav-spx", "SPX", 5815.2, 0.42)] },
     ],
   },
 ];
@@ -329,23 +341,37 @@ export const AllFeatures: Story = {
     }
 
     // The caller owns the actual reshuffling (see ChartWorkspaceProps.onMoveWatchlistRow's own
-    // doc) — the library only ever reports "this row moved from A to B". Both ends handled in one
-    // `sections.map` pass: the from-section (if any) loses the row, the to-section (if any) gains
-    // it; the root `rows` array is adjusted the same way for whichever end (if either) is `null`.
-    function handleMoveWatchlistRow(watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) {
+    // doc) — the library only ever reports "this row should end up at `toIndex` in this list".
+    // One `nextRowsFor` computation covers both a same-list reorder and a cross-list move: it
+    // always starts from that list's own *current* rows, removes the dragged row from it first
+    // (a no-op wherever it wasn't already), then — only for whichever list is actually the
+    // destination — inserts it at `toIndex` into what's left. Doing the removal before the
+    // insertion in the very same pass is what makes a same-list reorder's own index land
+    // correctly without any special-casing: `toIndex` is already documented as relative to the
+    // list *without* the dragged row (see MoveWatchlistRowArgs), which this naturally produces.
+    function handleMoveWatchlistRow(
+      watchlistId: string,
+      rowId: string,
+      fromSectionId: string | null,
+      toSectionId: string | null,
+      toIndex: number
+    ) {
       setWatchlists((prev) =>
         prev.map((w) => {
           if (w.id !== watchlistId) return w;
-          const fromRows = fromSectionId === null ? w.rows : (w.sections?.find((s) => s.id === fromSectionId)?.rows ?? []);
-          const row = fromRows.find((r) => r.id === rowId);
+          const rowsFor = (sectionId: string | null) => (sectionId === null ? w.rows : (w.sections?.find((s) => s.id === sectionId)?.rows ?? []));
+          const row = rowsFor(fromSectionId).find((r) => r.id === rowId);
           if (!row) return w;
-          const rows = fromSectionId === null ? w.rows.filter((r) => r.id !== rowId) : w.rows;
-          const sections = w.sections?.map((s) => {
-            if (s.id === fromSectionId) return { ...s, rows: s.rows.filter((r) => r.id !== rowId) };
-            if (s.id === toSectionId) return { ...s, rows: [...s.rows, row] };
-            return s;
-          });
-          return { ...w, rows: toSectionId === null ? [...rows, row] : rows, sections };
+          function nextRowsFor(sectionId: string | null) {
+            let rows = rowsFor(sectionId);
+            if (sectionId === fromSectionId) rows = rows.filter((r) => r.id !== rowId);
+            if (sectionId === toSectionId) {
+              const clamped = Math.min(Math.max(0, toIndex), rows.length);
+              rows = [...rows.slice(0, clamped), row, ...rows.slice(clamped)];
+            }
+            return rows;
+          }
+          return { ...w, rows: nextRowsFor(null), sections: w.sections?.map((s) => ({ ...s, rows: nextRowsFor(s.id) })) };
         })
       );
     }

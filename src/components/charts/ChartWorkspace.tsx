@@ -130,11 +130,14 @@ export interface ChartWorkspaceProps {
    *  whenever that section actually contains rows (an empty one is removed immediately — nothing
    *  a confirmation would protect). Omitting this hides the trash button entirely. */
   onRemoveWatchlistSection?: (watchlistId: string, sectionId: string) => void;
-  /** Fires when a row is dragged (via its own grip handle) from one section to another, or to/
-   *  from the no-section zone (`null` on either end) — see `ChartWorkspaceWatchlistSection`'s own
-   *  doc. The caller owns `watchlists` itself, so this only reports the move; actually moving the
-   *  row between `rows`/`sections[].rows` arrays is up to whatever this does. */
-  onMoveWatchlistRow?: (watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void;
+  /** Fires when a row is dragged (from anywhere on the row) to a precise position — within its
+   *  own section/the no-section zone (reordering) or a different one (moving), `toIndex` either
+   *  way giving where it lands *after* removal from wherever it started (see
+   *  `MoveWatchlistRowArgs`'s own doc for the exact convention) — see
+   *  `ChartWorkspaceWatchlistSection`'s own doc. The caller owns `watchlists` itself, so this only
+   *  reports the move; actually moving the row between `rows`/`sections[].rows` arrays is up to
+   *  whatever this does. */
+  onMoveWatchlistRow?: (watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null, toIndex: number) => void;
   /** Fires while a section is being dragged (via its own grip handle) past a neighbor — live, not
    *  just on drop (see `useWatchlistSectionDrag`'s own doc) — with the section list's own new
    *  order. Same "caller owns `watchlists`, this only reports the intent" shape as

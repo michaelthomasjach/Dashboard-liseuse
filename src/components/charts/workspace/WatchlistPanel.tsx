@@ -7,9 +7,19 @@ import { SymbolSearchModal } from "../candlestick/components/SymbolSearchModal";
 import { WatchlistExposureModal } from "./WatchlistExposureModal";
 import { useSymbolSearchState } from "../candlestick/hooks/useSymbolSearchState";
 import { defaultSymbolLogoColor } from "../candlestick/symbolSearchCatalog";
-import { useWatchlistRowDrag, watchlistDropZoneProps } from "./useWatchlistRowDrag";
+import { useWatchlistRowDrag, watchlistDropZoneProps, watchlistRowProps } from "./useWatchlistRowDrag";
 import { useWatchlistSectionDrag } from "./useWatchlistSectionDrag";
-import { ChevronDownIcon, ChevronRightIcon, PlusIcon, MoreHorizontalIcon, GripIcon, TrashIcon, PieChartIcon } from "../../icons";
+import {
+  ChevronDownIcon,
+  ChevronRightIcon,
+  PlusIcon,
+  MoreHorizontalIcon,
+  GripIcon,
+  TrashIcon,
+  PieChartIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+} from "../../icons";
 import type { SymbolSearchCategory } from "../candlestick/interfaces/SymbolSearchCategory.interface";
 import type { SymbolSearchResult } from "../candlestick/interfaces/SymbolSearchResult.interface";
 import type { ChartWorkspaceWatchlist, ChartWorkspaceWatchlistRow, ChartWorkspaceWatchlistSection } from "./ChartWorkspaceWatchlist.interface";
@@ -37,7 +47,7 @@ export interface WatchlistPanelProps {
   onCreateWatchlist: ((name: string) => void) | undefined;
   onCreateSection: ((watchlistId: string, name: string) => void) | undefined;
   onRemoveRow: ((watchlistId: string, rowId: string, sectionId: string | null) => void) | undefined;
-  onMoveRow: ((watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null) => void) | undefined;
+  onMoveRow: ((watchlistId: string, rowId: string, fromSectionId: string | null, toSectionId: string | null, toIndex: number) => void) | undefined;
   onRemoveSection: ((watchlistId: string, sectionId: string) => void) | undefined;
   onReorderSections: ((watchlistId: string, orderedSectionIds: string[]) => void) | undefined;
 }
@@ -86,9 +96,35 @@ export function WatchlistPanel({
   // removed immediately with no modal, since there's nothing a confirmation would be protecting.
   const [confirmDeleteSection, setConfirmDeleteSection] = useState<ChartWorkspaceWatchlistSection | null>(null);
   const [exposureModalOpen, setExposureModalOpen] = useState(false);
-  const { draggingRowId, dropTargetSectionId, startDrag } = useWatchlistRowDrag({
+  // Which column the table's own rows are sorted by, if any — "symbol" (the always-present
+  // ticker column) or one of `activeWatchlist.columns`' own ids. Pure view state (like
+  // collapsedSectionIds/columnWidths below): sorting only changes what's *rendered*, never
+  // `activeWatchlist.rows`/`section.rows` themselves — see toggleSort's own doc for why a manual
+  // drag clears it instead of fighting it.
+  const [sortColumn, setSortColumn] = useState<string | null>(null);
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const { pressedRowId, draggingRowId, dropIndicator, startDrag } = useWatchlistRowDrag({
     onMove: activeWatchlist
-      ? ({ rowId, fromSectionId, toSectionId }) => onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId)
+      ? ({ rowId, fromSectionId, toSectionId, toIndex }) => {
+          // `toIndex` was computed against whatever order was actually *rendered* (see
+          // useWatchlistRowDrag's own doc) — with a sort active, that's sortedRows' own order,
+          // not activeWatchlist.rows/section.rows' own (unsorted) order the caller's onMoveRow
+          // expects an index into. Translate by finding which row sits at that sorted position
+          // and using *that* row's own index in the raw array instead — a no-op whenever no sort
+          // is active (sortedRows returns the same array unchanged then, so this just re-finds
+          // the same index). A manually-placed row would otherwise land somewhere unrelated to
+          // where it was actually dropped the moment the sort below clears and the view snaps
+          // back to unsorted order.
+          const rawRows = toSectionId === null ? activeWatchlist.rows : (activeWatchlist.sections?.find((s) => s.id === toSectionId)?.rows ?? []);
+          const displayedRows = sortedRows(rawRows).filter((r) => r.id !== rowId);
+          const targetRow = displayedRows[toIndex];
+          const rawIndex = targetRow ? rawRows.findIndex((r) => r.id === targetRow.id) : rawRows.length;
+          // A manually-placed row would just snap right back the moment the active sort
+          // re-renders it — same "dragging overrides sorting" behavior most real tables already
+          // have, rather than a drag that silently does nothing while a sort is active.
+          setSortColumn(null);
+          onMoveRow?.(activeWatchlist.id, rowId, fromSectionId, toSectionId, rawIndex);
+        }
       : undefined,
   });
   const { draggingSectionId, startDrag: startSectionDrag } = useWatchlistSectionDrag({
@@ -156,6 +192,52 @@ export function WatchlistPanel({
   if (!activeWatchlist) return null;
   const visibleColumns = activeWatchlist.columns.filter((c) => visibleColumnIds.has(c.id));
 
+  // "symbol" (the ticker) is always sortable, with no accessor needed — every other column's own
+  // `sortValue` decides whether it's sortable at all (see that field's own doc: `values[id]` is a
+  // ReactNode, not necessarily comparable on its own).
+  function sortValueFor(row: ChartWorkspaceWatchlistRow, columnId: string): string | number | undefined {
+    if (columnId === "symbol") return row.ticker;
+    return activeWatchlist.columns.find((c) => c.id === columnId)?.sortValue?.(row);
+  }
+
+  function isSortable(columnId: string): boolean {
+    return columnId === "symbol" || activeWatchlist.columns.find((c) => c.id === columnId)?.sortValue !== undefined;
+  }
+
+  // Clicking the already-active column flips direction; clicking a *different* one starts fresh
+  // — ascending for a text column (A→Z, "Symbole"'s own convention), descending for a numeric one
+  // (highest first, e.g. biggest gainer first on "Variation") — inferred from whichever direction
+  // reads most useful for that value's own type rather than always defaulting to ascending.
+  function toggleSort(columnId: string) {
+    if (!isSortable(columnId)) return;
+    if (sortColumn === columnId) {
+      setSortDirection((d) => (d === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSortColumn(columnId);
+    const allRows = [...activeWatchlist.rows, ...(activeWatchlist.sections?.flatMap((s) => s.rows) ?? [])];
+    const sample = allRows.map((r) => sortValueFor(r, columnId)).find((v) => v !== undefined);
+    setSortDirection(typeof sample === "number" ? "desc" : "asc");
+  }
+
+  // Independent per section (and for the root list) — see ChartWorkspaceWatchlistColumn's own
+  // doc: an active sort reorders what each list *contains*, never the lists themselves.
+  function sortedRows(rows: ChartWorkspaceWatchlistRow[]): ChartWorkspaceWatchlistRow[] {
+    if (!sortColumn) return rows;
+    const dir = sortDirection === "asc" ? 1 : -1;
+    return [...rows].sort((a, b) => {
+      const va = sortValueFor(a, sortColumn);
+      const vb = sortValueFor(b, sortColumn);
+      if (typeof va === "number" && typeof vb === "number") return (va - vb) * dir;
+      return String(va ?? "").localeCompare(String(vb ?? "")) * dir;
+    });
+  }
+
+  function sortIcon(columnId: string) {
+    if (sortColumn !== columnId) return null;
+    return sortDirection === "asc" ? <ArrowUpIcon size={10} /> : <ArrowDownIcon size={10} />;
+  }
+
   // Only asks for confirmation when deleting the section would also delete something — an empty
   // one is removed on the spot.
   function requestRemoveSection(section: ChartWorkspaceWatchlistSection) {
@@ -167,25 +249,32 @@ export function WatchlistPanel({
     return (
       <div
         key={row.id}
-        className={["lq-chart-workspace__watchlist-row", draggingRowId === row.id && "lq-chart-workspace__watchlist-row--dragging"]
+        className={[
+          "lq-chart-workspace__watchlist-row",
+          pressedRowId === row.id && "lq-chart-workspace__watchlist-row--pressed",
+          draggingRowId === row.id && "lq-chart-workspace__watchlist-row--dragging",
+        ]
           .filter(Boolean)
           .join(" ")}
+        {...watchlistRowProps(row.id)}
       >
-        <button
-          type="button"
-          className="lq-chart-workspace__watchlist-grip"
-          onPointerDown={(e) => startDrag(row.id, sectionId, e)}
-          aria-label={`Déplacer ${row.ticker}`}
-          title="Glisser pour déplacer"
-        >
-          <GripIcon size={12} />
-        </button>
         <button
           type="button"
           className="lq-chart-workspace__watchlist-row-main"
           onPointerDown={(e) => startDrag(row.id, sectionId, e)}
           onClick={() => onRowClick?.(row, activeWatchlist.id)}
         >
+          {/* Purely decorative — the button above already starts the same drag from anywhere on
+              the row (see onPointerDown), same "grip has no handler of its own, the press just
+              bubbles up" convention the section header's own grip already established. A
+              *different* class from that one (not .lq-chart-workspace__watchlist-grip) since this
+              one overlaps the logo's own position instead of reserving space beside it (see its
+              own CSS doc for why: floating it into the panel's own padding instead would clip
+              against `.lq-chart__side-panel`'s own `overflow: auto`) — the section header's own
+              grip keeps its original reserved-space layout untouched. */}
+          <span className="lq-chart-workspace__watchlist-row-grip" aria-hidden="true">
+            <GripIcon size={12} />
+          </span>
           <span
             className="lq-chart-workspace__watchlist-logo"
             style={row.logoUrl ? undefined : { backgroundColor: row.logoColor ?? defaultSymbolLogoColor(index) }}
@@ -212,6 +301,21 @@ export function WatchlistPanel({
         )}
       </div>
     );
+  }
+
+  // Rows for one zone (root, or one section), interleaved with a drop-indicator line at
+  // `dropIndicator`'s own position when it's currently pointing into *this* zone — rendered as a
+  // sibling between rows rather than any kind of border on the rows themselves, so it reads as
+  // "the row will land exactly here" instead of "this existing row is highlighted".
+  function renderRowsWithIndicator(rows: ChartWorkspaceWatchlistRow[], sectionId: string | null) {
+    const showIndicatorAt = (i: number) => dropIndicator && dropIndicator.sectionId === sectionId && dropIndicator.index === i;
+    const nodes: React.ReactNode[] = [];
+    rows.forEach((row, i) => {
+      if (showIndicatorAt(i)) nodes.push(<div key={`drop-${i}`} className="lq-chart-workspace__watchlist-drop-line" />);
+      nodes.push(renderRow(row, sectionId, i));
+    });
+    if (showIndicatorAt(rows.length)) nodes.push(<div key="drop-end" className="lq-chart-workspace__watchlist-drop-line" />);
+    return nodes;
   }
 
   return (
@@ -306,40 +410,62 @@ export function WatchlistPanel({
         </div>
       </div>
 
-      {/* Same grip-spacer/delete-spacer shape as a real row (see renderRow) — not just the
-          ticker/cells alone — so every column label lines up exactly with the real values below
-          despite the header having no actual grip/delete buttons of its own to reserve that space
-          otherwise. No logo spacer, unlike a real row's own leading logo: "Symbole" labels the
-          *whole* identity column (logo + ticker together), so it starts flush with the logo's own
-          left edge — the leftmost thing that column actually shows — rather than indented past it
-          to align with the ticker text specifically. */}
+      {/* No grip spacer anymore — a real row's own grip no longer reserves any layout space of
+          its own (see .lq-chart-workspace__watchlist-grip's own CSS doc), so there's nothing left
+          here to match. Delete-spacer stays: real rows still reserve that space on their own
+          right edge. Each cell (including "Symbole") is its own clickable sort button now — see
+          toggleSort — with an arrow icon appearing next to whichever one is currently active. No
+          logo spacer, unlike a real row's own leading logo: "Symbole" labels the *whole* identity
+          column (logo + ticker together), so it starts flush with the logo's own left edge — the
+          leftmost thing that column actually shows — rather than indented past it to align with
+          the ticker text specifically. */}
       <div className="lq-chart-workspace__watchlist-row lq-chart-workspace__watchlist-row--header">
-        <span className="lq-chart-workspace__watchlist-grip lq-chart-workspace__watchlist-grip--spacer" />
         <span className="lq-chart-workspace__watchlist-row-main">
-          <span className="lq-chart-workspace__watchlist-ticker">Symbole</span>
+          <button
+            type="button"
+            className="lq-chart-workspace__watchlist-sort-header lq-chart-workspace__watchlist-ticker"
+            onClick={() => toggleSort("symbol")}
+          >
+            Symbole
+            {sortIcon("symbol")}
+          </button>
           {visibleColumns.map((c) => (
-            <span key={c.id} className="lq-chart-workspace__watchlist-cell" style={columnFlexStyle(c.id)}>
+            <button
+              key={c.id}
+              type="button"
+              className={[
+                "lq-chart-workspace__watchlist-sort-header lq-chart-workspace__watchlist-cell",
+                !isSortable(c.id) && "lq-chart-workspace__watchlist-sort-header--disabled",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+              style={columnFlexStyle(c.id)}
+              onClick={() => toggleSort(c.id)}
+              disabled={!isSortable(c.id)}
+            >
               {c.label}
+              {sortIcon(c.id)}
               <span
                 className="lq-chart-workspace__watchlist-col-resize"
                 onPointerDown={(e) => startColumnResize(c.id, e)}
+                onClick={(e) => e.stopPropagation()}
                 role="separator"
                 aria-orientation="vertical"
                 aria-label={`Redimensionner la colonne ${c.label}`}
               />
-            </span>
+            </button>
           ))}
         </span>
         <span className="lq-chart-workspace__watchlist-delete lq-chart-workspace__watchlist-delete--spacer" />
       </div>
 
       <div
-        className={["lq-chart-workspace__watchlist-group", dropTargetSectionId === null && "lq-chart-workspace__watchlist-group--drop-target"]
+        className={["lq-chart-workspace__watchlist-group", dropIndicator?.sectionId === null && "lq-chart-workspace__watchlist-group--drop-target"]
           .filter(Boolean)
           .join(" ")}
         {...watchlistDropZoneProps(null)}
       >
-        {activeWatchlist.rows.map((row, i) => renderRow(row, null, i))}
+        {renderRowsWithIndicator(sortedRows(activeWatchlist.rows), null)}
       </div>
 
       {activeWatchlist.sections?.map((section) => {
@@ -349,7 +475,7 @@ export function WatchlistPanel({
             <div
               className={[
                 "lq-chart-workspace__watchlist-section-header",
-                dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
+                dropIndicator?.sectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
                 draggingSectionId === section.id && "lq-chart-workspace__watchlist-row--dragging",
               ]
                 .filter(Boolean)
@@ -386,13 +512,13 @@ export function WatchlistPanel({
               <div
                 className={[
                   "lq-chart-workspace__watchlist-group",
-                  dropTargetSectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
+                  dropIndicator?.sectionId === section.id && "lq-chart-workspace__watchlist-group--drop-target",
                 ]
                   .filter(Boolean)
                   .join(" ")}
                 {...watchlistDropZoneProps(section.id)}
               >
-                {section.rows.map((row, i) => renderRow(row, section.id, i))}
+                {renderRowsWithIndicator(sortedRows(section.rows), section.id)}
               </div>
             )}
           </div>
