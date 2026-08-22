@@ -88,8 +88,8 @@ export function WatchlistExposureModal({ open, onClose, watchlist }: WatchlistEx
 
             <h3 className="lq-watchlist-exposure__section-title">Exposition par secteur et type</h3>
             <div className="lq-watchlist-exposure__charts">
-              <DonutChart data={sectorData} centerValue={sectorData.length} centerCaption="Secteurs" />
-              <DonutChart data={typeData} centerValue={typeData.length} centerCaption="Types de symboles" />
+              <DonutChart data={sectorData} centerValue={sectorData.length} centerCaption="Secteurs" legendPosition="left" />
+              <DonutChart data={typeData} centerValue={typeData.length} centerCaption="Types de symboles" legendPosition="left" />
             </div>
           </>
         )}

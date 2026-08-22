@@ -12,3 +12,15 @@ type Story = StoryObj<typeof DonutChart>;
 export const AssetAllocation: Story = {
   render: () => <DonutChart data={SAMPLE_ALLOCATION} formatValue={(v) => `${v} %`} />,
 };
+
+export const LegendLeft: Story = {
+  render: () => <DonutChart data={SAMPLE_ALLOCATION} formatValue={(v) => `${v} %`} legendPosition="left" />,
+};
+
+export const LegendRight: Story = {
+  render: () => <DonutChart data={SAMPLE_ALLOCATION} formatValue={(v) => `${v} %`} legendPosition="right" />,
+};
+
+export const SquareShape: Story = {
+  render: () => <DonutChart data={SAMPLE_ALLOCATION} formatValue={(v) => `${v} %`} shape="square" />,
+};

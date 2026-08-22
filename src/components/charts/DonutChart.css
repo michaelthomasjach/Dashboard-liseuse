@@ -1,8 +1,26 @@
 .lq-donut-chart {
   display: flex;
-  flex-direction: column;
   align-items: center;
   gap: var(--lq-space-3);
+}
+
+/* "left"/"right" just differ in DOM order (see DonutChart.tsx's own JSX — the legend renders
+   before the plot for "left", after it for "right"), both the same row layout — no
+   flex-direction: row-reverse needed. */
+.lq-donut-chart--legend-bottom {
+  flex-direction: column;
+}
+
+.lq-donut-chart--legend-left,
+.lq-donut-chart--legend-right {
+  flex-direction: row;
+}
+
+.lq-donut-chart--legend-left .lq-donut-chart__legend,
+.lq-donut-chart--legend-right .lq-donut-chart__legend {
+  flex-direction: column;
+  align-items: flex-start;
+  flex-wrap: nowrap;
 }
 
 .lq-donut-chart__plot {
